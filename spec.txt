@@ -1,0 +1,97 @@
+Design Document: tpt-dsp
+A Pure Rust, Real-Time Safe, Standalone Digital Signal Processing Framework
+Project: tpt-dsp (Open Source)
+License: Dual MIT / Apache-2.0 (Strictly enforced, zero GPL/LGPL dependencies)
+Status: Design Phase 1.0
+Target Ecosystem: General Rust (with support for WebAssembly, Embedded no_std, and Desktop)
+1. Executive Summary
+The Digital Signal Processing (DSP) and audio industry is heavily bottlenecked by legacy C++ frameworks (like JUCE), proprietary SDKs (VST3/AU), and restrictive, GPL-licensed algorithmic libraries. Furthermore, real-time DSP (audio processing, RF demodulation) is notoriously unforgiving: a single unexpected memory allocation or garbage collection pause causes audible glitches or dropped data.
+tpt-dsp is a ground-up, pure Rust DSP framework designed to be zero-allocation in real-time paths, mathematically rigorous, and universally applicable. It aims to provide the Rust ecosystem with a permissively licensed, high-performance alternative to C++ DSP monopolies, enabling everything from browser-based audio plugins to software-defined radio and embedded sensor analysis.
+2. Core Design Principles
+100% Pure Rust & no_std Capable: Zero C/C++ FFI. The core math and filtering libraries will be no_std compatible, meaning they can run on bare-metal microcontrollers without an operating system.
+Strict Real-Time Safety (Zero-Allocation): In audio and control loops, heap allocation is forbidden. tpt-dsp uses pre-allocated buffers, ring buffers, and Rust’s ownership model to guarantee that processing a block of samples will never trigger a memory allocation.
+Strict MIT/Apache-2.0 Licensing: The DSP world is plagued by GPL-licensed C++ code. We will audit all dependencies. If a fast FFT or filter library is GPL, we rewrite it in pure Rust.
+SIMD & Hardware Accelerated: Core operations (convolution, FFT, matrix math) will utilize Rust’s portable-simd for CPU vectorization, ensuring performance parity with hand-tuned C/C++ intrinsics.
+Cross-Platform by Default: Designed to compile seamlessly to Desktop (via cpal), WebAssembly (via wasm-bindgen for browser audio), and Embedded (via embedded-hal).
+3. Architecture Overview
+The framework is divided into specialized crates, separating pure math from real-time I/O and domain-specific applications.
+tpt-dsp/
+├── tpt-dsp-core        # Pure math, FFT, filters, zero-alloc buffers (no_std)
+├── tpt-dsp-audio       # Synthesis, effects, real-time audio graphs
+├── tpt-dsp-analysis    # Spectrum analysis, time-series, feature extraction
+├── tpt-dsp-control     # PID loops, kinematics, motor control math
+└── tpt-dsp-io          # Pure Rust hardware I/O (Audio, Serial, ADC/DAC)
+
+4. Module Breakdown
+4.1 tpt-dsp-core (The Mathematical Engine)
+The foundational layer. Pure math, no I/O, fully no_std compatible.
+Transforms: Fast Fourier Transform (FFT), Discrete Cosine Transform (DCT), Hilbert transforms.
+Filters: Biquad filters (Low/High/Band pass, Notch, All-pass), FIR (Finite Impulse Response), and IIR (Infinite Impulse Response) filters.
+Math: Complex numbers (crucial for RF/IQ data), windowing functions (Hann, Hamming, Blackman), and convolution.
+Buffers: Lock-free, pre-allocated ring buffers and SPSC (Single-Producer Single-Consumer) queues for passing data between threads without mutexes.
+4.2 tpt-dsp-audio (Music & Acoustics)
+Replacing the need for C++ audio frameworks for basic to intermediate tasks.
+Audio Graph: A node-based processing graph where audio flows from sources (oscillators, samples) through effects (reverb, delay, EQ) to sinks (speakers).
+Synthesis: Wavetable, FM, and Subtractive synthesis engines.
+Real-Time Engine: A callback-driven engine designed to process audio blocks (e.g., 128 or 256 samples) with strict deadline guarantees.
+4.3 tpt-dsp-analysis (Telemetry, RF, & Biomedical)
+For processing continuous streams of data where throughput is more important than microsecond latency.
+Spectrum Analysis: Real-time FFT averaging, peak detection, and spectrogram generation.
+Time-Series Analysis: Moving averages, exponential smoothing, and outlier detection for noisy sensor data.
+Feature Extraction: Zero-crossing rate, RMS energy, and spectral centroid calculation.
+4.4 tpt-dsp-control (Robotics & Automation)
+PID Controllers: Mathematically rigorous, anti-windup PID loops for precise hardware control.
+Input Shaping: Algorithms to cancel out mechanical resonance (critical for high-speed CNC machining and robotics).
+Kinematics: Real-time trajectory planning and jerk-limiting for stepper/servo motors.
+4.5 tpt-dsp-io (Hardware Abstraction)
+Audio I/O: Built on cpal (pure Rust cross-platform audio I/O).
+Serial/Telemetry: Pure Rust serial port handling for reading data from microcontrollers or SDR (Software Defined Radio) dongles.
+5. Integration with the Broader Rust Ecosystem
+tpt-dsp is designed to be a good citizen in the wider Rust ecosystem:
+WebAssembly: tpt-dsp-core and tpt-dsp-audio can be compiled to WASM and hooked directly into the Web Audio API, enabling high-performance browser-based audio apps.
+Async Rust: tpt-dsp-analysis provides adapters for tokio and async-std, allowing DSP pipelines to be integrated into high-throughput network streaming applications.
+Embedded: The no_std nature of tpt-dsp-core allows it to run on ARM Cortex-M microcontrollers via the embedded-hal ecosystem.
+6. The Flagship MVPs
+To prove the library’s viability and showcase its diverse capabilities, the initial development will target two highly popular, completely distinct applications in the open-source DSP community.
+MVP 1: The Web-Native Real-Time Guitar Effects Pedal (Audio Focus)
+Target Audience: Musicians, Web Audio Developers, Plugin Builders.
+Objective: Build a browser-based, real-time guitar amp simulator and effects pedalboard (Distortion, Delay, Reverb, EQ) that runs via WebAssembly with ultra-low latency.
+Why this proves the library:
+It demands strict real-time safety. The Web Audio API will glitch if the Rust code allocates memory or takes too long to process a 128-sample block.
+It proves WASM compilation and zero-FFI web integration.
+It demonstrates the Audio Graph architecture of tpt-dsp-audio.
+Technical Focus: Waveshaping (distortion algorithms), convolution reverb (using pre-allocated impulse response buffers), and biquad filtering (EQ).
+MVP 2: The Real-Time SDR Spectrum Analyzer & FM Demodulator (Analysis/RF Focus)
+Target Audience: Ham Radio Operators, RF Engineers, Tech Hobbyists.
+Objective: Build a desktop application that takes raw IQ (In-phase/Quadrature) data from a cheap RTL-SDR USB dongle, displays a real-time waterfall spectrum, and demodulates FM radio stations.
+Why this proves the library:
+It demands heavy mathematical throughput. Processing 2.4 million complex samples per second requires highly optimized FFTs and complex number math.
+It proves the ability to handle continuous, high-volume data streams without dropping frames.
+It demonstrates the Analysis and Core modules (Complex math, FFT, FIR filters for channel selection).
+Technical Focus: Complex arithmetic, Fast Fourier Transforms (FFT), FIR decimation filters, and FM demodulation (calculating the phase delta between complex samples).
+7. Licensing & Compliance Strategy
+Audio and DSP are notoriously toxic licensing-wise. Many classic C++ DSP libraries (like specific freeverb implementations or optimized FFTs) are GPL, which prevents their use in commercial or permissively licensed open-source projects.
+Rule 1: tpt-dsp is strictly Dual MIT / Apache-2.0.
+Rule 2: We will use cargo-deny to block copyleft.
+Rule 3: If we need a specific algorithm and the only existing Rust port is GPL, we will write a clean-room, mathematically equivalent pure Rust version from the original academic paper or textbook.
+8. Technical Stack & Approved Dependencies
+Math/FFT: rustfft (pure Rust, MIT/Apache), num-complex.
+Audio I/O: cpal (pure Rust cross-platform audio).
+DSP Primitives: Custom implementations in tpt-dsp-core to avoid GPL-licensed Rust audio crates, referencing standard academic DSP textbooks (e.g., Oppenheim & Schafer).
+Parallelism: rayon for batch processing (e.g., rendering an offline audio file), crossbeam for lock-free real-time audio thread queues.
+Serialization: serde, bincode for saving filter states, impulse responses, and configuration.
+9. Development Roadmap
+Phase 1: Core Math & Audio MVP (Months 1-3)
+Establish tpt-dsp workspace and cargo-deny licensing pipeline.
+Implement tpt-dsp-core (FFT, Biquad filters, complex math, ring buffers).
+Implement tpt-dsp-audio (Audio graph, basic oscillators, waveshapers).
+Milestone: Release the Web-Native Guitar Effects Pedal (WASM). Publish it to GitHub Pages to demonstrate zero-glitch, browser-based real-time audio processing.
+Phase 2: Analysis & Streaming MVP (Months 4-6)
+Implement tpt-dsp-analysis (Spectrum analysis, streaming FFT).
+Implement tpt-dsp-io integrations for raw USB/Serial streaming (e.g., rtlsdr bindings or raw TCP streams).
+Optimize tpt-dsp-core FFT and complex math using portable-simd.
+Milestone: Release the Real-Time SDR Spectrum Analyzer. Publish the desktop application, demonstrating high-throughput IQ data processing and waterfall rendering.
+Phase 3: Control, Embedded & Ecosystem Maturation (Months 7-12)
+Implement tpt-dsp-control (PID, kinematics).
+Ensure tpt-dsp-core is fully no_std compliant and tested on ARM Cortex-M microcontrollers.
+Publish comprehensive documentation, benchmark comparisons against C++ equivalents (like JUCE or libsamplerate), and release v1.0.0 on crates.io.
