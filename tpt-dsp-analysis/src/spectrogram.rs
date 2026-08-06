@@ -23,7 +23,10 @@ impl Spectrogram {
     ///
     /// Panics if either dimension is zero.
     pub fn new(rows: usize, cols: usize) -> Self {
-        assert!(rows > 0 && cols > 0, "spectrogram dimensions must be positive");
+        assert!(
+            rows > 0 && cols > 0,
+            "spectrogram dimensions must be positive"
+        );
         Self {
             rows,
             cols,
@@ -80,7 +83,10 @@ impl Spectrogram {
     /// must be exactly `rows * cols` long (or `filled * cols` if you pass a
     /// smaller buffer — see [`row`](Self::row)).
     pub fn as_image(&self, out: &mut [f32]) {
-        assert!(out.len() >= self.filled * self.cols, "image buffer too small");
+        assert!(
+            out.len() >= self.filled * self.cols,
+            "image buffer too small"
+        );
         for i in 0..self.filled {
             let base = i * self.cols;
             self.row(i, &mut out[base..base + self.cols]);

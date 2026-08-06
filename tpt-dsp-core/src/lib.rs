@@ -2,8 +2,8 @@
 //!
 //! This crate provides pure, real-time-safe signal processing primitives:
 //! complex-number arithmetic, FFT/DCT/Hilbert transforms, windowing
-//! functions, biquad/FIR/IIR filters, convolution, and lock-free ring
-//! buffers.
+//! functions, biquad/FIR/IIR filters, convolution, FIR decimation, FM
+//! demodulation, and lock-free ring buffers.
 //!
 //! # Real-time safety
 //!
@@ -17,7 +17,8 @@
 //! - `std` (default): enables the RustFFT-backed [`FftPlan`], crossbeam
 //!   [`SpscQueue`] and the [`alloc`] feature.
 //! - `alloc`: enables heap-backed convenience structs (owning FIR/IIR
-//!   coefficient storage, [`HilbertTransformer`], [`FftConvolver`]).
+//!   coefficient storage, [`HilbertTransformer`], [`FftConvolver`],
+//!   [`FIRDecimator`]).
 //!   All real-time *processing* stays allocation-free regardless.
 //!
 //! # License
@@ -34,9 +35,12 @@ extern crate alloc;
 mod complex;
 mod convolution;
 mod dct;
+pub mod demod;
 mod fft;
 mod filters;
 mod hilbert;
+#[cfg(feature = "alloc")]
+pub mod resample;
 mod ring;
 mod windows;
 
@@ -46,23 +50,26 @@ mod plan;
 #[cfg(feature = "std")]
 mod spsc;
 
-pub use complex::{exp_i, magnitude, magnitude_squared, phase, rotate, C32, C64, Complex32, Complex64};
-pub use convolution::{convolve, ConvolvePlan};
-pub use dct::{dct_ii, dct_iii, dct_iv};
-pub use fft::{fft, fft_inplace, ifft, ifft_inplace, is_power_of_two, next_power_of_two, twiddles};
-pub use filters::{
-    process_biquad, Biquad, BiquadCoeffs, BiquadType, IirStage,
+pub use complex::{
+    exp_i, magnitude, magnitude_squared, phase, rotate, Complex32, Complex64, C32, C64,
 };
+pub use convolution::convolve;
+pub use dct::{dct_ii, dct_iii, dct_iv};
+pub use demod::{phase_delta, phase_to_audio, FmDemodulator};
+pub use fft::{fft, fft_inplace, ifft, ifft_inplace, is_power_of_two, next_power_of_two, twiddles};
+pub use filters::{process_biquad, Biquad, BiquadCoeffs, BiquadType};
 pub use hilbert::hilbert;
 pub use ring::{RingBuffer, RingRead, RingWrite};
 pub use windows::{windowed, WindowType};
 
 #[cfg(feature = "alloc")]
-pub use filters::{Fir, FirDesign, IirFilter, IirCoeffs};
+pub use convolution::{ConvolvePlan, FftConvolver};
+#[cfg(feature = "alloc")]
+pub use filters::{Fir, FirDesign, IirCoeffs, IirFilter, IirStage};
 #[cfg(feature = "alloc")]
 pub use hilbert::HilbertTransformer;
 #[cfg(feature = "alloc")]
-pub use convolution::FftConvolver;
+pub use resample::FIRDecimator;
 
 #[cfg(feature = "std")]
 pub use plan::FftPlan;

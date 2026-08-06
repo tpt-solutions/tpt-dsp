@@ -99,22 +99,14 @@ pub fn ifft_inplace<F: Float>(buf: &mut [Complex<F>], scratch: &mut [Complex<F>]
 
 /// Out-of-place forward transform: writes the DFT of `input` into `out`.
 /// `out.len() == input.len()`, power of two; `scratch.len() >= len`.
-pub fn fft<F: Float>(
-    input: &[Complex<F>],
-    out: &mut [Complex<F>],
-    scratch: &mut [Complex<F>],
-) {
+pub fn fft<F: Float>(input: &[Complex<F>], out: &mut [Complex<F>], scratch: &mut [Complex<F>]) {
     assert_eq!(input.len(), out.len(), "input/output length mismatch");
     out.copy_from_slice(input);
     fft_inplace(out, scratch);
 }
 
 /// Out-of-place inverse transform.
-pub fn ifft<F: Float>(
-    input: &[Complex<F>],
-    out: &mut [Complex<F>],
-    scratch: &mut [Complex<F>],
-) {
+pub fn ifft<F: Float>(input: &[Complex<F>], out: &mut [Complex<F>], scratch: &mut [Complex<F>]) {
     assert_eq!(input.len(), out.len(), "input/output length mismatch");
     out.copy_from_slice(input);
     ifft_inplace(out, scratch);
@@ -146,7 +138,7 @@ fn conjugate<F: Float>(buf: &mut [Complex<F>]) {
 mod tests {
     use super::*;
     use crate::complex::tau;
-    use crate::{C32, Complex64};
+    use crate::{Complex64, C32};
 
     fn naive_dft<F: Float>(input: &[Complex<F>]) -> Vec<Complex<F>> {
         let n = input.len();

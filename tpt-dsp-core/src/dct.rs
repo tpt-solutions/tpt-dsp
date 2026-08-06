@@ -16,14 +16,14 @@ pub fn dct_ii<F: Float>(input: &[F], out: &mut [F]) {
     let n = input.len();
     assert!(out.len() >= n, "output too small for DCT-II");
     let scale = pi::<F>() / F::from(n).unwrap();
-    for k in 0..n {
+    for (k, slot) in out.iter_mut().take(n).enumerate() {
         let kf = F::from(k).unwrap();
         let mut acc = F::zero();
         for (m, x) in input.iter().enumerate() {
             let theta = scale * kf * (F::from(m).unwrap() + F::from(0.5).unwrap());
             acc = acc + *x * theta.cos();
         }
-        out[k] = acc;
+        *slot = acc;
     }
 }
 
@@ -53,14 +53,14 @@ pub fn dct_iv<F: Float>(input: &[F], out: &mut [F]) {
     let n = input.len();
     assert!(out.len() >= n, "output too small for DCT-IV");
     let scale = pi::<F>() / F::from(n).unwrap();
-    for k in 0..n {
+    for (k, slot) in out.iter_mut().take(n).enumerate() {
         let kf = F::from(k).unwrap() + F::from(0.5).unwrap();
         let mut acc = F::zero();
         for (m, x) in input.iter().enumerate() {
             let theta = scale * kf * (F::from(m).unwrap() + F::from(0.5).unwrap());
             acc = acc + *x * theta.cos();
         }
-        out[k] = acc;
+        *slot = acc;
     }
 }
 

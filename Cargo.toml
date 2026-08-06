@@ -21,14 +21,19 @@ keywords = ["dsp", "audio", "fft", "signal-processing", "no-std"]
 categories = ["multimedia::audio", "science", "no-std"]
 
 [workspace.dependencies]
-num-complex = "0.4"
-num-traits = "0.2"
+# `default-features = false` is required here (not in the member manifest):
+# cargo silently ignores a member-level `default-features = false` when the
+# workspace dependency does not declare it. Members opt back into `std` via
+# their own feature flags so `tpt-dsp-core` stays no_std-buildable.
+num-complex = { version = "0.4", default-features = false }
+num-traits = { version = "0.2", default-features = false }
 rustfft = { version = "6.2", default-features = false }
 crossbeam-channel = "0.5"
 cpal = "0.15"
 serialport = "4.6"
 tokio = { version = "1", features = ["sync", "time", "io-util", "rt", "net"] }
 futures = "0.3"
+async-std = { version = "1.13", features = ["default"] }
 serde = { version = "1", features = ["derive"] }
 
 [profile.release]

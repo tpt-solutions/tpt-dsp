@@ -12,6 +12,8 @@ pub struct ConvolutionReverb {
     convolver: FftConvolver<f32>,
     block_size: usize,
     wet: f32,
+    block_in: Vec<f32>,
+    block_out: Vec<f32>,
 }
 
 impl ConvolutionReverb {
@@ -30,6 +32,8 @@ impl ConvolutionReverb {
             convolver: FftConvolver::new(impulse_response, block_size),
             block_size,
             wet: 1.0,
+            block_in: vec![0.0; block_size],
+            block_out: vec![0.0; block_size],
         }
     }
 
@@ -47,17 +51,22 @@ impl ConvolutionReverb {
     ///
     /// Both slices must be the same length. Internally the signal is split
     /// into `block_size`-sized pieces; a final short block is zero-padded.
+    /// Allocation-free: the per-block scratch buffers are reused.
     pub fn process(&mut self, input: &[f32], output: &mut [f32]) {
         assert_eq!(input.len(), output.len(), "input/output length mismatch");
         let bs = self.block_size;
         let mut i = 0;
         while i < input.len() {
             let end = (i + bs).min(input.len());
-            let mut block_out = vec![0.0f32; bs];
-            self.convolver.process(&input[i..end], &mut block_out);
+            let len = end - i;
+            self.block_in[..len].copy_from_slice(&input[i..end]);
+            for s in &mut self.block_in[len..] {
+                *s = 0.0;
+            }
+            self.convolver.process(&self.block_in, &mut self.block_out);
             for (o, (x, y)) in output[i..end]
                 .iter_mut()
-                .zip(input[i..end].iter().zip(block_out.iter()))
+                .zip(input[i..end].iter().zip(self.block_out[..len].iter()))
             {
                 *o = x * (1.0 - self.wet) + y * self.wet;
             }
@@ -112,7 +121,10 @@ mod tests {
         rev.set_wet(1.0);
         let mut out = vec![0.0f32; 64];
         let input = [1.0f32; 1];
-        let padded_in: Vec<f32> = std::iter::once(1.0f32).chain(std::iter::repeat(0.0)).take(64).collect();
+        let padded_in: Vec<f32> = std::iter::once(1.0f32)
+            .chain(std::iter::repeat(0.0))
+            .take(64)
+            .collect();
         let _ = input;
         rev.process(&padded_in, &mut out);
         // First sample should equal the first IR tap.

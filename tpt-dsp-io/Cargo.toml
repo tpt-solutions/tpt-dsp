@@ -15,10 +15,12 @@ categories.workspace = true
 default = []
 audio = ["dep:cpal"]
 serial = ["dep:serialport"]
+tcp = ["dep:tokio"]
 
 [dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core" }
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
 cpal = { workspace = true, optional = true }
 serialport = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
 
 [dev-dependencies]

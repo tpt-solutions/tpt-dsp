@@ -149,6 +149,7 @@ impl Ema {
 #[derive(Debug, Clone)]
 pub struct OutlierDetector {
     window: Vec<f32>,
+    scratch: Vec<f32>,
     pos: usize,
     filled: usize,
     sigma: f32,
@@ -164,6 +165,7 @@ impl OutlierDetector {
         assert!(window_size >= 4, "window must be at least 4 samples");
         Self {
             window: vec![0.0; window_size],
+            scratch: vec![0.0; window_size],
             pos: 0,
             filled: 0,
             sigma,
@@ -172,6 +174,9 @@ impl OutlierDetector {
     }
 
     /// Push a sample and return `true` if it is an outlier.
+    ///
+    /// Uses a single internal scratch buffer, so the window sort is performed
+    /// in place and steady-state use is allocation-free.
     pub fn push(&mut self, x: f32) -> bool {
         let n = self.window.len();
         if self.filled == n {
@@ -186,12 +191,15 @@ impl OutlierDetector {
             return false;
         }
 
-        let mut sorted: Vec<f32> = self.window[..self.filled].to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let median = sorted[sorted.len() / 2];
-        let mut devs: Vec<f32> = sorted.iter().map(|v| (v - median).abs()).collect();
-        devs.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let mad = devs[devs.len() / 2].max(1e-9);
+        let m = self.filled;
+        self.scratch[..m].copy_from_slice(&self.window[..m]);
+        self.scratch[..m].sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let median = self.scratch[m / 2];
+        for v in &mut self.scratch[..m] {
+            *v = (*v - median).abs();
+        }
+        self.scratch[..m].sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let mad = self.scratch[m / 2].max(1e-9);
         (x - median).abs() > self.sigma * 1.4826 * mad
     }
 }

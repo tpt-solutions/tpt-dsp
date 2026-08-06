@@ -13,13 +13,30 @@ categories.workspace = true
 
 [features]
 default = ["std"]
-std = ["alloc", "dep:rustfft", "dep:crossbeam-channel"]
+std = [
+    "alloc",
+    "num-complex/std",
+    "num-traits/std",
+    "dep:rustfft",
+    "dep:crossbeam-channel",
+]
 alloc = []
 
 [dependencies]
-num-complex = { workspace = true }
-num-traits = { workspace = true }
+# `libm` is enabled unconditionally so that `num_traits::Float` (sin/cos/sqrt/
+# atan2) and `Complex::{norm,arg}` exist on bare-metal targets that have no
+# `std`. When the `std` feature is on, num-traits prefers the std intrinsics
+# and the libm code is not used.
+num-complex = { workspace = true, features = ["libm"] }
+num-traits = { workspace = true, features = ["libm"] }
 rustfft = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true, optional = true }
 
 [dev-dependencies]
+criterion = "0.5"
+rubato = "1.0.1"
+
+[[bench]]
+name = "dsp_bench"
+harness = false
+

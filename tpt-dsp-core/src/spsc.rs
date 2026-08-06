@@ -4,12 +4,20 @@
 //! blocks or control messages between an audio thread and a UI/control
 //! thread: crossbeam's channels are lock-free for the SPSC case and never
 //! allocate in `try_*` paths.
+//!
+//! A [`SpscQueue`] is cheaply cloneable: each clone is another handle to the
+//! *same* channel. Use [`SpscQueue::split`] to move the producer and consumer
+//! ends out of the queue so that dropping the producer disconnects the
+//! consumer (and vice-versa).
 
-use crossbeam_channel::{bounded, unbounded, Receiver, RecvError, SendError, Sender, TryRecvError, TrySendError};
+use crossbeam_channel::{
+    bounded, unbounded, Receiver, RecvError, SendError, Sender, TryRecvError, TrySendError,
+};
 
 /// A single-producer, single-consumer FIFO channel.
 ///
-/// Cheaply cloneable for both ends; the channel itself is `Send + Sync`.
+/// Cheaply cloneable: each clone is another handle to the same channel.
+/// Call [`split`](Self::split) to obtain owning producer/consumer halves.
 #[derive(Debug, Clone)]
 pub struct SpscQueue<T> {
     sender: Sender<T>,
@@ -52,8 +60,20 @@ impl<T> SpscQueue<T> {
     }
 
     /// Split into independent producer and consumer halves.
-    pub fn split(&self) -> (Producer<T>, Consumer<T>) {
-        (Producer { sender: self.sender.clone() }, Consumer { receiver: self.receiver.clone() })
+    ///
+    /// Consumes the queue: afterwards only the returned [`Producer`] and
+    /// [`Consumer`] reference the channel, so dropping one end disconnects
+    /// the other (`recv`/`try_recv` then return an error rather than blocking
+    /// forever).
+    pub fn split(self) -> (Producer<T>, Consumer<T>) {
+        (
+            Producer {
+                sender: self.sender,
+            },
+            Consumer {
+                receiver: self.receiver,
+            },
+        )
     }
 }
 

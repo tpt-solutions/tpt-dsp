@@ -148,7 +148,9 @@ mod tests {
                     *o = x * 2.0;
                 }
             }))],
-            Box::new(ClosureSink(move |in_: &[f32]| sink_data.lock().unwrap().extend_from_slice(in_))),
+            Box::new(ClosureSink(move |in_: &[f32]| {
+                sink_data.lock().unwrap().extend_from_slice(in_)
+            })),
         );
         graph.run(4);
         let collected = collected.lock().unwrap();
@@ -168,7 +170,9 @@ mod tests {
                 }
             })),
             vec![Box::new(Passthrough), Box::new(Passthrough)],
-            Box::new(ClosureSink(move |in_: &[f32]| seen_data.lock().unwrap().extend_from_slice(in_))),
+            Box::new(ClosureSink(move |in_: &[f32]| {
+                seen_data.lock().unwrap().extend_from_slice(in_)
+            })),
         );
         graph.run(2);
         assert_eq!(

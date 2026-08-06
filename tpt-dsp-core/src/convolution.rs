@@ -5,10 +5,12 @@
 //! [`ConvolvePlan`] (FFT-based) or [`FftConvolver`] for a streaming
 //! zero-alloc real-time block convolver.
 
-use num_complex::Complex;
 use num_traits::Float;
 
+#[cfg(feature = "alloc")]
 use crate::fft::{fft_inplace, ifft_inplace, next_power_of_two};
+#[cfg(feature = "alloc")]
+use num_complex::Complex;
 
 /// Direct convolution of `input` with `kernel`.
 ///
@@ -33,7 +35,8 @@ pub fn convolve<F: Float>(input: &[F], kernel: &[F], out: &mut [F]) {
 /// Requires the `alloc` feature. Allocates all buffers once; each
 /// [`convolve`](Self::convolve) call is allocation-free.
 #[cfg(feature = "alloc")]
-pub struct ConvolvePlan<F: Float> {    fft_len: usize,
+pub struct ConvolvePlan<F: Float> {
+    fft_len: usize,
     out_len: usize,
     scratch: alloc::vec::Vec<Complex<F>>,
     work: alloc::vec::Vec<Complex<F>>,
@@ -67,10 +70,7 @@ impl<F: Float + Default> ConvolvePlan<F> {
     /// (from construction) and `output` must hold at least `out_len`
     /// elements. Allocation-free.
     pub fn convolve(&mut self, input: &[F], output: &mut [F]) {
-        assert!(
-            input.len() + 1 <= self.fft_len,
-            "block too large for this plan"
-        );
+        assert!(input.len() < self.fft_len, "block too large for this plan");
         assert!(output.len() >= self.out_len, "output too small");
         for (z, &x) in self.work.iter_mut().zip(input.iter()) {
             *z = Complex::new(x, F::zero());
@@ -83,7 +83,8 @@ impl<F: Float + Default> ConvolvePlan<F> {
             *z = *z * h;
         }
         ifft_inplace(&mut self.work, &mut self.scratch);
-        for (o, z) in output[..self.out_len].iter_mut().zip(self.work.iter()) {            *o = z.re;
+        for (o, z) in output[..self.out_len].iter_mut().zip(self.work.iter()) {
+            *o = z.re;
         }
     }
 }
@@ -136,13 +137,18 @@ impl<F: Float + Default> FftConvolver<F> {
         self.block_len
     }
 
+    /// FFT size used internally for the overlap-add convolution.
+    #[inline]
+    pub fn fft_len(&self) -> usize {
+        self.fft_len
+    }
+
     /// Process one block of `block_len()` samples, producing `block_len()`
     /// output samples (the overlap-add tail is carried internally).
     /// `output` must have at least `block_len()` elements. Allocation-free.
     pub fn process(&mut self, input: &[F], output: &mut [F]) {
         assert!(input.len() == self.block_len, "wrong input block size");
         assert!(output.len() >= self.block_len, "output too small");
-        let fft_len = self.fft_len;
         let block_len = self.block_len;
 
         for (z, &x) in self.work.iter_mut().zip(input.iter()) {
@@ -157,13 +163,13 @@ impl<F: Float + Default> FftConvolver<F> {
         }
         ifft_inplace(&mut self.work, &mut self.scratch);
 
-        for i in 0..block_len {
-            output[i] = self.work[i].re + self.tail[i];
+        let (head, tail_part) = self.work.split_at(block_len);
+        for ((o, t), w) in output.iter_mut().zip(self.tail.iter_mut()).zip(head.iter()) {
+            *o = w.re + *t;
         }
-        for i in 0..block_len {
-            self.tail[i] = self.work[block_len + i].re;
+        for (t, w) in self.tail.iter_mut().zip(tail_part.iter()) {
+            *t = w.re;
         }
-        let _ = fft_len;
     }
 }
 
@@ -224,7 +230,10 @@ mod tests {
         let block_len = 8;
         let mut conv = FftConvolver::<f32>::new(&kernel, block_len);
         let mut out = vec![0.0f32; input.len()];
-        for (chunk, o) in input.chunks_exact(block_len).zip(out.chunks_exact_mut(block_len)) {
+        for (chunk, o) in input
+            .chunks_exact(block_len)
+            .zip(out.chunks_exact_mut(block_len))
+        {
             conv.process(chunk, o);
         }
 
@@ -236,7 +245,12 @@ mod tests {
                     acc += input[n - m] * kernel[m];
                 }
             }
-            assert!((out[n] - acc).abs() < 1e-2, "n={n} got {} want {}", out[n], acc);
+            assert!(
+                (out[n] - acc).abs() < 1e-2,
+                "n={n} got {} want {}",
+                out[n],
+                acc
+            );
         }
     }
 }

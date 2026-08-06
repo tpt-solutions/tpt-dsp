@@ -5,9 +5,10 @@
 //! so it is allocation-free and real-time safe.
 
 /// The shape produced by an [`Oscillator`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Waveform {
     /// Sinusoid.
+    #[default]
     Sine,
     /// Ramp from -1 to +1 (wraps to -1).
     Sawtooth,
@@ -15,12 +16,6 @@ pub enum Waveform {
     Square,
     /// Triangle ranging -1..+1 with the peak at the midpoint.
     Triangle,
-}
-
-impl Default for Waveform {
-    fn default() -> Self {
-        Waveform::Sine
-    }
 }
 
 /// A phase-accumulator oscillator.
@@ -124,7 +119,7 @@ mod tests {
             prev = s;
         }
         // 1000 samples / 100 per period = 10 periods → ~10 rising edges.
-        assert!((crossings as i32 - 10).abs() <= 1, "crossings {crossings}");
+        assert!((crossings - 10i32).abs() <= 1, "crossings {crossings}");
     }
 
     #[test]

@@ -10,6 +10,7 @@ use tpt_dsp_core::{Biquad, BiquadType, IirFilter};
 /// A multi-band parametric equalizer.
 pub struct Eq {
     filter: IirFilter<f32>,
+    scratch: Vec<f32>,
 }
 
 impl Eq {
@@ -23,6 +24,7 @@ impl Eq {
             .collect();
         Self {
             filter: IirFilter::new(stages),
+            scratch: Vec::new(),
         }
     }
 
@@ -62,6 +64,7 @@ impl Eq {
         ));
         Self {
             filter: IirFilter::new(stages),
+            scratch: Vec::new(),
         }
     }
 
@@ -75,11 +78,17 @@ impl Eq {
         self.filter.reset();
     }
 
-    /// Process one block in place. Allocation-free.
+    /// Process one block in place.
+    ///
+    /// Uses a single internal scratch buffer that is (re)allocated only when
+    /// the block length grows, so steady-state real-time use is allocation
+    /// free.
     pub fn process(&mut self, buf: &mut [f32]) {
-        let mut tmp = vec![0.0f32; buf.len()];
-        self.filter.process(buf, &mut tmp);
-        buf.copy_from_slice(&tmp);
+        if self.scratch.len() < buf.len() {
+            self.scratch = vec![0.0f32; buf.len()];
+        }
+        self.filter.process(buf, &mut self.scratch);
+        buf.copy_from_slice(&self.scratch[..buf.len()]);
     }
 }
 

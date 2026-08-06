@@ -30,7 +30,10 @@ pub fn hilbert<F: Float>(
 ) {
     let n = input.len();
     assert!(out.len() >= n, "output too small for Hilbert transform");
-    assert!(work.len() >= n, "work buffer too small for Hilbert transform");
+    assert!(
+        work.len() >= n,
+        "work buffer too small for Hilbert transform"
+    );
     assert!(
         scratch.len() >= n,
         "scratch buffer too small for Hilbert transform"
@@ -54,12 +57,11 @@ pub fn hilbert<F: Float>(
     if n % 2 == 0 {
         work[mid + 1] = Complex::new(F::zero(), F::zero());
     }
-    for k in 1..=mid {
-        let z = work[k];
-        work[k] = Complex::new(z.re + z.re, z.im + z.im);
+    for z in work[1..=mid].iter_mut() {
+        *z = Complex::new(z.re + z.re, z.im + z.im);
     }
-    for k in (mid + 2 + (n % 2))..n {
-        work[k] = Complex::new(F::zero(), F::zero());
+    for z in work[(mid + 2 + (n % 2))..n].iter_mut() {
+        *z = Complex::new(F::zero(), F::zero());
     }
 
     ifft_inplace(&mut work[..n], scratch);
@@ -123,6 +125,7 @@ mod tests {
     use crate::C32;
 
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn hilbert_shifts_sine_to_cosine() {
         let n = 128;
         let input: Vec<f32> = (0..n).map(|i| (i as f32 * 0.2).sin()).collect();
@@ -135,7 +138,12 @@ mod tests {
         // ringing at the edges of a finite transform).
         for i in 10..n - 10 {
             let expected = -(i as f32 * 0.2).cos();
-            assert!((out[i] - expected).abs() < 0.2, "i={i} got {} want {}", out[i], expected);
+            assert!(
+                (out[i] - expected).abs() < 0.2,
+                "i={i} got {} want {}",
+                out[i],
+                expected
+            );
         }
     }
 
@@ -157,6 +165,7 @@ mod tests {
 
     #[cfg(feature = "alloc")]
     #[test]
+    #[allow(clippy::needless_range_loop)]
     fn transformer_wrapper_roundtrip() {
         let n = 64;
         let mut t = HilbertTransformer::<f64>::new(n);

@@ -79,7 +79,6 @@ mod tests {
 
     #[test]
     fn plan_matches_reference_fft() {
-        use crate::fft::fft_inplace;
         let len = 24; // not a power of two — RustFFT handles it
         let input: Vec<Complex<f32>> = (0..len)
             .map(|i| Complex::new((i as f32 * 0.3).sin(), (i as f32 * 0.1).cos()))
@@ -89,19 +88,31 @@ mod tests {
         let mut got = vec![Complex::default(); len];
         plan.process(&input, &mut got);
 
-        // Reference: pad to power of two and compare shared bins.
-        let pad = len.next_power_of_two();
-        let mut ref_buf: Vec<Complex<f32>> = input.clone();
-        ref_buf.resize(pad, Complex::default());
-        let mut scratch = vec![Complex::default(); pad];
-        fft_inplace(&mut ref_buf, &mut scratch);
-
+        // Reference: a direct (naive) DFT of the same length.
+        let naive = naive_dft(&input);
         for (k, g) in got.iter().enumerate() {
             assert!(
-                (g.re - ref_buf[k].re).abs() < 1e-4 && (g.im - ref_buf[k].im).abs() < 1e-4,
-                "bin {k}: got {g} want {}", ref_buf[k]
+                (g.re - naive[k].re).abs() < 1e-3 && (g.im - naive[k].im).abs() < 1e-3,
+                "bin {k}: got {g} want {}",
+                naive[k]
             );
         }
+    }
+
+    fn naive_dft(input: &[Complex<f32>]) -> Vec<Complex<f32>> {
+        let n = input.len();
+        let tau = 2.0 * core::f32::consts::PI;
+        (0..n)
+            .map(|k| {
+                let mut acc = Complex::new(0.0f32, 0.0f32);
+                for (m, x) in input.iter().enumerate() {
+                    let a = tau * (k * m) as f32 / n as f32;
+                    let w = Complex::new(a.cos(), -a.sin());
+                    acc += *x * w;
+                }
+                acc
+            })
+            .collect()
     }
 
     #[test]
@@ -125,7 +136,9 @@ mod tests {
     #[test]
     fn inplace_matches_out_of_place() {
         let len = 16;
-        let input: Vec<Complex<f32>> = (0..len).map(|i| Complex::new(i as f32, -(i as f32))).collect();
+        let input: Vec<Complex<f32>> = (0..len)
+            .map(|i| Complex::new(i as f32, -(i as f32)))
+            .collect();
         let mut plan = FftPlan::new_forward(len);
         let mut inplace = input.clone();
         plan.process_inplace(&mut inplace);

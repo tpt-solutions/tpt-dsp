@@ -127,7 +127,7 @@ mod tests {
     fn sustain_holds_level() {
         let mut env = Adsr::new(1000.0, 0.01, 0.01, 0.4, 0.5);
         env.note_on();
-        for _ in 0..(1000 * 1) {
+        for _ in 0..1000 {
             // 1 second held
             env.tick();
         }

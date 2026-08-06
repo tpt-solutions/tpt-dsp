@@ -90,7 +90,7 @@ impl Pid {
         let d = self.kd * (error - self.prev_error) / dt;
         let mut integral = self.integral + self.ki * error * dt;
 
-        let mut output = p + integral + d;
+        let output = p + integral + d;
         let clamped = output.clamp(self.out_min, self.out_max);
 
         match self.anti_windup {
@@ -98,7 +98,6 @@ impl Pid {
                 // If saturated, discard the integration we just added.
                 if clamped != output {
                     integral = self.integral;
-                    output = p + integral + d;
                 }
             }
             AntiWindup::BackCalculation(kaw) => {

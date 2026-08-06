@@ -58,13 +58,7 @@ impl<F: Float> BiquadCoeffs<F> {
     /// # Panics
     ///
     /// Panics if `fs <= 0` or `f0` is not in `(0, fs/2]`.
-    pub fn design(
-        kind: BiquadType,
-        fs: F,
-        f0: F,
-        q: F,
-        gain_db: F,
-    ) -> Self {
+    pub fn design(kind: BiquadType, fs: F, f0: F, q: F, gain_db: F) -> Self {
         let half = F::from(0.5).unwrap();
         let two = F::from(2.0).unwrap();
         assert!(fs > F::zero(), "sample rate must be positive");
@@ -74,7 +68,9 @@ impl<F: Float> BiquadCoeffs<F> {
         let cosw = w0.cos();
         let sinw = w0.sin();
 
-        let a_db = F::from(10.0).unwrap().powf(gain_db / F::from(40.0).unwrap());
+        let a_db = F::from(10.0)
+            .unwrap()
+            .powf(gain_db / F::from(40.0).unwrap());
         let sq_a = a_db.sqrt();
 
         let alpha = match kind {
@@ -92,17 +88,32 @@ impl<F: Float> BiquadCoeffs<F> {
             }
             BiquadType::HighPass => {
                 let c = one + cosw;
-                (c * half, -c, c * half, one + alpha, -two * cosw, one - alpha)
+                (
+                    c * half,
+                    -c,
+                    c * half,
+                    one + alpha,
+                    -two * cosw,
+                    one - alpha,
+                )
             }
-            BiquadType::BandPass => {
-                (alpha, F::zero(), -alpha, one + alpha, -two * cosw, one - alpha)
-            }
-            BiquadType::Notch => {
-                (one, -two * cosw, one, one + alpha, -two * cosw, one - alpha)
-            }
-            BiquadType::AllPass => {
-                (one - alpha, -two * cosw, one + alpha, one + alpha, -two * cosw, one - alpha)
-            }
+            BiquadType::BandPass => (
+                alpha,
+                F::zero(),
+                -alpha,
+                one + alpha,
+                -two * cosw,
+                one - alpha,
+            ),
+            BiquadType::Notch => (one, -two * cosw, one, one + alpha, -two * cosw, one - alpha),
+            BiquadType::AllPass => (
+                one - alpha,
+                -two * cosw,
+                one + alpha,
+                one + alpha,
+                -two * cosw,
+                one - alpha,
+            ),
             BiquadType::Peaking => (
                 one + alpha * a_db,
                 -two * cosw,
@@ -221,7 +232,12 @@ impl<F: Float> Biquad<F> {
     /// Process one sample, returning the filtered sample.
     pub fn tick(&mut self, x: F) -> F {
         let mut out = [F::zero()];
-        process_biquad(&self.coeffs, &mut self.state, core::slice::from_ref(&x), &mut out);
+        process_biquad(
+            &self.coeffs,
+            &mut self.state,
+            core::slice::from_ref(&x),
+            &mut out,
+        );
         out[0]
     }
 }
@@ -317,7 +333,10 @@ impl FirDesign {
     ///
     /// Panics if `taps == 0`, is even, or cutoffs are out of range.
     pub fn design<F: Float>(self, taps: usize) -> Fir<F> {
-        assert!(taps > 0 && taps % 2 == 1, "FIR tap count must be odd and nonzero");
+        assert!(
+            taps > 0 && taps % 2 == 1,
+            "FIR tap count must be odd and nonzero"
+        );
         let half = (taps / 2) as f32;
 
         let (lo, hi) = match self {
@@ -361,13 +380,17 @@ pub type IirStage<F> = Biquad<F>;
 /// A cascade of biquad stages implementing an arbitrary-order IIR filter.
 pub struct IirFilter<F: Float> {
     stages: alloc::vec::Vec<IirStage<F>>,
+    scratch: alloc::vec::Vec<F>,
 }
 
 #[cfg(feature = "alloc")]
 impl<F: Float> IirFilter<F> {
     /// Create a filter from a cascade of biquad stages.
     pub fn new(stages: alloc::vec::Vec<IirStage<F>>) -> Self {
-        Self { stages }
+        Self {
+            stages,
+            scratch: alloc::vec::Vec::new(),
+        }
     }
 
     /// Number of biquad stages.
@@ -383,14 +406,20 @@ impl<F: Float> IirFilter<F> {
         }
     }
 
-    /// Process one block through every stage. Allocation-free.
+    /// Process one block through every stage.
+    ///
+    /// Uses a single internal scratch buffer that is (re)allocated only when
+    /// the block length grows, so steady-state real-time use is allocation
+    /// free.
     pub fn process(&mut self, input: &[F], output: &mut [F]) {
         assert!(output.len() >= input.len(), "output too small for IIR");
+        if self.scratch.len() < input.len() {
+            self.scratch = alloc::vec![F::zero(); input.len()];
+        }
         output[..input.len()].copy_from_slice(input);
         for stage in self.stages.iter_mut() {
-            let mut next = alloc::vec![F::zero(); input.len()];
-            stage.process(&output[..input.len()], &mut next);
-            output[..input.len()].copy_from_slice(&next);
+            self.scratch[..input.len()].copy_from_slice(&output[..input.len()]);
+            stage.process(&self.scratch[..input.len()], &mut output[..input.len()]);
         }
     }
 }
@@ -464,8 +493,14 @@ mod tests {
         let mut lo_out = 0.0f32;
         let mut hi_out = 0.0f32;
         for i in 0..4_000 {
-            lo_out = lo_out.max(lo.tick((i as f32 * 0.02 * core::f32::consts::TAU).sin()).abs());
-            hi_out = hi_out.max(hi.tick((i as f32 * 0.2 * core::f32::consts::TAU).sin()).abs());
+            lo_out = lo_out.max(
+                lo.tick((i as f32 * 0.02 * core::f32::consts::TAU).sin())
+                    .abs(),
+            );
+            hi_out = hi_out.max(
+                hi.tick((i as f32 * 0.2 * core::f32::consts::TAU).sin())
+                    .abs(),
+            );
         }
         assert!(lo_out.abs() > 0.8, "low passed {lo_out}");
         assert!(hi_out.abs() < 0.1, "high passed {hi_out}");

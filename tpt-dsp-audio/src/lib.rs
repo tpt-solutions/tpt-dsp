@@ -20,8 +20,8 @@
 #![warn(rust_2018_idioms)]
 
 mod delay;
-mod envelope;
 mod engine;
+mod envelope;
 mod eq;
 mod fm;
 mod graph;
@@ -32,8 +32,8 @@ mod waveshaper;
 mod wavetable;
 
 pub use delay::Delay;
-pub use envelope::{Adsr, EnvelopeState};
 pub use engine::{RealtimeEngine, BLOCK_128, BLOCK_256};
+pub use envelope::{Adsr, EnvelopeState};
 pub use eq::Eq;
 pub use fm::FmSynth;
 pub use graph::{

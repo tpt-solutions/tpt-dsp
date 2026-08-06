@@ -12,6 +12,6 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core" }
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
 
 [dev-dependencies]

@@ -74,7 +74,11 @@ impl<F: FnMut(&[f32], &mut [f32])> RealtimeEngine<F> {
     /// Convenience: feed `input` (must be `block_size` long), run the
     /// callback, and return a slice of the output. Allocation-free.
     pub fn process_with(&mut self, input: &[f32]) -> &[f32] {
-        assert_eq!(input.len(), self.block_size, "input must be block_size long");
+        assert_eq!(
+            input.len(),
+            self.block_size,
+            "input must be block_size long"
+        );
         self.input.copy_from_slice(input);
         (self.callback)(&self.input, &mut self.output);
         &self.output

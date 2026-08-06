@@ -74,7 +74,10 @@ mod tests {
     fn rms_of_unit_sine_is_about_sqrt_half() {
         let sig: Vec<f32> = (0..1000).map(|i| (i as f32 * 0.3).sin()).collect();
         let r = rms(&sig);
-        assert!((r - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.02, "rms {r}");
+        assert!(
+            (r - std::f32::consts::FRAC_1_SQRT_2).abs() < 0.02,
+            "rms {r}"
+        );
     }
 
     #[test]

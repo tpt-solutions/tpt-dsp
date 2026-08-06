@@ -3,6 +3,12 @@
 //! All window functions are symmetric (periodic for use with the FFT) and
 //! allocate nothing: they write into a caller-provided slice.
 
+// On `no_std` targets the inherent `f32::cos` does not exist, so pull in the
+// `num_traits::Float` trait. Under `std` the inherent methods are used and the
+// import would be flagged as unused, hence the cfg gate.
+#[cfg(not(feature = "std"))]
+use num_traits::Float;
+
 /// The kind of spectral window to generate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WindowType {
@@ -32,9 +38,7 @@ pub fn windowed(win: WindowType, len: usize, out: &mut [f32]) {
         *slot = match win {
             WindowType::Hann => 0.5 - 0.5 * x.cos(),
             WindowType::Hamming => 0.54 - 0.46 * x.cos(),
-            WindowType::Blackman => {
-                0.42 - 0.5 * x.cos() + 0.08 * (2.0 * x).cos()
-            }
+            WindowType::Blackman => 0.42 - 0.5 * x.cos() + 0.08 * (2.0 * x).cos(),
         };
     }
 }

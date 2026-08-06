@@ -122,7 +122,8 @@ impl<'a, F> RingBuffer<'a, F> {
             return None;
         }
         let value = self.data[read];
-        self.read.store((read + 1) % self.data.len(), Ordering::Release);
+        self.read
+            .store((read + 1) % self.data.len(), Ordering::Release);
         Some(value)
     }
 
@@ -142,7 +143,8 @@ impl<'a, F> RingBuffer<'a, F> {
 
     /// Discard all buffered items.
     pub fn clear(&mut self) {
-        self.read.store(self.write.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.read
+            .store(self.write.load(Ordering::Relaxed), Ordering::Relaxed);
     }
 }
 
@@ -227,7 +229,7 @@ mod tests {
     fn front_peeks_without_removing() {
         let mut storage = [0f32; 4];
         let mut ring = RingBuffer::new(&mut storage);
-        ring.push(7.0);
+        let _ = ring.push(7.0);
         assert_eq!(ring.front(), Some(7.0));
         assert_eq!(ring.len(), 1);
     }
@@ -236,8 +238,8 @@ mod tests {
     fn clear_empties() {
         let mut storage = [0f32; 4];
         let mut ring = RingBuffer::new(&mut storage);
-        ring.push(1.0);
-        ring.push(2.0);
+        let _ = ring.push(1.0);
+        let _ = ring.push(2.0);
         ring.clear();
         assert!(ring.is_empty());
         assert_eq!(ring.pop(), None);

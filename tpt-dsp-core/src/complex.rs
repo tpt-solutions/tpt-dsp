@@ -7,17 +7,16 @@
 use num_complex::Complex;
 use num_traits::Float;
 
-/// π at f64 precision, converted to `F` (correctly rounded for `f32`).
-/// Avoids the loss of precision caused by going through `f32` constants.
+/// π at f64 precision, converted to `F`.
 #[inline]
 pub(crate) fn pi<F: Float>() -> F {
-    F::from(3.141592653589793238462643383279502884_f64).unwrap()
+    F::from(core::f64::consts::PI).unwrap()
 }
 
 /// 2π at f64 precision, converted to `F`.
 #[inline]
 pub(crate) fn tau<F: Float>() -> F {
-    F::from(6.283185307179586476925286766559005768_f64).unwrap()
+    F::from(core::f64::consts::TAU).unwrap()
 }
 
 /// `f32` complex type.

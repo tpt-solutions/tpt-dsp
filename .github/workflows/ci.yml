@@ -4,6 +4,10 @@ on:
   push:
     branches: [master, main]
   pull_request:
+  # Re-run the dependency audit even when nothing is pushed, so newly
+  # published RUSTSEC advisories against existing dependencies are caught.
+  schedule:
+    - cron: "0 3 * * 1"
 
 env:
   CARGO_TERM_COLOR: always
@@ -37,8 +41,10 @@ jobs:
         run: cargo test --workspace --all-features
       - name: cargo clippy
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
-      - name: no_std check (core)
+      - name: no_std check (core, no features)
         run: cargo build -p tpt-dsp-core --no-default-features
+      - name: no_std check (core, alloc only)
+        run: cargo build -p tpt-dsp-core --no-default-features --features alloc
 
   wasm:
     name: Build (wasm32-unknown-unknown)
@@ -62,19 +68,39 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: thumbv7em-none-eabihf
+          components: clippy
       - uses: Swatinem/rust-cache@v2
-      - name: cargo check tpt-dsp-core (no_std)
-        run: cargo check -p tpt-dsp-core --target thumbv7em-none-eabihf --no-default-features
+      # A real `build` (not just `check`) on a target that has no `std` at all
+      # is what actually proves no_std correctness: any dependency that leaks
+      # `std` fails to link here. Both feature configurations that are meant
+      # to work without `std` are covered.
+      - name: cargo build tpt-dsp-core (no_std, no features)
+        run: cargo build -p tpt-dsp-core --target thumbv7em-none-eabihf --no-default-features
+      - name: cargo build tpt-dsp-core (no_std + alloc)
+        run: cargo build -p tpt-dsp-core --target thumbv7em-none-eabihf --no-default-features --features alloc
+      - name: cargo clippy tpt-dsp-core (no_std)
+        run: cargo clippy -p tpt-dsp-core --target thumbv7em-none-eabihf --no-default-features -- -D warnings
 
   deny:
     name: License / advisory audit (cargo-deny)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-deny
         uses: taiki-e/install-action@cargo-deny
-      - name: cargo-deny check
-        run: cargo deny check
+      # Default feature set: what a plain `cargo add tpt-dsp-*` pulls in.
+      - name: cargo-deny check (default features)
+        run: cargo deny check bans licenses advisories sources
+      # Every optional dependency (cpal, serialport, tokio, async-std, ...)
+      # lives behind a non-default feature, so the default-feature pass above
+      # never sees them. Without this second pass a GPL/LGPL dependency could
+      # be added behind a feature flag and slip through the audit entirely.
+      # NOTE: `--all-features` is a *global* cargo-deny flag and must appear
+      # before the `check` subcommand.
+      - name: cargo-deny check (all features)
+        run: cargo deny --all-features check bans licenses advisories sources
 
   docs:
     name: Docs

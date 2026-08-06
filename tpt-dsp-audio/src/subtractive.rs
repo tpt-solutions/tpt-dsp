@@ -63,7 +63,7 @@ impl SubtractiveVoice {
         let cutoff = self.base_cutoff + self.filter_env_amount * self.filter_env.tick();
         let cutoff = cutoff.clamp(20.0, self.sample_rate * 0.45);
         let c = Biquad::<f32>::design(BiquadType::LowPass, self.sample_rate, cutoff, 4.0, 0.0);
-        self.filter.set_coeffs(c.coeffs().clone());
+        self.filter.set_coeffs(*c.coeffs());
         let s = self.osc.tick();
         let mut filtered = [0.0f32; 1];
         self.filter.process(&[s], &mut filtered);
