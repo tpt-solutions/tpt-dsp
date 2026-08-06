@@ -1,0 +1,23 @@
+[package]
+name = "tpt-dsp-analysis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Spectrum analysis, time-series statistics and feature extraction for tpt-dsp."
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = ["async"]
+async = ["dep:tokio", "dep:futures"]
+
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core" }
+tokio = { workspace = true, optional = true }
+futures = { workspace = true, optional = true }
+
+[dev-dependencies]

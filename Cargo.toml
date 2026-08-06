@@ -1,0 +1,38 @@
+[workspace]
+resolver = "2"
+members = [
+    "tpt-dsp-core",
+    "tpt-dsp-audio",
+    "tpt-dsp-analysis",
+    "tpt-dsp-control",
+    "tpt-dsp-io",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.74"
+authors = ["TPT Solutions"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tpt-solutions/tpt-dsp"
+homepage = "https://github.com/tpt-solutions/tpt-dsp"
+description = "A pure-Rust, real-time-safe digital signal processing framework."
+keywords = ["dsp", "audio", "fft", "signal-processing", "no-std"]
+categories = ["multimedia::audio", "science", "no-std"]
+
+[workspace.dependencies]
+num-complex = "0.4"
+num-traits = "0.2"
+rustfft = { version = "6.2", default-features = false }
+crossbeam-channel = "0.5"
+cpal = "0.15"
+serialport = "4.6"
+tokio = { version = "1", features = ["sync", "time", "io-util", "rt", "net"] }
+futures = "0.3"
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+lto = "thin"
+
+[workspace.metadata.docs.rs]
+all-features = true

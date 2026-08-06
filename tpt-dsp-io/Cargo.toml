@@ -1,0 +1,24 @@
+[package]
+name = "tpt-dsp-io"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Pure Rust hardware I/O: audio (cpal), serial and streaming for tpt-dsp."
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = []
+audio = ["dep:cpal"]
+serial = ["dep:serialport"]
+
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core" }
+cpal = { workspace = true, optional = true }
+serialport = { workspace = true, optional = true }
+
+[dev-dependencies]

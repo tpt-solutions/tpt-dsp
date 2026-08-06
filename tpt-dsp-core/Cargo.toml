@@ -1,0 +1,25 @@
+[package]
+name = "tpt-dsp-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Pure math, FFT, filters and zero-allocation buffers for tpt-dsp. Fully no_std compatible."
+keywords.workspace = true
+categories.workspace = true
+
+[features]
+default = ["std"]
+std = ["alloc", "dep:rustfft", "dep:crossbeam-channel"]
+alloc = []
+
+[dependencies]
+num-complex = { workspace = true }
+num-traits = { workspace = true }
+rustfft = { workspace = true, optional = true }
+crossbeam-channel = { workspace = true, optional = true }
+
+[dev-dependencies]

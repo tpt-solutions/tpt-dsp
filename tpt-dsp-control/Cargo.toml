@@ -1,0 +1,17 @@
+[package]
+name = "tpt-dsp-control"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "PID control, input shaping and kinematics for real-time automation."
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core" }
+
+[dev-dependencies]
