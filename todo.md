@@ -90,9 +90,18 @@ _Last synced: 2026-08-07. Reconciled with the actual code in `tpt-dsp-*/src`. Th
 - [x] RTL-SDR IQ data ingestion (2.4M complex samples/sec) — `tpt-dsp-io` `iq`/`source`/`rtlsdr` + `tpt-dsp-core` `demod`
 - [x] FIR decimation filters for channel selection — `FIRDecimator` in `resample.rs`
 - [x] FM demodulation (phase delta calculation) — `FmDemodulator` in `demod.rs`
-- [ ] Real-time waterfall spectrum rendering (desktop UI) — _`tpt-dsp-viz` is a crate skeleton only: `Cargo.toml` depends on `egui`/`eframe`/`tpt-dsp-analysis`, but `src/lib.rs` is just the SPDX header and `src/main.rs` is `fn main() {}`. No rendering code has been written yet._
+- [x] Real-time waterfall spectrum rendering (desktop UI) — _`tpt-dsp-viz` is now implemented (2026-08-07): `VizApp` (`eframe::App`) renders a scrolling `Spectrogram` waterfall (colour-mapped by `colormap`: black → blue → cyan → yellow → red) plus a live dB spectrum line, with peak frequency/dB readout and a pause toggle. A producer thread streams `SpectrumFrame`s over a `crossbeam-channel`: `run_synthetic` (deterministic multi-tone + noise) runs with no hardware, `run_audio_input` (under the `audio` feature) captures the default input device via `cpal` (F32/I16/U16, mono downmix). Sub-tasks:_
+  - [x] `pipeline.rs`: `SpectrumFrame` + `analyze_block` (windows/transforms/averages one block via `RealtimeSpectrumAnalyzer`, allocates only the per-frame `Vec<f32>` sent over the channel — same known tradeoff as the `tpt-dsp-analysis` async adapters, not a hot-path violation)
+  - [x] `pipeline.rs`: `SyntheticGenerator` + `run_synthetic` — deterministic multi-tone + noise demo signal on a paced background thread, so the app runs with no hardware attached
+  - [x] `pipeline.rs` (`audio` feature): `run_audio_input` — `cpal` default input device capture, mono downmix, F32/I16/U16 format handling
+  - [x] `colormap.rs`: dB → heat-map `Color32` gradient (black → blue → cyan → yellow → red) + unit tests
+  - [x] `app.rs`: `VizApp` (`eframe::App` impl) — waterfall texture from `Spectrogram`, live spectrum line via `egui` painter, peak frequency/dB readout, pause toggle, source label
+  - [x] `lib.rs`: wire modules + `pub fn run()` (spawn pipeline thread, `eframe::run_native`); `main.rs` calls it
+  - [x] Unit tests for `analyze_block` (known sine block → expected peak bin/dB) and `SyntheticGenerator` determinism/bounds
+  - [ ] Manually run the app (`cargo run -p tpt-dsp-viz` and `--features audio`) and confirm the waterfall/spectrum line actually render — _blocked: this headless environment has no display, so live rendering can't be verified here; code compiles, builds and unit-tests pass. Run on a machine with a GUI to confirm._
+  - [x] Update `ARCHITECTURE.md` §4.2, which previously listed "the desktop waterfall UI" under **Not yet implemented** / **Unstarted roadmap** (stale)
 - [x] Frame-drop-free continuous streaming verification — `streaming` integration test (`synthetic_stream_runs_frame_drop_free_at_full_rate`)
-- [ ] **Milestone: Phase 2 MVP released** — _blocked on the waterfall UI implementation above, plus pending push to GitHub_
+- [ ] **Milestone: Phase 2 MVP released** — _waterfall UI implemented; still blocked on a live render check (needs a display) plus pending push to GitHub_
 
 ---
 
@@ -145,9 +154,9 @@ _Last synced: 2026-08-07. Reconciled with the actual code in `tpt-dsp-*/src`. Th
 **Still open / external blockers**
 - Push initial repo to GitHub — needs a remote + credentials.
 - Deploy web pedalboard to GitHub Pages — workflow exists; needs the repo's Pages setting = "GitHub Actions".
-- `v0.1.0` publish to crates.io — needs publish token; the other 6 crates are release-ready, `tpt-dsp-viz` is not (see below).
+- `v0.1.0` publish to crates.io — needs publish token; all 7 crates are now implemented and release-ready (the `tpt-dsp-viz` desktop UI builds, tests and clips clean — a live render check on a GUI machine is the only remaining verification).
 - Cortex-M `embedded-hal` validation — needs physical hardware; not runnable here.
 - Benchmark report vs JUCE / libsamplerate — intentionally deferred (both are C libraries); `BENCHMARKS.md` documents the pure-Rust `rubato` comparison instead.
-- `tpt-dsp-viz` is an empty crate skeleton (`src/lib.rs` is just the SPDX header, `src/main.rs` is `fn main() {}`) — the waterfall/spectrum-line UI described in its `Cargo.toml` deps (`egui`/`eframe`) and `README.md` has not been implemented yet, contrary to what MVP 2's checklist previously claimed.
+- `tpt-dsp-viz` is **implemented** (2026-08-07): `VizApp` renders a waterfall + live spectrum line from a producer thread, with a deterministic synthetic source and an optional `cpal` audio source (`audio` feature). A live (displayed) render check is still pending — this headless environment has no display.
 
 (End of file)

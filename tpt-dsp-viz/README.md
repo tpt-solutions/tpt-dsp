@@ -47,10 +47,12 @@ control crates — what you see is what the rest of the framework computes.
 
 ## Status
 
-This crate is **early-stage**: the rendering pipeline and egui widgets are being
-assembled. The public API is not yet stable; expect the module and type names to
-change between `0.1.x` releases. The core dependency stack
-(`tpt-dsp-core` → `tpt-dsp-analysis` → `egui`/`eframe`) is fixed.
+This crate is **implemented**: `cargo run -p tpt-dsp-viz` opens a window with a
+scrolling waterfall spectrogram (colour-mapped black → blue → cyan → yellow →
+red) and a live dB spectrum line, with a peak-frequency/dB readout and a pause
+toggle. With no hardware attached it renders a deterministic synthetic
+multi-tone + noise signal; pass `--features audio -- --audio` to capture from
+the default system audio input device via `cpal` instead.
 
 ## Building
 

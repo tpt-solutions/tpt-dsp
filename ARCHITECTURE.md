@@ -184,10 +184,22 @@ Building blocks now present:
   a pre-allocated ring for waterfall rendering.
 - **FM demod:** `FmDemodulator` / `phase_delta` / `phase_to_audio`
   (`core::demod`) — phase-delta discriminator, `no_std`, `Copy`, allocation-free.
+- **Desktop waterfall UI (`tpt-dsp-viz`):** implemented. A producer thread
+  (`pipeline::run_synthetic` / `pipeline::run_audio_input`) streams
+  [`SpectrumFrame`]s (one-sided dB spectrum + metadata) to the egui UI over a
+  `crossbeam-channel`. `analyze_block` windows/transforms/averages one block via
+  `RealtimeSpectrumAnalyzer`. `VizApp` (`app.rs`, an `eframe::App`) renders the
+  `Spectrogram` as a scrolling `egui` texture (colour-mapped by `colormap` —
+  black → blue → cyan → yellow → red) and the latest frame as a live spectrum
+  line, with peak-frequency/dB readout and a pause toggle. `run_audio_input`
+  (under the `audio` feature) captures the default input device via `cpal`,
+  downmixing F32/I16/U16 streams to mono. The only per-frame allocation is the
+  `Vec<f32>` of dB values sent over the channel.
 
-**Not yet implemented** (from `todo.md`): the actual RTL-SDR USB driver/binding,
-the desktop waterfall UI, continuous frame-drop-free streaming verification, and
-a fully wired SDR app. The constituent DSP stages are available for assembling it.
+**Not yet implemented** (from `todo.md`): the actual RTL-SDR USB driver/binding
+and a fully wired end-to-end SDR app (the `io` `rtl-sdr` feature is a stubbed
+backend). Continuous frame-drop-free streaming verification and the desktop
+waterfall UI are now implemented.
 
 ---
 
@@ -303,10 +315,12 @@ async adapters and grow-only scratch in `IirFilter`/`Eq`.
 - `tpt-dsp-control` depends on `tpt-dsp-core` but does not currently use it.
 - `portable-simd` FFT/complex optimization: **not started**.
 
-**Unstarted roadmap (marked "(planned)" above):**
-- MVP 1 (WASM guitar pedal UI + wasm-bindgen + GitHub Pages).
+**Roadmap status (marked "(planned)" above):**
+- MVP 1 (WASM guitar pedal UI + wasm-bindgen + GitHub Pages) — **done**.
 - MVP 2 (RTL-SDR USB ingestion, desktop waterfall UI, frame-drop-free streaming
-  verification, fully wired SDR app).
+  verification, fully wired SDR app) — **waterfall UI and frame-drop-free
+  streaming verification are done**; RTL-SDR USB driver and a fully wired SDR app
+  remain.
 - `embedded-hal` Cortex-M validation; criterion benchmark reports vs JUCE /
   libsamplerate; crates.io v1.0.0 publish.
 
