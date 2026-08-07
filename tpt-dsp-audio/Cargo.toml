@@ -8,8 +8,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Synthesis, effects and real-time audio graphs for tpt-dsp."
-keywords.workspace = true
-categories.workspace = true
+keywords = ["dsp", "audio", "synthesis", "effects", "audio-graph"]
+categories = ["multimedia::audio", "multimedia"]
+readme = "README.md"
 
 [dependencies]
 tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }

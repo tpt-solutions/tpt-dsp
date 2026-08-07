@@ -90,9 +90,9 @@ _Last synced: 2026-08-07. Reconciled with the actual code in `tpt-dsp-*/src`. Th
 - [x] RTL-SDR IQ data ingestion (2.4M complex samples/sec) — `tpt-dsp-io` `iq`/`source`/`rtlsdr` + `tpt-dsp-core` `demod`
 - [x] FIR decimation filters for channel selection — `FIRDecimator` in `resample.rs`
 - [x] FM demodulation (phase delta calculation) — `FmDemodulator` in `demod.rs`
-- [x] Real-time waterfall spectrum rendering (desktop UI) — `tpt-dsp-viz` (egui)
+- [ ] Real-time waterfall spectrum rendering (desktop UI) — _`tpt-dsp-viz` is a crate skeleton only: `Cargo.toml` depends on `egui`/`eframe`/`tpt-dsp-analysis`, but `src/lib.rs` is just the SPDX header and `src/main.rs` is `fn main() {}`. No rendering code has been written yet._
 - [x] Frame-drop-free continuous streaming verification — `streaming` integration test (`synthetic_stream_runs_frame_drop_free_at_full_rate`)
-- [ ] **Milestone: Phase 2 MVP released** — _code complete; pending push to GitHub_
+- [ ] **Milestone: Phase 2 MVP released** — _blocked on the waterfall UI implementation above, plus pending push to GitHub_
 
 ---
 
@@ -117,8 +117,8 @@ _Last synced: 2026-08-07. Reconciled with the actual code in `tpt-dsp-*/src`. Th
 - [x] Benchmark suite vs libsamplerate — _libsamplerate is C; deferred (documented). `rubato` used as the pure-Rust analog._
 - [x] Publish benchmark comparison report — `BENCHMARKS.md` (criterion suites in `tpt-dsp-core/benches`, `tpt-dsp-audio/benches`)
 - [x] Final license/dependency audit (full `cargo-deny` pass) — _`cargo deny --all-features check` green (OFL-1.1 / Ubuntu-font-1.0 added for egui's bundled fonts, 2026-08-07)_
-- [ ] v1.0.0 release on crates.io — _blocked on publish credentials; code is release-ready_
-- [ ] **Milestone: Phase 3 complete — v1.0.0 published**
+- [ ] v0.1.0 release on crates.io — _blocked on publish credentials; code is release-ready_
+- [ ] **Milestone: Phase 3 complete — v0.1.0 published**
 
 ---
 
@@ -145,9 +145,9 @@ _Last synced: 2026-08-07. Reconciled with the actual code in `tpt-dsp-*/src`. Th
 **Still open / external blockers**
 - Push initial repo to GitHub — needs a remote + credentials.
 - Deploy web pedalboard to GitHub Pages — workflow exists; needs the repo's Pages setting = "GitHub Actions".
-- `v1.0.0` publish to crates.io — needs publish token; code is release-ready.
+- `v0.1.0` publish to crates.io — needs publish token; the other 6 crates are release-ready, `tpt-dsp-viz` is not (see below).
 - Cortex-M `embedded-hal` validation — needs physical hardware; not runnable here.
 - Benchmark report vs JUCE / libsamplerate — intentionally deferred (both are C libraries); `BENCHMARKS.md` documents the pure-Rust `rubato` comparison instead.
-- `tpt-dsp-viz` desktop waterfall is a standalone example app; not wired into a release binary/crate publish.
+- `tpt-dsp-viz` is an empty crate skeleton (`src/lib.rs` is just the SPDX header, `src/main.rs` is `fn main() {}`) — the waterfall/spectrum-line UI described in its `Cargo.toml` deps (`egui`/`eframe`) and `README.md` has not been implemented yet, contrary to what MVP 2's checklist previously claimed.
 
 (End of file)

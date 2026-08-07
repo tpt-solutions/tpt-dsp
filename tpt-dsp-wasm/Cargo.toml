@@ -10,6 +10,7 @@ homepage.workspace = true
 description = "WebAssembly / Web Audio guitar-effects pedalboard front end for tpt-dsp."
 keywords = ["dsp", "audio", "wasm", "webaudio", "guitar"]
 categories = ["multimedia::audio", "wasm"]
+readme = "README.md"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -8,8 +8,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Pure Rust hardware I/O: audio (cpal), serial and streaming for tpt-dsp."
-keywords.workspace = true
-categories.workspace = true
+keywords = ["dsp", "audio", "serial", "sdr", "hardware-io"]
+categories = ["hardware-support", "multimedia::audio", "embedded"]
+readme = "README.md"
 
 [features]
 default = []

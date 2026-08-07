@@ -10,6 +10,7 @@ homepage.workspace = true
 description = "Real-time waterfall spectrum and live spectrum-line desktop UI for tpt-dsp."
 keywords = ["dsp", "waterfall", "spectrum", "sdr", "gui"]
 categories = ["visualization", "science", "multimedia"]
+readme = "README.md"
 
 [features]
 default = []

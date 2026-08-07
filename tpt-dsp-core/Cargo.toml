@@ -8,8 +8,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Pure math, FFT, filters and zero-allocation buffers for tpt-dsp. Fully no_std compatible."
-keywords.workspace = true
-categories.workspace = true
+keywords = ["dsp", "signal-processing", "fft", "filters", "no-std"]
+categories = ["multimedia::audio", "science", "no-std"]
+readme = "README.md"
 
 [features]
 default = ["std"]

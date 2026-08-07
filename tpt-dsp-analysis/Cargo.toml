@@ -8,8 +8,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Spectrum analysis, time-series statistics and feature extraction for tpt-dsp."
-keywords.workspace = true
-categories.workspace = true
+keywords = ["dsp", "signal-analysis", "spectrum", "fft", "statistics"]
+categories = ["science", "multimedia::audio", "algorithms"]
+readme = "README.md"
 
 [features]
 default = ["async"]
