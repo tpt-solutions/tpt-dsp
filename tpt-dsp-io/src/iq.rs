@@ -7,6 +7,9 @@
 
 use tpt_dsp_core::Complex32;
 
+/// Bytes occupied by the widest sample layout in [`IqFormat`].
+pub const MAX_BYTES_PER_SAMPLE: usize = 8;
+
 /// The byte layout of an interleaved I/Q stream.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IqFormat {
@@ -65,6 +68,116 @@ pub fn parse_iq(format: IqFormat, bytes: &[u8], out: &mut [Complex32]) -> usize 
         *o = Complex32::new(i_val, q_val);
     }
     n
+}
+
+/// Outcome of [`IqReassembler::push`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Reassembled {
+    /// Complete samples written to the head of the output slice.
+    pub samples: usize,
+    /// Input bytes taken by the reassembler: either parsed, or retained
+    /// internally as the leading fragment of the next sample. Bytes beyond
+    /// this count are untouched and must be offered again.
+    pub consumed: usize,
+}
+
+/// A zero-allocation reassembler for byte streams whose chunk boundaries do
+/// not align with sample boundaries.
+///
+/// Transports such as TCP split their payload at arbitrary offsets, so a
+/// complex sample can straddle two reads. [`IqReassembler`] keeps the trailing
+/// fragment of a chunk in a fixed-size internal buffer and completes it from
+/// the front of the next chunk, so no byte is dropped and the I/Q phase of the
+/// stream is never inverted.
+///
+/// Unlike [`IqStream`] the bulk of the data is parsed straight out of the
+/// caller's buffer: only the sub-sample remainder (at most
+/// [`MAX_BYTES_PER_SAMPLE`] - 1 bytes) is ever copied, and no allocation
+/// happens on any path, which makes it usable from a real-time receive loop.
+///
+/// ```
+/// # use tpt_dsp_io::{IqFormat, IqReassembler};
+/// # use tpt_dsp_core::Complex32;
+/// let mut r = IqReassembler::new(IqFormat::U8);
+/// let mut out = [Complex32::default(); 4];
+/// assert_eq!(r.push(&[128, 128, 255], &mut out).samples, 1);
+/// assert_eq!(r.pending_bytes(), 1);
+/// assert_eq!(r.push(&[0], &mut out).samples, 1);
+/// ```
+#[derive(Debug, Clone)]
+pub struct IqReassembler {
+    format: IqFormat,
+    partial: [u8; MAX_BYTES_PER_SAMPLE],
+    partial_len: usize,
+}
+
+impl IqReassembler {
+    /// Create a reassembler for `format`.
+    pub fn new(format: IqFormat) -> Self {
+        Self {
+            format,
+            partial: [0u8; MAX_BYTES_PER_SAMPLE],
+            partial_len: 0,
+        }
+    }
+
+    /// The format being reassembled.
+    #[inline]
+    pub fn format(&self) -> IqFormat {
+        self.format
+    }
+
+    /// Bytes of an incomplete sample currently held over from a previous push.
+    #[inline]
+    pub fn pending_bytes(&self) -> usize {
+        self.partial_len
+    }
+
+    /// Discard the held-over fragment, e.g. after a reconnect.
+    pub fn reset(&mut self) {
+        self.partial_len = 0;
+    }
+
+    /// Parse `bytes` into `out`, completing any sample left dangling by the
+    /// previous call.
+    ///
+    /// Fewer bytes than supplied are consumed when `out` fills up; call again
+    /// with the remainder (`&bytes[result.consumed..]`) after draining `out`.
+    pub fn push(&mut self, bytes: &[u8], out: &mut [Complex32]) -> Reassembled {
+        let bps = self.format.bytes_per_sample();
+        debug_assert!(bps <= MAX_BYTES_PER_SAMPLE);
+        if out.is_empty() {
+            return Reassembled::default();
+        }
+
+        let mut samples = 0;
+        let mut consumed = 0;
+
+        if self.partial_len > 0 {
+            let take = (bps - self.partial_len).min(bytes.len());
+            self.partial[self.partial_len..self.partial_len + take].copy_from_slice(&bytes[..take]);
+            self.partial_len += take;
+            consumed += take;
+            if self.partial_len < bps {
+                return Reassembled { samples, consumed };
+            }
+            samples += parse_iq(self.format, &self.partial[..bps], out);
+            self.partial_len = 0;
+        }
+
+        let written = parse_iq(self.format, &bytes[consumed..], &mut out[samples..]);
+        consumed += written * bps;
+        samples += written;
+
+        let tail = bytes.len() - consumed;
+        if tail > 0 && tail < bps {
+            self.partial[..tail].copy_from_slice(&bytes[consumed..]);
+            self.partial_len = tail;
+            consumed = bytes.len();
+        }
+
+        Reassembled { samples, consumed }
+    }
 }
 
 /// A streaming IQ parser that buffers bytes until it can emit complete
@@ -154,5 +267,87 @@ mod tests {
         assert_eq!(n, 1);
         // Second drained sample is (255, 0) → re = 127/128, im = -1.0.
         assert!((out[0].re - 127.0 / 128.0).abs() < 1e-6);
+    }
+
+    fn u8_pattern(samples: usize) -> (Vec<u8>, Vec<Complex32>) {
+        let mut bytes = Vec::with_capacity(samples * 2);
+        let mut expect = Vec::with_capacity(samples);
+        for i in 0..samples {
+            let i_byte = (i % 251) as u8;
+            let q_byte = ((i * 7 + 3) % 251) as u8;
+            bytes.push(i_byte);
+            bytes.push(q_byte);
+            expect.push(Complex32::new(
+                (i_byte as f32 - 128.0) / 128.0,
+                (q_byte as f32 - 128.0) / 128.0,
+            ));
+        }
+        (bytes, expect)
+    }
+
+    fn drive(format: IqFormat, bytes: &[u8], chunk_sizes: &[usize]) -> Vec<Complex32> {
+        let mut r = IqReassembler::new(format);
+        let mut out = [Complex32::default(); 3];
+        let mut got = Vec::new();
+        let mut pos = 0;
+        let mut next = 0;
+        while pos < bytes.len() {
+            let take = chunk_sizes[next % chunk_sizes.len()].min(bytes.len() - pos);
+            next += 1;
+            let chunk = &bytes[pos..pos + take];
+            let mut offset = 0;
+            while offset < chunk.len() {
+                let res = r.push(&chunk[offset..], &mut out);
+                got.extend_from_slice(&out[..res.samples]);
+                if res.consumed == 0 {
+                    break;
+                }
+                offset += res.consumed;
+            }
+            pos += take;
+        }
+        got
+    }
+
+    #[test]
+    fn reassembler_recovers_samples_split_mid_sample() {
+        let (bytes, expect) = u8_pattern(500);
+        // Odd chunk sizes guarantee reads that end between the I and Q byte.
+        let got = drive(IqFormat::U8, &bytes, &[1, 3, 5, 7, 11]);
+        assert_eq!(got.len(), expect.len());
+        assert_eq!(got, expect);
+    }
+
+    #[test]
+    fn reassembler_handles_wide_formats() {
+        let mut bytes = Vec::new();
+        let mut expect = Vec::new();
+        for i in 0..64 {
+            let re = i as f32 * 0.25;
+            let im = -(i as f32) * 0.5;
+            bytes.extend_from_slice(&re.to_le_bytes());
+            bytes.extend_from_slice(&im.to_le_bytes());
+            expect.push(Complex32::new(re, im));
+        }
+        // 3-byte chunks split 8-byte samples at every possible offset.
+        assert_eq!(drive(IqFormat::F32Le, &bytes, &[3]), expect);
+        // The same 512 bytes read as 4-byte I16Le samples: 128 of them.
+        assert_eq!(drive(IqFormat::I16Le, &bytes, &[5, 1, 2]).len(), 128);
+    }
+
+    #[test]
+    fn reassembler_reports_unconsumed_bytes_when_output_is_full() {
+        let mut r = IqReassembler::new(IqFormat::U8);
+        let mut out = [Complex32::default(); 2];
+        let res = r.push(&[1, 2, 3, 4, 5, 6, 7], &mut out);
+        assert_eq!(res.samples, 2);
+        assert_eq!(res.consumed, 4);
+        assert_eq!(r.pending_bytes(), 0);
+        let res = r.push(&[5, 6, 7], &mut out);
+        assert_eq!(res.samples, 1);
+        assert_eq!(res.consumed, 3);
+        assert_eq!(r.pending_bytes(), 1);
+        r.reset();
+        assert_eq!(r.pending_bytes(), 0);
     }
 }

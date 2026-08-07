@@ -1,0 +1,31 @@
+[package]
+name = "tpt-dsp-viz"
+version.workspace = true
+edition.workspace = true
+rust-version = "1.85"
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Real-time waterfall spectrum and live spectrum-line desktop UI for tpt-dsp."
+keywords = ["dsp", "waterfall", "spectrum", "sdr", "gui"]
+categories = ["visualization", "science", "multimedia"]
+
+[features]
+default = []
+audio = ["dep:cpal"]
+
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.1.0", default-features = false }
+crossbeam-channel = { workspace = true }
+egui = "0.36"
+eframe = { version = "0.36", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
+cpal = { workspace = true, optional = true }
+
+[dev-dependencies]

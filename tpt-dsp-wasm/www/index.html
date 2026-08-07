@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tpt-dsp — web-native guitar pedal</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        padding: 2rem;
+        font: 15px/1.5 system-ui, sans-serif;
+        background: #14161a;
+        color: #e6e8ea;
+      }
+      h1 {
+        font-size: 1.4rem;
+        margin: 0 0 0.25rem;
+      }
+      p.sub {
+        margin: 0 0 1.5rem;
+        color: #97a0a8;
+      }
+      fieldset {
+        border: 1px solid #2c3138;
+        border-radius: 8px;
+        margin: 0 0 1rem;
+        padding: 0.75rem 1rem 1rem;
+        max-width: 34rem;
+      }
+      legend {
+        color: #7fd7c4;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+      }
+      label {
+        display: grid;
+        grid-template-columns: 9rem 1fr 4rem;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0.35rem 0;
+      }
+      output {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        color: #97a0a8;
+      }
+      button {
+        background: #7fd7c4;
+        border: 0;
+        border-radius: 6px;
+        color: #14161a;
+        cursor: pointer;
+        font-weight: 600;
+        padding: 0.6rem 1.2rem;
+      }
+      button[disabled] {
+        opacity: 0.4;
+        cursor: default;
+      }
+      #status {
+        margin-left: 0.75rem;
+        color: #97a0a8;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>tpt-dsp pedalboard</h1>
+    <p class="sub">distortion &rarr; delay &rarr; reverb &rarr; EQ, 128 samples per block, in WebAssembly.</p>
+
+    <p>
+      <button id="start">Start</button>
+      <button id="stop" disabled>Stop</button>
+      <span id="status">idle</span>
+    </p>
+    <p class="sub">Use headphones — open speakers plus a live microphone will feed back.</p>
+
+    <fieldset>
+      <legend>Distortion</legend>
+      <label>Drive<input type="range" data-param="distortion" min="0" max="20" step="0.1" value="4" /><output></output></label>
+      <label>Mix<input type="range" data-param="distortionMix" min="0" max="1" step="0.01" value="0.8" /><output></output></label>
+      <label>Curve
+        <select data-param="distortionCurve">
+          <option value="0">Tanh</option>
+          <option value="1">Hard clip</option>
+          <option value="2">Cubic</option>
+        </select>
+        <output></output>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Delay</legend>
+      <label>Time (s)<input type="range" data-param="delayTime" min="0" max="2" step="0.01" value="0.25" /><output></output></label>
+      <label>Feedback<input type="range" data-param="delayFeedback" min="0" max="0.95" step="0.01" value="0.3" /><output></output></label>
+      <label>Mix<input type="range" data-param="delayMix" min="0" max="1" step="0.01" value="0.25" /><output></output></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Reverb</legend>
+      <label>Mix<input type="range" data-param="reverbMix" min="0" max="1" step="0.01" value="0.2" /><output></output></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Tone stack</legend>
+      <label>100 Hz (dB)<input type="range" data-param="eq0" min="-24" max="24" step="0.5" value="0" /><output></output></label>
+      <label>800 Hz (dB)<input type="range" data-param="eq1" min="-24" max="24" step="0.5" value="0" /><output></output></label>
+      <label>3.2 kHz (dB)<input type="range" data-param="eq2" min="-24" max="24" step="0.5" value="0" /><output></output></label>
+      <label>Output<input type="range" data-param="outputGain" min="0" max="2" step="0.01" value="1" /><output></output></label>
+    </fieldset>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>

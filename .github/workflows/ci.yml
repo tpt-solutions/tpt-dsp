@@ -58,6 +58,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo check core/audio for wasm
         run: cargo check -p tpt-dsp-core -p tpt-dsp-audio --target wasm32-unknown-unknown
+      - name: cargo build tpt-dsp-wasm for wasm
+        run: cargo build -p tpt-dsp-wasm --all-features --target wasm32-unknown-unknown
 
   embedded:
     name: Build (thumbv7em-none-eabihf, no_std)

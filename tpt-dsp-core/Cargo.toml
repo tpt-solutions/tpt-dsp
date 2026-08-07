@@ -21,6 +21,11 @@ std = [
     "dep:crossbeam-channel",
 ]
 alloc = []
+# Nightly-only: enables the `core::simd` (portable SIMD) accelerated paths in
+# `crate::simd`. Requires a nightly compiler because `portable_simd` is an
+# unstable language feature. With this off (the default) the same functions are
+# provided by a portable scalar fallback that builds on stable.
+simd = []
 
 [dependencies]
 # `libm` is enabled unconditionally so that `num_traits::Float` (sin/cos/sqrt/
@@ -33,10 +38,22 @@ rustfft = { workspace = true, optional = true }
 crossbeam-channel = { workspace = true, optional = true }
 
 [dev-dependencies]
+# `rubato` (MIT) and its buffer-adapter crate are benchmark-only reference
+# implementations for the sample-rate-conversion comparison in
+# `benches/resampling_bench.rs`. They are never linked into the library.
+audioadapter-buffers = "2.0"
 criterion = "0.5"
 rubato = "1.0.1"
 
 [[bench]]
 name = "dsp_bench"
+harness = false
+
+[[bench]]
+name = "filter_bench"
+harness = false
+
+[[bench]]
+name = "resampling_bench"
 harness = false
 

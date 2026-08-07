@@ -85,6 +85,32 @@ pub fn fft_inplace<F: Float>(buf: &mut [Complex<F>], scratch: &mut [Complex<F>])
     }
 }
 
+/// In-place forward DFT specialised for `Complex<f32>`.
+///
+/// Numerically equivalent to [`fft_inplace::<f32>`](fft_inplace), but the
+/// butterfly inner loop is delegated to [`crate::simd::fft_butterfly`], which
+/// is vectorised with `core::simd` when the nightly-only `simd` feature is
+/// enabled and plain scalar code otherwise.
+pub fn fft_inplace_f32(buf: &mut [Complex<f32>], scratch: &mut [Complex<f32>]) {
+    let n = buf.len();
+    assert!(is_power_of_two(n), "FFT length must be a power of two");
+    assert!(scratch.len() >= n, "FFT scratch too small");
+
+    twiddles(n, scratch);
+    bit_reverse(buf);
+
+    let mut size = 2;
+    while size <= n {
+        let half = size / 2;
+        let step = n / size;
+        for start in (0..n).step_by(size) {
+            let (lower, upper) = buf[start..start + size].split_at_mut(half);
+            crate::simd::fft_butterfly(lower, upper, &scratch[..n], step);
+        }
+        size *= 2;
+    }
+}
+
 /// Inverse in-place DFT of `buf` (`x[n] = (1/N)·Σ X[k]·e^(+2πi·nk/N)`).
 pub fn ifft_inplace<F: Float>(buf: &mut [Complex<F>], scratch: &mut [Complex<F>]) {
     let n = buf.len();
@@ -228,6 +254,27 @@ mod tests {
         for z in input.iter() {
             assert!((z.re - 1.0).abs() < 1e-6);
             assert!(z.im.abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn f32_specialised_matches_generic() {
+        for n in [1usize, 2, 4, 8, 16, 64, 256, 1024] {
+            let input: Vec<C32> = (0..n)
+                .map(|i| C32::new((i as f32 * 0.17).sin(), (i as f32 * 0.09).cos()))
+                .collect();
+
+            let mut want = input.clone();
+            let mut scratch = vec![C32::default(); n];
+            fft_inplace(&mut want, &mut scratch);
+
+            let mut got = input.clone();
+            fft_inplace_f32(&mut got, &mut scratch);
+
+            for (g, w) in got.iter().zip(want.iter()) {
+                assert!((g.re - w.re).abs() < 1e-4, "n={n}: {g} vs {w}");
+                assert!((g.im - w.im).abs() < 1e-4, "n={n}: {g} vs {w}");
+            }
         }
     }
 

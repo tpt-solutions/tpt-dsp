@@ -1,0 +1,43 @@
+[package]
+name = "tpt-dsp-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "WebAssembly / Web Audio guitar-effects pedalboard front end for tpt-dsp."
+keywords = ["dsp", "audio", "wasm", "webaudio", "guitar"]
+categories = ["multimedia::audio", "wasm"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+async = ["dep:wasm-bindgen-futures"]
+
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.1.0" }
+wasm-bindgen = { workspace = true }
+wasm-bindgen-futures = { workspace = true, optional = true }
+js-sys = { workspace = true }
+web-sys = { workspace = true, features = [
+    "AudioContext",
+    "AudioDestinationNode",
+    "AudioNode",
+    "AudioWorklet",
+    "AudioWorkletNode",
+    "AudioWorkletNodeOptions",
+    "BaseAudioContext",
+    "MediaDevices",
+    "MediaStream",
+    "MediaStreamAudioSourceNode",
+    "MediaStreamConstraints",
+    "MessagePort",
+    "Navigator",
+    "Window",
+    "Worklet",
+] }

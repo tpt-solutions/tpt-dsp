@@ -20,11 +20,19 @@
 //!   coefficient storage, [`HilbertTransformer`], [`FftConvolver`],
 //!   [`FIRDecimator`]).
 //!   All real-time *processing* stays allocation-free regardless.
+//! - `simd` (**nightly only**): swaps [`crate::simd`] over to `core::simd`
+//!   (portable SIMD) implementations of the complex helpers and the radix-2
+//!   FFT butterfly. Off by default; the identical scalar API is always
+//!   available, so enabling it never changes the public surface.
 //!
 //! # License
 //!
 //! Dual licensed under MIT / Apache-2.0. Copyright TPT Solutions.
 #![cfg_attr(not(feature = "std"), no_std)]
+// `#![feature(..)]` is only honoured in the crate root, so the `portable_simd`
+// gate lives here rather than in `simd.rs`. It is enabled solely by the
+// nightly-only `simd` feature; the default stable build never sees it.
+#![cfg_attr(feature = "simd", feature(portable_simd))]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
@@ -44,6 +52,13 @@ pub mod resample;
 mod ring;
 mod windows;
 
+#[cfg(feature = "simd")]
+pub mod simd;
+
+#[cfg(not(feature = "simd"))]
+#[path = "simd_scalar.rs"]
+pub mod simd;
+
 #[cfg(feature = "std")]
 mod plan;
 
@@ -56,10 +71,14 @@ pub use complex::{
 pub use convolution::convolve;
 pub use dct::{dct_ii, dct_iii, dct_iv};
 pub use demod::{phase_delta, phase_to_audio, FmDemodulator};
-pub use fft::{fft, fft_inplace, ifft, ifft_inplace, is_power_of_two, next_power_of_two, twiddles};
+pub use fft::{
+    fft, fft_inplace, fft_inplace_f32, ifft, ifft_inplace, is_power_of_two, next_power_of_two,
+    twiddles,
+};
 pub use filters::{process_biquad, Biquad, BiquadCoeffs, BiquadType};
 pub use hilbert::hilbert;
 pub use ring::{RingBuffer, RingRead, RingWrite};
+pub use simd::{complex_add_simd, complex_mul_simd, magnitude_simd};
 pub use windows::{windowed, WindowType};
 
 #[cfg(feature = "alloc")]
