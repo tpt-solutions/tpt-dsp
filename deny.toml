@@ -32,6 +32,11 @@ allow = [
     "BSL-1.0",
     "MPL-2.0",
     "CC0-1.0",
+    # Bundled UI fonts pulled in transitively by `egui`/`epaint` (used only by
+    # the `tpt-dsp-viz` desktop example). These are permissive *font* licenses,
+    # not source copyleft, so they are safe to allow alongside the code licenses.
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
 ]
 confidence-threshold = 0.8
 

@@ -13,7 +13,7 @@
 //! Everything here is `core`-only and allocation-free, so it also works under
 //! `--no-default-features --features simd`.
 
-#![cfg(all(feature = "simd"))]
+#![cfg(feature = "simd")]
 
 use core::simd::f32x4;
 use num_complex::Complex;

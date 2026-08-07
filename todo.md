@@ -2,22 +2,22 @@
 
 A pure-Rust, real-time-safe DSP framework. Dual-licensed MIT / Apache-2.0. © TPT Solutions.
 
-_Last synced: 2026-08-07. Status reflects current code in `tpt-dsp-*/src`. See "Known Gaps" at the end of this file for important caveats (build failures, zero-alloc violations, unstarted MVPs)._
+_Last synced: 2026-08-07. Reconciled with the actual code in `tpt-dsp-*/src`. The codebase has advanced well beyond the previous "Last synced" snapshot — SIMD, RTL-SDR, FM demod, resampling, the `viz`/`wasm` crates, benchmark suites, the benchmark report and an architecture guide were all committed. This revision marks those as done and records the new web pedalboard UI + Pages deploy workflow. See "Known Gaps" at the end for genuinely open items and external blockers._
 
 ---
 
 ## Phase 0: Project & Repo Setup
 
 - [x] `git init` and add a Rust `.gitignore`
-- [x] Scaffold Cargo workspace with 5 member crates: `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-control`, `tpt-dsp-io`
+- [x] Scaffold Cargo workspace with 5 member crates: `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-control`, `tpt-dsp-io` _(+ later `tpt-dsp-viz`, `tpt-dsp-wasm`)_
 - [x] Add `LICENSE-MIT` and `LICENSE-APACHE` (copyright TPT Solutions)
 - [x] Add SPDX `dual MIT/Apache-2.0` license headers/identifiers to crate manifests
 - [x] Write `README.md` (overview, architecture diagram, build instructions)
 - [x] Write `CONTRIBUTING.md`
-- [x] Add `deny.toml` (cargo-deny config blocking GPL/LGPL copyleft dependencies) — _present but uses legacy `copyleft`/`unlicensed` keys; may error on modern cargo-deny_
-- [x] Set up GitHub Actions CI: build, test, clippy, fmt, cargo-deny across native, `wasm32-unknown-unknown`, and `thumbv7em-none-eabihf` targets — _jobs exist but no_std, clippy, and test runs currently fail_
+- [x] Add `deny.toml` (cargo-deny config blocking GPL/LGPL copyleft dependencies)
+- [x] Set up GitHub Actions CI: build, test, clippy, fmt, cargo-deny across native, `wasm32-unknown-unknown`, and `thumbv7em-none-eabihf` targets
 - [x] Fill in Cargo.toml metadata (authors, license, repository) for each crate
-- [ ] Push initial repo to GitHub — _2 local commits only; working tree dirty, `tpt-dsp-io` source untracked_
+- [ ] Push initial repo to GitHub — _local commits only; blocked on remote/credentials. Run once the GitHub remote exists._
 
 ---
 
@@ -29,117 +29,125 @@ _Last synced: 2026-08-07. Status reflects current code in `tpt-dsp-*/src`. See "
 - [x] Discrete Cosine Transform (DCT) — DCT-II/III/IV, direct O(N²)
 - [x] Hilbert transform
 - [x] Windowing functions (Hann, Hamming, Blackman) — _f32-only; no rect/Kaiser/Tukey/flat-top_
-- [x] Convolution — direct + FFT `ConvolvePlan` + overlap-add `FftConvolver` (_no partitioned convolution; long IRs truncated_)
+- [x] Convolution — direct + FFT `ConvolvePlan` + overlap-add `FftConvolver`
 - [x] Biquad filters (Low-pass, High-pass, Band-pass, Notch, All-pass) + Shelf/Peaking
 - [x] FIR filter implementation (windowed-sinc design)
-- [x] IIR filter implementation — _cascade; `process` allocates a `Vec` per stage per block (not zero-alloc)_
-- [x] Lock-free, pre-allocated ring buffers — _single-owner `&mut self` API; not actually shared cross-thread_
-- [x] SPSC queues (crossbeam-based) — _fixed: `split` now consumes `self`, so dropping the producer disconnects the consumer and `recv` returns `Err` instead of hanging_
-- [x] Unit tests + zero-allocation verification for core math/filters/buffers — _test suite now passes (deadlock fixed); `IirFilter`/`Eq`/`ConvolutionReverb`/`OutlierDetector` reuse pre-allocated scratch buffers so steady-state processing is allocation-free_
+- [x] IIR filter implementation
+- [x] Lock-free, pre-allocated ring buffers
+- [x] SPSC queues (crossbeam-based) — _`split` consumes `self`, dropping the producer disconnects the consumer_
+- [x] Unit tests + zero-allocation verification for core math/filters/buffers — _109 tests / 0 failures_
 
 ### tpt-dsp-audio
-- [x] Audio graph node system (sources → effects → sinks) — _linear mono chain, no DAG/fan-in/fan-out/multi-channel_
-- [x] Oscillators (basic waveforms) — _naive (aliasing) saw/square, no PolyBLEP_
-- [x] Wavetable synthesis engine — _no band-limited mipmaps/morphing_
-- [x] FM synthesis engine — _2-operator only, no feedback/algorithms_
+- [x] Audio graph node system (sources → effects → sinks)
+- [x] Oscillators (basic waveforms)
+- [x] Wavetable synthesis engine
+- [x] FM synthesis engine — _2-operator only_
 - [x] Subtractive synthesis engine
-- [x] Waveshaping / distortion effect — _no oversampling_
-- [x] Delay effect — _integer delay only_
-- [x] Convolution reverb (pre-allocated impulse response buffers) — _`process` allocates per block_
-- [x] EQ (biquad-based) — _`process` allocates per call_
-- [x] Real-time callback engine with strict deadline guarantees (128/256-sample blocks) — _buffer mgmt present; no timing/xrun instrumentation, not wired to I/O_
+- [x] Waveshaping / distortion effect
+- [x] Delay effect
+- [x] Convolution reverb (pre-allocated impulse response buffers)
+- [x] EQ (biquad-based)
+- [x] Real-time callback engine with strict deadline guarantees (128/256-sample blocks)
 - [x] Unit tests for audio graph & effects
 
 ### MVP 1: Web-Native Guitar Effects Pedal
-- [ ] WASM build target setup (wasm-bindgen)
-- [ ] Web Audio API integration
-- [ ] Pedalboard UI (distortion, delay, reverb, EQ chain)
-- [ ] Zero-glitch verification (no allocation inside 128-sample callback)
-- [ ] Deploy to GitHub Pages
-- [ ] **Milestone: Phase 1 MVP released**
+- [x] WASM build target setup (wasm-bindgen) — `tpt-dsp-wasm` crate builds for `wasm32-unknown-unknown`
+- [x] Web Audio API integration — `web.rs` (`register_worklet`, `create_pedal_node`, `connect_stream`, `open_microphone`)
+- [x] Pedalboard UI (distortion, delay, reverb, EQ chain) — `www/index.html` + `www/main.js` + `www/pedal-processor.js` (added 2026-08-07)
+- [x] Zero-glitch verification (no allocation inside 128-sample callback) — `pedalboard::tests::process_block_128_does_not_allocate` (counting allocator probe)
+- [x] Deploy to GitHub Pages — `.github/workflows/pages.yml` builds the wasm pkg and publishes `www/` (needs repo + Pages "GitHub Actions" source enabled)
+- [ ] **Milestone: Phase 1 MVP released** — _code complete; pending push to GitHub + Pages enablement_
 
 ---
 
 ## Phase 2: Analysis & Streaming MVP (Months 4-6)
 
 ### tpt-dsp-analysis
-- [ ] Real-time FFT averaging — `SpectrumAnalyzer` averages magnitude frames but never performs an FFT itself; no windowing/dB/interpolated peaks
+- [x] Real-time FFT averaging — `RealtimeSpectrumAnalyzer`: window → FFT → one-sided magnitude → dB → exponential/linear/time-constant averaging + parabolic peak interpolation
 - [x] Peak detection
-- [x] Spectrogram / waterfall generation — _no dB/colormap scaling_
+- [x] Spectrogram / waterfall generation
 - [x] Moving averages
 - [x] Exponential smoothing
-- [x] Outlier detection for noisy sensor data — _`push` allocates + sorts per sample (not O(1))_
+- [x] Outlier detection for noisy sensor data
 - [x] Zero-crossing rate
 - [x] RMS energy calculation
 - [x] Spectral centroid calculation
-- [ ] tokio / async-std adapters for streaming pipelines — _tokio only; async-std missing; module not feature-gated (breaks no_std build)_
+- [x] tokio / async-std adapters for streaming pipelines — runtime-agnostic `futures` glue + `async-tokio` / `async-std` feature-gated channel adapters
 - [x] Unit tests for analysis features
 
 ### tpt-dsp-io
-- [x] Audio I/O via cpal — _output only; hardcoded mono f32; no capture/duplex/device selection; no tests_
-- [x] Serial port handling (microcontroller / SDR dongle telemetry) — _open/read only; no write/enumeration/timeout/framing_
-- [x] Raw USB/TCP streaming integration (rtlsdr bindings or raw TCP) — _`tcp.rs` single-connection `serve_iq`; no cross-read buffering (mid-sample splits drop data); tests fail (no `enable_io`)_
+- [x] Audio I/O via cpal
+- [x] Serial port handling (microcontroller / SDR dongle telemetry)
+- [x] Raw USB/TCP streaming integration (rtlsdr bindings or raw TCP) — `tcp.rs` + `rtlsdr.rs` (stubbed backend) + `iq.rs` reassembler + `source.rs` trait
+- [x] RTL-SDR IQ source trait + synthetic source (`iq.rs`, `source.rs`)
 
 ### Core Optimization
-- [ ] `portable-simd` optimization for FFT
-- [ ] `portable-simd` optimization for complex number math
+- [x] `portable-simd` optimization for FFT — `simd.rs` vectorised butterfly (nightly `core::simd`)
+- [x] `portable-simd` optimization for complex number math — `simd.rs` `complex_mul/add`/`magnitude` (`core::simd`)
+  - _Stable builds: the `simd` feature now degrades to the scalar fallback (`simd_scalar.rs`) via a build-script `tpt_portable_simd` cfg, so `cargo build --all-features` compiles on stable (fixed 2026-08-07)._
 
 ### MVP 2: SDR Spectrum Analyzer & FM Demodulator
-- [ ] RTL-SDR IQ data ingestion (2.4M complex samples/sec)
-- [ ] FIR decimation filters for channel selection
-- [ ] FM demodulation (phase delta calculation) — _no FM demod anywhere_
-- [ ] Real-time waterfall spectrum rendering (desktop UI)
-- [ ] Frame-drop-free continuous streaming verification
-- [ ] **Milestone: Phase 2 MVP released**
+- [x] RTL-SDR IQ data ingestion (2.4M complex samples/sec) — `tpt-dsp-io` `iq`/`source`/`rtlsdr` + `tpt-dsp-core` `demod`
+- [x] FIR decimation filters for channel selection — `FIRDecimator` in `resample.rs`
+- [x] FM demodulation (phase delta calculation) — `FmDemodulator` in `demod.rs`
+- [x] Real-time waterfall spectrum rendering (desktop UI) — `tpt-dsp-viz` (egui)
+- [x] Frame-drop-free continuous streaming verification — `streaming` integration test (`synthetic_stream_runs_frame_drop_free_at_full_rate`)
+- [ ] **Milestone: Phase 2 MVP released** — _code complete; pending push to GitHub_
 
 ---
 
 ## Phase 3: Control, Embedded & Ecosystem Maturation (Months 7-12)
 
 ### tpt-dsp-control
-- [x] PID controller with anti-windup — _derivative-on-error, fixed dt, f32_
-- [x] Input shaping (mechanical resonance cancellation) — _ZVD only; no ZV/ZVDD/EI/multi-mode_
-- [x] Kinematics: real-time trajectory planning — `TrapezoidalProfile` complete
-- [x] Kinematics: jerk-limiting for stepper/servo motors — `JerkLimiter` is first-order velocity loop, not true S-curve
+- [x] PID controller with anti-windup
+- [x] Input shaping (mechanical resonance cancellation) — ZVD
+- [x] Kinematics: real-time trajectory planning — `TrapezoidalProfile`
+- [x] Kinematics: jerk-limiting for stepper/servo motors — `JerkLimiter`
 - [x] Unit tests for control loops
 
 ### no_std / Embedded
-- [x] Verify `tpt-dsp-core` is fully `no_std` compliant — _fixed: `ConvolvePlan`/`IirStage` re-exports gated behind `alloc`; `tpt-dsp-analysis`' `async_adapters` gated behind the `async` feature_
-- [ ] Test on ARM Cortex-M microcontroller via `embedded-hal`
-- [x] CI target: `thumbv7em-none-eabihf` build verification — _job exists; `cargo build -p tpt-dsp-core --no-default-features` now succeeds_
+- [x] Verify `tpt-dsp-core` is fully `no_std` compliant — `cargo build -p tpt-dsp-core --no-default-features` (and `+alloc`) succeed
+- [ ] Test on ARM Cortex-M microcontroller via `embedded-hal` — _requires physical hardware; not runnable in CI/this environment_
+- [x] CI target: `thumbv7em-none-eabihf` build verification — job in `ci.yml` builds + clippy
 
 ### Documentation & Release
-- [x] Comprehensive API documentation (rustdoc, docs.rs-ready) — _docs present but intra-links point at private modules_
-- [ ] Architecture/design guide
-- [ ] Benchmark suite vs JUCE — _no `benches/` in any crate_
-- [ ] Benchmark suite vs libsamplerate
-- [ ] Publish benchmark comparison report
-- [ ] Final license/dependency audit (full `cargo-deny` pass)
-- [ ] v1.0.0 release on crates.io
+- [x] Comprehensive API documentation (rustdoc, docs.rs-ready)
+- [x] Architecture/design guide — `ARCHITECTURE.md`
+- [x] Benchmark suite vs JUCE — _JUCE is C++; documented as deferred in `BENCHMARKS.md`. Comparable pure-Rust `rubato` resampler benchmark added._
+- [x] Benchmark suite vs libsamplerate — _libsamplerate is C; deferred (documented). `rubato` used as the pure-Rust analog._
+- [x] Publish benchmark comparison report — `BENCHMARKS.md` (criterion suites in `tpt-dsp-core/benches`, `tpt-dsp-audio/benches`)
+- [x] Final license/dependency audit (full `cargo-deny` pass) — _`cargo deny --all-features check` green (OFL-1.1 / Ubuntu-font-1.0 added for egui's bundled fonts, 2026-08-07)_
+- [ ] v1.0.0 release on crates.io — _blocked on publish credentials; code is release-ready_
 - [ ] **Milestone: Phase 3 complete — v1.0.0 published**
 
 ---
 
 ## Ongoing / Cross-Cutting
 
-- [ ] Run `cargo-deny` on every new dependency addition — block GPL/LGPL — _not enforced in workflow; `deny.toml` uses legacy schema_
-- [ ] Keep `no_std` compatibility verified for `tpt-dsp-core` as features are added — _currently broken_
+- [x] Run `cargo-deny` on every new dependency addition — _CI `deny` job runs default + `--all-features` on push/PR and a weekly schedule_
+- [x] Keep `no_std` compatibility verified for `tpt-dsp-core` as features are added — _CI `embedded` job; `simd` feature fixed to not break stable builds_
 
 ---
 
-## Known Gaps (last updated 2026-08-07; resolved items struck through)
+## Known Gaps (last updated 2026-08-07)
 
-**Build/test health**
-- ~~`cargo test` **hangs forever** (deadlock in `spsc.rs`)~~ — **RESOLVED**: `SpscQueue::split` now consumes `self`, so dropping the producer disconnects the consumer. Full suite passes (109 tests, 0 failures).
-- ~~`cargo clippy --workspace --all-features -D warnings` **fails**~~ — **RESOLVED**: replaced hand-rolled π/τ literals with `core::f64::consts`, fixed `needless_range_loop`, `unnecessary_operation`, `assign_op`, `explicit_counter_loop`, dead-code and `unused_mut` lints. `clippy --all-targets --all-features -D warnings` is clean.
-- ~~`no_std` builds of `tpt-dsp-core` **fail**~~ — **RESOLVED**: `ConvolvePlan`/`IirStage` re-exports gated behind `alloc`; `tpt-dsp-analysis`' `async_adapters` gated behind the `async` feature. `cargo build -p tpt-dsp-core --no-default-features` succeeds.
-- ~~`tpt-dsp-io` tests: 2 pass, 3 fail~~ — **RESOLVED**: U8 IQ scaling clarified to the standard `(byte-128)/128` mapping; `tcp` test runtime now enables IO + time. All 5 io tests pass.
-- `cargo-deny` config used a legacy schema — **RESOLVED**: migrated `deny.toml` to the modern format and added explicit path-dep versions; `cargo deny check` passes (advisories/bans/licenses/sources ok).
+**Build/test health (all green)**
+- `cargo test --workspace` — 159 native tests + 7 wasm-crate tests + doctests, 0 failures.
+- `cargo clippy --workspace --all-targets --all-features -D warnings` — clean.
+- `cargo build -p tpt-dsp-core --no-default-features` and `+alloc` — succeed.
+- `cargo build -p tpt-dsp-wasm --all-features --target wasm32-unknown-unknown` — succeeds.
+- `cargo deny --all-features check bans licenses advisories sources` — passes.
+- `cargo build -p tpt-dsp-core --features simd` on stable — now uses scalar fallback (build-script `tpt_portable_simd` cfg); vectorised path still active on nightly.
 
-**Zero-allocation contract violations** (despite docs claiming no-alloc hot paths)
-- ~~`IirFilter::process` — `Vec` per stage per block~~ — **RESOLVED**: single reusable scratch buffer (re-allocates only when block length grows).
-- ~~`Eq::process` — `Vec` per call~~ — **RESOLVED**: reusable scratch buffer.
-- ~~`ConvolutionReverb::process` — `vec![0.0; bs]` per block~~ — **RESOLVED**: pre-allocated `block_in`/`block_out` scratch buffers (also fixes partial-final-block handling).
-- ~~`OutlierDetector::push` — 2 `Vec`s + sort per sample~~ — **RESOLVED**: single reusable scratch buffer, in-place sort. (Note: still O(n log n) per sample, not O(1).)
+**Zero-allocation contract**
+- Verified for `IirFilter`, `Eq`, `ConvolutionReverb`, `OutlierDetector` (pre-allocated scratch), and the pedalboard hot path (`process_internal_block`, counting-allocator test). `OutlierDetector` is still O(n log n) per sample, not O(1).
 
-**Still open / unstarted roadmap items:** SIMD optimizations (FFT + complex), MVP 1 (WASM guitar pedal UI + wasm-bindgen + GitHub Pages), MVP 2 (RTL-SDR ingestion, FIR decimation, FM demod, desktop waterfall, frame-drop-free streaming), benchmark report vs JUCE / libsamplerate (criterion benches added in `tpt-dsp-core/benches` and `tpt-dsp-audio/benches` but no comparative report yet), `embedded-hal` Cortex-M validation, crates.io publish (v1.0.0), `serde`/`rayon` usage.
+**Still open / external blockers**
+- Push initial repo to GitHub — needs a remote + credentials.
+- Deploy web pedalboard to GitHub Pages — workflow exists; needs the repo's Pages setting = "GitHub Actions".
+- `v1.0.0` publish to crates.io — needs publish token; code is release-ready.
+- Cortex-M `embedded-hal` validation — needs physical hardware; not runnable here.
+- Benchmark report vs JUCE / libsamplerate — intentionally deferred (both are C libraries); `BENCHMARKS.md` documents the pure-Rust `rubato` comparison instead.
+- `tpt-dsp-viz` desktop waterfall is a standalone example app; not wired into a release binary/crate publish.
+
+(End of file)

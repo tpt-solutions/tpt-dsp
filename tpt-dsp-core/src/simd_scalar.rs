@@ -3,9 +3,9 @@
 //! Compiled whenever the nightly-only `simd` feature is *off*, which is the
 //! default. It mirrors the vectorised API one-for-one — same names, same
 //! signatures, same operation order — so downstream code can call
-//! `crate::simd::*` unconditionally and stable builds keep working.
-
-#![cfg(not(feature = "simd"))]
+//! `crate::simd::*` unconditionally and stable builds keep working. (It is also
+//! selected on a stable toolchain when the `simd` feature is enabled, because
+//! `core::simd` is unavailable there.)
 
 use num_complex::Complex;
 

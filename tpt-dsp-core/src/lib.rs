@@ -30,9 +30,11 @@
 //! Dual licensed under MIT / Apache-2.0. Copyright TPT Solutions.
 #![cfg_attr(not(feature = "std"), no_std)]
 // `#![feature(..)]` is only honoured in the crate root, so the `portable_simd`
-// gate lives here rather than in `simd.rs`. It is enabled solely by the
-// nightly-only `simd` feature; the default stable build never sees it.
-#![cfg_attr(feature = "simd", feature(portable_simd))]
+// gate lives here rather than in `simd.rs`. It is enabled by the nightly-only
+// `simd` feature *and* only when the toolchain actually supports it (the
+// `tpt_portable_simd` cfg set by `build.rs`); a stable build with `simd` on
+// falls back to the scalar module so `--all-features` keeps compiling.
+#![cfg_attr(all(feature = "simd", tpt_portable_simd), feature(portable_simd))]
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
@@ -52,10 +54,13 @@ pub mod resample;
 mod ring;
 mod windows;
 
-#[cfg(feature = "simd")]
+// The vectorised module is only reachable on a toolchain that supports
+// `portable_simd`; everywhere else (including stable builds with the `simd`
+// feature enabled) we compile the identical scalar fallback.
+#[cfg(all(feature = "simd", tpt_portable_simd))]
 pub mod simd;
 
-#[cfg(not(feature = "simd"))]
+#[cfg(not(all(feature = "simd", tpt_portable_simd)))]
 #[path = "simd_scalar.rs"]
 pub mod simd;
 

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>tpt-dsp · Web Guitar Pedalboard</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0; padding: 2rem; background: #12131a; color: #e6e7ee;
+    }
+    h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+    p.sub { margin: 0 0 1.5rem; color: #9aa0b4; font-size: 0.9rem; }
+    .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .pedal {
+      background: #1c1e29; border: 1px solid #2c2f3e; border-radius: 12px;
+      padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;
+    }
+    .pedal h2 { margin: 0; font-size: 0.95rem; letter-spacing: 0.04em; text-transform: uppercase; color: #8ab4ff; }
+    .control { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.82rem; }
+    .control .row { display: flex; justify-content: space-between; }
+    .control input[type=range] { width: 100%; accent-color: #8ab4ff; }
+    .control select { background: #12131a; color: #e6e7ee; border: 1px solid #2c2f3e; border-radius: 6px; padding: 0.25rem; }
+    .actions { display: flex; gap: 0.75rem; margin: 1.5rem 0; flex-wrap: wrap; }
+    button {
+      background: #2c2f3e; color: #e6e7ee; border: 1px solid #3a3e52;
+      border-radius: 8px; padding: 0.6rem 1.1rem; font-size: 0.9rem; cursor: pointer;
+    }
+    button.primary { background: #8ab4ff; color: #12131a; border-color: #8ab4ff; font-weight: 600; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status { font-size: 0.85rem; color: #9aa0b4; min-height: 1.2rem; }
+    .led { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: #543; margin-right: 0.4rem; vertical-align: middle; }
+    .led.on { background: #5f6; }
+  </style>
+</head>
+<body>
+  <h1>tpt-dsp Web Guitar Pedalboard</h1>
+  <p class="sub">distortion → delay → reverb → EQ · 128-sample render quantum · zero heap allocation in the audio callback</p>
+
+  <div class="actions">
+    <button id="start-mic" class="primary">Start (microphone)</button>
+    <button id="start-demo">Start (demo tone)</button>
+    <button id="stop" disabled>Stop</button>
+    <label class="control" style="flex-direction:row; align-items:center; gap:0.4rem;">
+      <input type="checkbox" id="bypass" /> Bypass (dry)
+    </label>
+  </div>
+  <div id="status"><span class="led" id="led"></span>idle</div>
+
+  <div class="board">
+    <section class="pedal">
+      <h2>Distortion</h2>
+      <div class="control">
+        <div class="row"><span>Drive</span><span id="distortion-val">4.0</span></div>
+        <input type="range" id="distortion" min="0" max="20" step="0.1" value="4" />
+      </div>
+      <div class="control">
+        <div class="row"><span>Mix</span><span id="distortion_mix-val">1.0</span></div>
+        <input type="range" id="distortion_mix" min="0" max="1" step="0.01" value="1" />
+      </div>
+      <div class="control">
+        <span>Curve</span>
+        <select id="distortion_curve">
+          <option value="0" selected>Tanh (tube)</option>
+          <option value="1">Hard clip (fuzz)</option>
+          <option value="2">Cubic</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="pedal">
+      <h2>Delay</h2>
+      <div class="control">
+        <div class="row"><span>Time (s)</span><span id="delay_time-val">0.25</span></div>
+        <input type="range" id="delay_time" min="0" max="2" step="0.01" value="0.25" />
+      </div>
+      <div class="control">
+        <div class="row"><span>Feedback</span><span id="delay_feedback-val">0.30</span></div>
+        <input type="range" id="delay_feedback" min="0" max="0.99" step="0.01" value="0.3" />
+      </div>
+      <div class="control">
+        <div class="row"><span>Mix</span><span id="delay_mix-val">0.25</span></div>
+        <input type="range" id="delay_mix" min="0" max="1" step="0.01" value="0.25" />
+      </div>
+    </section>
+
+    <section class="pedal">
+      <h2>Reverb</h2>
+      <div class="control">
+        <div class="row"><span>Wet</span><span id="reverb_mix-val">0.20</span></div>
+        <input type="range" id="reverb_mix" min="0" max="1" step="0.01" value="0.2" />
+      </div>
+    </section>
+
+    <section class="pedal">
+      <h2>EQ</h2>
+      <div class="control">
+        <div class="row"><span>Band 1 · 100 Hz</span><span id="eq-0-val">0.0</span></div>
+        <input type="range" id="eq-0" min="-24" max="24" step="0.5" value="0" />
+      </div>
+      <div class="control">
+        <div class="row"><span>Band 2 · 800 Hz</span><span id="eq-1-val">0.0</span></div>
+        <input type="range" id="eq-1" min="-24" max="24" step="0.5" value="0" />
+      </div>
+      <div class="control">
+        <div class="row"><span>Band 3 · 3.2 kHz</span><span id="eq-2-val">0.0</span></div>
+        <input type="range" id="eq-2" min="-24" max="24" step="0.5" value="0" />
+      </div>
+    </section>
+
+    <section class="pedal">
+      <h2>Master</h2>
+      <div class="control">
+        <div class="row"><span>Output gain</span><span id="output_gain-val">1.00</span></div>
+        <input type="range" id="output_gain" min="0" max="4" step="0.01" value="1" />
+      </div>
+      <button id="reset">Reset pedal</button>
+    </section>
+  </div>
+
+  <script type="module" src="./main.js"></script>
+</body>
+</html>
