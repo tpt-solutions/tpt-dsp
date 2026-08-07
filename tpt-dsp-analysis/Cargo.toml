@@ -13,7 +13,10 @@ categories = ["science", "multimedia::audio", "algorithms"]
 readme = "README.md"
 
 [features]
-default = ["async"]
+# No async by default: the analysis crate is pure math/spectrum and should not
+# force a runtime (tokio/futures) on default consumers. Opt in via `async`,
+# `async-tokio` or `async-std`.
+default = []
 async = ["async-tokio"]
 async-tokio = ["dep:tokio", "dep:futures"]
 async-std = ["dep:async-std", "dep:futures"]

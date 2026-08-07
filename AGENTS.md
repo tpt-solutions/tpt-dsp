@@ -96,9 +96,10 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
 - `tpt-dsp-io/tests/streaming.rs` asserts **wall-clock** throughput: 1 s of 2.4 MS/s IQ
   must process within 6× real time (debug) / 1× (release). A failure on a loaded machine
   is not necessarily a regression — re-run on an idle machine before "fixing" it.
-- Feature defaults: `tpt-dsp-analysis` defaults to `async` (tokio); `async-std` is the
-  alternate adapter and its RUSTSEC-2025-0052 advisory is deliberately ignored in
-  `deny.toml`. All `tpt-dsp-io` features (`audio`, `serial`, `tcp`, `rtl-sdr`) are off by
+- Feature defaults: `tpt-dsp-analysis` has **no default features** (pure math/spectrum);
+  async is opt-in via `async`/`async-tokio`/`async-std`. `async-std` is the alternate
+  adapter and its RUSTSEC-2025-0052 advisory is deliberately ignored in `deny.toml`.
+  All `tpt-dsp-io` features (`audio`, `serial`, `tcp`, `rtl-sdr`) are off by
   default, so plain `cargo test -p tpt-dsp-io` exercises only the IQ layer.
 
 ## Which docs to trust

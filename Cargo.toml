@@ -13,7 +13,11 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.74"
+# Whole-workspace minimum: `tpt-dsp-viz` depends on `egui`/`eframe` 0.36,
+# which require Rust 1.85+. The leaf crates (core/audio/analysis/control/io)
+# still build on older toolchains when compiled in isolation, but the workspace
+# as a whole cannot build below 1.85.
+rust-version = "1.85"
 authors = ["TPT Solutions"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/tpt-solutions/tpt-dsp"
