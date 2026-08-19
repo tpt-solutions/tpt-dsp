@@ -338,3 +338,32 @@ async adapters and grow-only scratch in `IirFilter`/`Eq`.
   frame path allocation-free.
 - Never introduce heap allocation, locks, or system calls on a hot path; reuse a
   pre-allocated scratch buffer instead. Keep `core` `#![forbid(unsafe_code)]`.
+
+---
+
+## 9. CLI, plugin & Python bindings (2026-08-20)
+
+Three crates wrap the framework for use outside Rust:
+
+- **`tpt-dsp-cli`** (workspace member) — a command-line WAV/IQ pipeline.
+  `filter` runs biquad / EQ / waveshaper / delay / convolution-reverb chains
+  (specs parse the same `tpt-dsp-audio` effects), `demod` FM-demodulates raw IQ
+  to WAV, `spectrum` averages a one-sided magnitude spectrum and reports
+  dominant frequency, peak dB, RMS, zero-crossing rate and spectral centroid,
+  and `info` prints file metadata. WAV I/O uses `hound`; IQ parsing uses
+  `tpt-dsp-io`.
+- **`tpt-dsp-nihplug`** (excluded) — a CLAP/VST3 plugin wrapping the
+  `tpt-dsp-audio` pedalboard (Waveshaper → Delay → ConvolutionReverb → 3-band
+  EQ) as a host-parameterised chain. Built on `nice-plug` (the actively
+  maintained successor to `nih-plug`, which is no longer on crates.io) and
+  exported with `nice_export_clap!` / `nice_export_vst3!`.
+- **`tpt-dsp-py`** (excluded) — pyo3 bindings exposing `rms`,
+  `zero_crossing_rate`, `spectral_centroid`, `spectrum`, `fm_demod` and
+  `analyze` as the `tpt_dsp` extension module.
+
+`nihplug` and `py` are **excluded** from the main workspace (root `Cargo.toml`
+`exclude`): the plugin pulls VST3/CLAP SDK bindings whose licences fall outside
+the main `deny.toml` allow-list, and the Python module links Python
+(`extension-module`) so it cannot be built or tested by the `cargo
+build/test --workspace` gate. Both are verified as standalone workspaces
+(`cargo build` / `cargo clippy` inside each directory).

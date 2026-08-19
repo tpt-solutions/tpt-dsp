@@ -2,7 +2,7 @@
 
 A pure-Rust, real-time-safe DSP framework. Dual-licensed MIT / Apache-2.0. © TPT Solutions.
 
-_Last synced: 2026-08-19. Reconciled with the actual code in `tpt-dsp-*/src`. The codebase has advanced well beyond the previous "Last synced" snapshot — SIMD, RTL-SDR, FM demod, resampling, the `viz`/`wasm` crates, benchmark suites, the benchmark report and an architecture guide were all committed. The 2026-08-19 review's Phase 4 follow-through (robustness fixes, CI hardening, DX tooling) is now complete; the remaining unchecked items are all external-blocker tasks (GitHub push, Pages enablement, crates.io publish, Cortex-M hardware, live GUI render). See "Known Gaps" at the end for genuinely open items and external blockers._
+_Last synced: 2026-08-20. Reconciled with the actual code in `tpt-dsp-*/src`. Three previously-deferred "future pass" crates are now implemented: `tpt-dsp-cli` (WAV/IQ pipe tool, a workspace member), and `tpt-dsp-nihplug` (CLAP/VST3 wrapper, uses nice-plug) and `tpt-dsp-py` (pyo3 Python bindings). The latter two are intentionally excluded from the main workspace (see root `Cargo.toml` `exclude`) and verified as standalone workspaces. All original workspace gates (`fmt`/`build`/`test`/`clippy`/`deny`/`doc`) remain green._
 
 ---
 
@@ -158,14 +158,14 @@ _From a full-project review: security audit, stub inventory, and adoption/DX ass
 - [x] Add an `examples/` directory + one runnable example each for `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-control` (only `tpt-dsp-io` has one today)
 - [x] Root README — link the `www/` pedalboard demo (once Pages is live) and add a short positioning note vs. `fundsp`/`dasp`/`cpal`
 
-### Noted for a future, separate pass (not bundled into this cleanup)
-- `tpt-dsp-cli` — terminal tool to pipe WAV/IQ files through filters/FFT/analysis
-- `nih-plug`-based CLAP/VST3 wrapper example around `tpt-dsp-audio`
-- pyo3 Python bindings for `tpt-dsp-analysis`/`tpt-dsp-core`
+### Noted for a future, separate pass (now implemented as separate crates)
+- `tpt-dsp-cli` — terminal tool to pipe WAV/IQ files through filters/FFT/analysis. **Done** (workspace member: `filter`, `demod`, `spectrum`, `info` subcommands).
+- `tpt-dsp-nihplug` — CLAP/VST3 wrapper example around `tpt-dsp-audio` (pedalboard: Waveshaper → Delay → ConvolutionReverb → 3-band EQ). **Done** (standalone workspace using nice-plug — the maintained successor to nih-plug).
+- `tpt-dsp-py` — pyo3 Python bindings for analysis/core. **Done** (standalone workspace; `tpt_dsp` extension module: `rms`, `zero_crossing_rate`, `spectral_centroid`, `spectrum`, `fm_demod`, `analyze`).
 
 ---
 
-## Known Gaps (last updated 2026-08-07)
+## Known Gaps (last updated 2026-08-20)
 
 **Build/test health (all green)**
 - `cargo test --workspace` — 159 native tests + 7 wasm-crate tests + doctests, 0 failures.
@@ -185,5 +185,6 @@ _From a full-project review: security audit, stub inventory, and adoption/DX ass
 - Cortex-M `embedded-hal` validation — needs physical hardware; not runnable here.
 - Benchmark report vs JUCE / libsamplerate — intentionally deferred (both are C libraries); `BENCHMARKS.md` documents the pure-Rust `rubato` comparison instead.
 - `tpt-dsp-viz` is **implemented** (2026-08-07): `VizApp` renders a waterfall + live spectrum line from a producer thread, with a deterministic synthetic source and an optional `cpal` audio source (`audio` feature). A live (displayed) render check is still pending — this headless environment has no display.
+- Three new crates added on 2026-08-20: `tpt-dsp-cli` (workspace member; `filter`/`demod`/`spectrum`/`info` over WAV/IQ), `tpt-dsp-nihplug` and `tpt-dsp-py` (both **excluded** from the main workspace in root `Cargo.toml` `exclude`). `tpt-dsp-nihplug` uses `nice-plug` (the maintained fork of `nih-plug`, which is no longer on crates.io) to export CLAP + VST3; `tpt-dsp-py` builds a `tpt_dsp` pyo3 extension module (`extension-module` + `abi3-py38`). Verified separately: `cargo build`/`clippy` inside each dir, and the py module imports and runs under Python 3.13.
 
 (End of file)

@@ -1,0 +1,24 @@
+[package]
+name = "tpt-dsp-py"
+version = "0.1.0"
+edition = "2021"
+authors = ["TPT Solutions"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tpt-solutions/tpt-dsp"
+homepage = "https://github.com/tpt-solutions/tpt-dsp"
+description = "Python bindings for tpt-dsp analysis/core (pyo3)."
+keywords = ["dsp", "python", "fft", "signal-processing"]
+categories = ["science", "multimedia::audio"]
+
+[lib]
+name = "tpt_dsp"
+crate-type = ["cdylib"]
+
+# `extension-module` builds a proper importable `.pyd`/`.so` that links the
+# Python C-API at load time rather than embedding libpython, so it must not be
+# linked into a normal binary/test. `abi3-py38` pins the stable ABI so the
+# extension module builds without a Python interpreter present.
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.1.0" }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py38"] }

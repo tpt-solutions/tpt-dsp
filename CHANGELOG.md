@@ -15,6 +15,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Runnable examples for `tpt-dsp-core`, `tpt-dsp-audio`,
   `tpt-dsp-analysis` and `tpt-dsp-control` (in addition to the existing
   `tpt-dsp-io` SDR pipeline example).
+- `tpt-dsp-cli` — a command-line WAV/IQ DSP pipeline: `filter` (biquad / EQ /
+  waveshaper / delay / convolution-reverb chains), `demod` (raw IQ → WAV via FM
+  discriminator), `spectrum` (averaged magnitude spectrum + features, optional
+  CSV) and `info`. Workspace member.
+- `tpt-dsp-nihplug` — a CLAP/VST3 plugin wrapping `tpt-dsp-audio` (pedalboard:
+  Waveshaper → Delay → ConvolutionReverb → 3-band EQ). Uses nice-plug (the
+  maintained successor to nih-plug, which is no longer on crates.io) and is
+  **excluded** from the main workspace (see root `Cargo.toml` `exclude`).
+- `tpt-dsp-py` — pyo3 Python bindings exposing `rms`, `zero_crossing_rate`,
+  `spectral_centroid`, `spectrum`, `fm_demod` and `analyze` as the `tpt_dsp`
+  extension module. Also **excluded** from the main workspace.
 
 ### Changed
 - `tpt-dsp-analysis`: `peak_bin` now uses a total order over `f32`, so a

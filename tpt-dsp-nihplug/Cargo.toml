@@ -17,3 +17,10 @@ nice-plug = "0.3.0"
 
 [lib]
 crate-type = ["cdylib"]
+
+# `cargo deny` (run on the parent workspace) does not see this crate because it
+# is excluded from the workspace; the VST3/CLAP SDK bindings pulled in here
+# (clap-sys, vst3-sys, …) carry licences (e.g. MIT-0) that are intentionally
+# not in the main framework's `deny.toml` allow-list.
+[package.metadata.docs.rs]
+all-features = true

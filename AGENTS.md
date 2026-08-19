@@ -1,7 +1,7 @@
 # AGENTS.md
 
 `tpt-dsp` — pure-Rust, real-time-safe DSP framework (audio, RF/SDR, control).
-One Cargo workspace, 7 crates, dual MIT/Apache-2.0.
+One Cargo workspace, 8 member crates (+ 2 excluded standalone crates), dual MIT/Apache-2.0.
 
 ## Commands
 
@@ -58,8 +58,15 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
   (`Waveshaper → Delay → ConvolutionReverb → Eq`) driven from `www/` via an `AudioWorklet`.
 - **`tpt-dsp-viz` is an empty stub**: `src/lib.rs` is a license comment and `src/main.rs`
   is `fn main() {}`, despite its README and `todo.md` describing an egui waterfall UI. It
-  still drags `egui`/`eframe` into every `--workspace` build and pins `rust-version = 1.85`
-  while the workspace MSRV is 1.74.
+  still drags `egui`/`eframe` (0.36) into every `--workspace` build, which forces the
+  workspace `rust-version` up to 1.85; `viz` inherits that via `rust-version.workspace = true`.
+- **`tpt-dsp-cli`** — a command-line WAV/IQ DSP pipeline (`src/main.rs` + `src/lib.rs`)
+  built on the framework; depends on `core`/`io`/`audio` and is a normal workspace member.
+- **`tpt-dsp-nihplug`** and **`tpt-dsp-py`** are **excluded** from the default workspace
+  build (see root `Cargo.toml` `exclude`): `nihplug` is a standalone CLAP/VST3 wrapper
+  around `tpt-dsp-audio` (its transitive licenses aren't in the main `deny.toml`
+  allow-list), and `py` is a standalone Python-extension binding. Both are verified
+  separately with `cargo build` inside their own directories.
 - `tpt-dsp-io`'s `rtl-sdr` feature is a **stubbed backend** — it only changes the error
   `RtlSdrSource` reports; there is no USB driver. Use `SyntheticIqSource`/`TcpIqSource`.
 
@@ -108,7 +115,8 @@ Executable sources (`Cargo.toml`, `.github/workflows/`) > `ARCHITECTURE.md` > th
 Known stale spots, verified against the code:
 
 - `ARCHITECTURE.md` is the best deep reference (dependency direction, zero-alloc caveats,
-  MVP data flows) but predates `viz`/`wasm` — it still says "five crates".
+  MVP data flows) but predates `viz`/`wasm`/`cli` — it still says "five crates" while the
+  workspace actually has 8 members (+ `nihplug`/`py` excluded).
 - `BENCHMARKS.md` lists a `window/kaiser_f32` benchmark, but there is no Kaiser window
   (`WindowType` is Hann/Hamming/Blackman only). Treat its figures as indicative, not as
   a baseline to compare against.

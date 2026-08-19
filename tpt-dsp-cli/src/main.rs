@@ -7,11 +7,14 @@
 //! tpt-dsp-cli info     --input iq.u8 --format i16le
 //! ```
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
-use tpt_dsp_cli::{analyze_complex, analyze_real, demod_file, filter_wav, read_iq, write_spectrum_csv, Effect, WavData};
+use tpt_dsp_cli::{
+    analyze_complex, analyze_real, demod_file, filter_wav, read_iq, write_spectrum_csv, Effect,
+    WavData,
+};
 use tpt_dsp_core::WindowType;
 use tpt_dsp_io::IqFormat;
 
@@ -62,7 +65,11 @@ impl WindowArg {
 
 /// tpt-dsp command-line DSP pipeline.
 #[derive(Parser)]
-#[command(name = "tpt-dsp-cli", version, about = "Command-line WAV/IQ DSP pipeline built on tpt-dsp")]
+#[command(
+    name = "tpt-dsp-cli",
+    version,
+    about = "Command-line WAV/IQ DSP pipeline built on tpt-dsp"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -144,7 +151,11 @@ enum Command {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
-        Command::Filter { input, output, effects } => {
+        Command::Filter {
+            input,
+            output,
+            effects,
+        } => {
             let specs: Vec<Effect> = effects
                 .iter()
                 .map(|s| Effect::parse(s))
@@ -152,11 +163,33 @@ fn main() -> Result<()> {
             filter_wav(&input, &output, &specs)?;
             println!("wrote `{}`", output.display());
         }
-        Command::Demod { input, output, format, iq_rate, deviation, decimate } => {
-            demod_file(&input, &output, format.to_format(), iq_rate, deviation, decimate)?;
+        Command::Demod {
+            input,
+            output,
+            format,
+            iq_rate,
+            deviation,
+            decimate,
+        } => {
+            demod_file(
+                &input,
+                &output,
+                format.to_format(),
+                iq_rate,
+                deviation,
+                decimate,
+            )?;
             println!("wrote `{}`", output.display());
         }
-        Command::Spectrum { input, format, iq_rate, fft_size, window, csv, top } => {
+        Command::Spectrum {
+            input,
+            format,
+            iq_rate,
+            fft_size,
+            window,
+            csv,
+            top,
+        } => {
             let report = if let Some(fmt) = format {
                 let iq = read_iq(&input, fmt.to_format())?;
                 if iq.is_empty() {
@@ -166,7 +199,13 @@ fn main() -> Result<()> {
             } else {
                 let data = read_wav_for_analysis(&input)?;
                 let mono = downmix_mono(&data);
-                analyze_real(&mono, data.sample_rate as f64, fft_size, window.to_window(), top)
+                analyze_real(
+                    &mono,
+                    data.sample_rate as f64,
+                    fft_size,
+                    window.to_window(),
+                    top,
+                )
             };
             print_spectrum(&report);
             if let Some(csv_path) = csv {
@@ -174,7 +213,11 @@ fn main() -> Result<()> {
                 println!("wrote spectrum CSV to `{}`", csv_path.display());
             }
         }
-        Command::Info { input, format, iq_rate } => {
+        Command::Info {
+            input,
+            format,
+            iq_rate,
+        } => {
             if let Some(fmt) = format {
                 let iq = read_iq(&input, fmt.to_format())?;
                 let seconds = iq.len() as f64 / iq_rate;
@@ -203,7 +246,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn read_wav_for_analysis(path: &PathBuf) -> Result<WavData> {
+fn read_wav_for_analysis(path: &Path) -> Result<WavData> {
     let data = tpt_dsp_cli::read_wav(path)?;
     if data.channels.is_empty() {
         anyhow::bail!("wav `{}` has no channels", path.display());
