@@ -8,6 +8,20 @@ members = [
     "tpt-dsp-io",
     "tpt-dsp-viz",
     "tpt-dsp-wasm",
+    "tpt-dsp-cli",
+]
+
+# `tpt-dsp-nihplug` (CLAP/VST3 wrapper) and `tpt-dsp-py` (Python bindings) are
+# intentionally excluded from the default workspace build:
+#   * `tpt-dsp-py` links Python (extension-module) and cannot be built or tested
+#     by the normal `cargo build/test --workspace` gate.
+#   * `tpt-dsp-nihplug` pulls the VST3/CLAP SDK bindings whose transitive
+#     licenses (e.g. MIT-0) are not in the main `deny.toml` allow-list.
+# Both are standalone workspaces that depend on the crates above via path
+# dependencies and are verified separately (`cargo build` inside each dir).
+exclude = [
+    "tpt-dsp-nihplug",
+    "tpt-dsp-py",
 ]
 
 [workspace.package]
@@ -27,6 +41,10 @@ keywords = ["dsp", "audio", "fft", "signal-processing", "no-std"]
 categories = ["multimedia::audio", "science", "no-std"]
 
 [workspace.dependencies]
+# CLI / example tooling crates (workspace members only).
+clap = { version = "4", features = ["derive"] }
+hound = "3"
+anyhow = "1"
 # `default-features = false` is required here (not in the member manifest):
 # cargo silently ignores a member-level `default-features = false` when the
 # workspace dependency does not declare it. Members opt back into `std` via

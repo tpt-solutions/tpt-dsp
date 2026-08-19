@@ -1,0 +1,19 @@
+[package]
+name = "tpt-dsp-nihplug"
+version = "0.1.0"
+edition = "2021"
+authors = ["TPT Solutions"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tpt-solutions/tpt-dsp"
+homepage = "https://github.com/tpt-solutions/tpt-dsp"
+description = "CLAP/VST3 plugin wrapping tpt-dsp-audio (nih-plug / nice-plug)."
+keywords = ["dsp", "audio", "vst3", "clap", "plugin"]
+categories = ["multimedia::audio"]
+
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.1.0" }
+nice-plug = "0.3.0"
+
+[lib]
+crate-type = ["cdylib"]

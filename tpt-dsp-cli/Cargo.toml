@@ -1,0 +1,29 @@
+[package]
+name = "tpt-dsp-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Command-line WAV/IQ DSP pipeline built on the tpt-dsp framework."
+keywords = ["dsp", "audio", "cli", "sdr", "signal-processing"]
+categories = ["command-line-utilities", "multimedia::audio", "science"]
+readme = "README.md"
+
+[[bin]]
+name = "tpt-dsp-cli"
+path = "src/main.rs"
+
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.1.0" }
+tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.1.0" }
+tpt-dsp-io = { path = "../tpt-dsp-io", version = "0.1.0" }
+clap = { workspace = true }
+hound = { workspace = true }
+anyhow = { workspace = true }
+
+[dev-dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
