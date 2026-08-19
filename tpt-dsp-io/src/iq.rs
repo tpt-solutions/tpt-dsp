@@ -183,6 +183,16 @@ impl IqReassembler {
 /// A streaming IQ parser that buffers bytes until it can emit complete
 /// complex samples. Useful when the underlying transport delivers arbitrary
 /// chunk sizes.
+///
+/// # Memory growth
+///
+/// [`feed`](Self::feed) appends to an internal byte buffer that is only
+/// reclaimed by [`drain`](Self::drain). If the caller keeps feeding bytes
+/// without ever draining, the buffer grows without bound — there is no
+/// back-pressure or built-in cap. [`feed`](Self::feed) is therefore only safe
+/// for transports whose bytes are always promptly drained (the bounded
+/// [`IqReassembler`] is the recommended zero-allocation path for streaming
+/// IQ such as the `tcp.rs` server, which does not use this type).
 pub struct IqStream {
     format: IqFormat,
     buffer: Vec<u8>,
@@ -199,6 +209,10 @@ impl IqStream {
 
     /// Feed raw bytes; return the number of complete samples available via
     /// [`drain`](Self::drain).
+    ///
+    /// Appends to the internal buffer, which is unaffected by this call —
+    /// stale bytes accumulate until [`drain`](Self::drain) is invoked, so an
+    /// application that never drains will grow the buffer without bound.
     pub fn feed(&mut self, bytes: &[u8]) {
         self.buffer.extend_from_slice(bytes);
     }

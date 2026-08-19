@@ -9,6 +9,11 @@ on:
   schedule:
     - cron: "0 3 * * 1"
 
+# Least-privilege: the CI jobs only read the repo and never push, matching
+# the pattern already used by the Pages deployment workflow.
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 

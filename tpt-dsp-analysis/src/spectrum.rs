@@ -102,11 +102,15 @@ pub fn find_peaks(magnitude: &[f32], threshold: f32) -> Vec<usize> {
 }
 
 /// Index of the strongest bin in a magnitude spectrum (0 for an empty one).
+///
+/// Uses a total order over `f32` so a NaN/Inf value in `magnitude` (which can
+/// occur if malformed IQ data propagates through the FFT) cannot panic this
+/// real-time-path function.
 pub fn peak_bin(magnitude: &[f32]) -> usize {
     magnitude
         .iter()
         .enumerate()
-        .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+        .max_by(|a, b| a.1.total_cmp(b.1))
         .map(|(i, _)| i)
         .unwrap_or(0)
 }
@@ -547,6 +551,25 @@ mod tests {
         mag[10] = 1.0;
         let f = dominant_frequency(&mag, 6400.0, 64);
         assert!((f - 1000.0).abs() < 1e-3, "freq {f}");
+    }
+
+    #[test]
+    fn peak_bin_does_not_panic_on_nan() {
+        // Malformed IQ can propagate NaN/Inf through the FFT into the
+        // magnitude spectrum. `peak_bin` uses a total order so it must return
+        // an in-range index rather than panicking on `partial_cmp().unwrap()`.
+        let mut mag = vec![0.0f32; 32];
+        mag[5] = f32::NAN;
+        mag[20] = 1.0;
+        let bin = std::panic::catch_unwind(|| peak_bin(&mag));
+        let bin = bin.expect("peak_bin must not panic on NaN");
+        assert!(
+            bin < mag.len(),
+            "peak_bin returned out-of-range index {bin}"
+        );
+        // An all-NaN spectrum must still yield an in-range index, not panic.
+        assert!(peak_bin(&[f32::NAN, f32::NAN, f32::NAN]) < 3);
+        assert_eq!(peak_bin(&[]), 0);
     }
 
     const SR: f32 = 48_000.0;

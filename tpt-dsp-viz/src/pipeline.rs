@@ -246,7 +246,7 @@ pub fn run_audio_input(
                 move |data: &[f32], _: &cpal::InputCallbackInfo| {
                     state
                         .lock()
-                        .unwrap()
+                        .unwrap_or_else(|e| e.into_inner())
                         .ingest_interleaved(data.iter().copied(), channels);
                 }
             },
@@ -260,7 +260,7 @@ pub fn run_audio_input(
                 move |data: &[i16], _: &cpal::InputCallbackInfo| {
                     state
                         .lock()
-                        .unwrap()
+                        .unwrap_or_else(|e| e.into_inner())
                         .ingest_interleaved(data.iter().map(|&x| f32::from_sample(x)), channels);
                 }
             },
@@ -274,7 +274,7 @@ pub fn run_audio_input(
                 move |data: &[u16], _: &cpal::InputCallbackInfo| {
                     state
                         .lock()
-                        .unwrap()
+                        .unwrap_or_else(|e| e.into_inner())
                         .ingest_interleaved(data.iter().map(|&x| f32::from_sample(x)), channels);
                 }
             },

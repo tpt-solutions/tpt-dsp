@@ -114,6 +114,35 @@ let mut graph = AudioGraph::new(
 graph.run(100); // render 100 blocks
 ```
 
+## Web demo
+
+The `tpt-dsp-wasm` crate powers a browser guitar-pedalboard
+(Waveshaper → Delay → ConvolutionReverb → EQ) running inside an
+`AudioWorklet`. Once the repo's GitHub Pages "GitHub Actions" source is
+enabled, the live demo is served from the [`www/`](www) directory — see
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml). Locally:
+
+```sh
+wasm-pack build tpt-dsp-wasm --target web --out-dir ../www/pkg
+python -m http.server 8080 --directory www   # open http://localhost:8080
+```
+
+## How does tpt-dsp compare?
+
+- **vs. [`cpal`](https://github.com/rustaudio/cpal):** `cpal` is audio
+  *transport* only — it moves samples to/from a device. `tpt-dsp` is the
+  *processing* layer that runs on those samples (and on RF/control data).
+  `tpt-dsp-io` uses `cpal` under the hood for the audio source.
+- **vs. [`dasp`](https://github.com/RustAudio/dasp):** `dasp` is a broad,
+  trait-based DSP toolkit with a friendly sample/Signal API. `tpt-dsp` is
+  narrower but emphasises a hard real-time contract (pre-allocated,
+  allocation-free hot paths) and `no_std`/embedded support.
+- **vs. [`fundsp`](https://github.com/SamiPerttu/fundsp):** `fundsp` offers
+  a composable, lazy audio-graph DSL with deep node support. `tpt-dsp` is a
+  lower-level, allocation-averse primitives library that also spans RF/SDR
+  (FM demod, IQ parsing, decimation) and control (PID, input shaping,
+  kinematics), and is verified on bare-metal Cortex-M.
+
 ## `no_std` / embedded
 
 `tpt-dsp-core` has no standard-library dependency when built without

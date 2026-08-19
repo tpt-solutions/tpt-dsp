@@ -55,13 +55,13 @@ and no boundary marshalling.
 ## Build
 
 ```sh
-# from this directory
-wasm-pack build --target web
+# from this directory — writes into www/pkg, which is what www/ imports
+wasm-pack build tpt-dsp-wasm --target web --out-dir ../www/pkg
 ```
 
-That writes `pkg/tpt_dsp_wasm.js` + `pkg/tpt_dsp_wasm_bg.wasm`, which is exactly
-what `www/` imports. Plain cargo also works if you only want to type-check the
-wasm target:
+That produces `www/pkg/tpt_dsp_wasm.js` + `www/pkg/tpt_dsp_wasm_bg.wasm`, which
+is exactly what `www/main.js` and `www/pedal-processor.js` import. Plain cargo
+also works if you only want to type-check the wasm target:
 
 ```sh
 cargo build -p tpt-dsp-wasm                              # host build (tests, CI)
@@ -79,11 +79,12 @@ wasm-pack build --target web -- --features async
 
 ## Run
 
-`www/main.js` imports from `../pkg/`, so serve the **crate root**, not `www/`:
+`www/main.js` and `www/pedal-processor.js` resolve `./pkg/tpt_dsp_wasm.*`
+relative to `www/`, so serve the **`www/` directory** (not the crate root):
 
 ```sh
-python -m http.server 8080        # or: npx serve .
-# open http://localhost:8080/www/
+python -m http.server 8080 --directory www   # or: npx serve www
+# open http://localhost:8080
 ```
 
 `localhost` counts as a secure context, so `getUserMedia` works without TLS.
@@ -115,7 +116,6 @@ Files in `www/`:
 | `index.html`          | Controls for every pedal parameter.                            |
 | `main.js`             | Main-thread setup: wasm init, worklet load, mic → node → out.  |
 | `pedal-processor.js`  | The `AudioWorkletProcessor` that runs the DSP.                 |
-| `worklet-polyfill.js` | `TextDecoder`/`TextEncoder` shims (see below).                 |
 
 Browser support notes:
 
@@ -123,11 +123,6 @@ Browser support notes:
   which Chromium-based browsers support. If your target browser rejects module
   imports in worklets, bundle `pkg/tpt_dsp_wasm.js` into the processor script
   instead of importing it.
-- `AudioWorkletGlobalScope` does not expose `TextDecoder`/`TextEncoder`, but the
-  wasm-bindgen glue constructs both at module scope. `worklet-polyfill.js`
-  installs minimal UTF-8 implementations and is imported *before* the glue —
-  module dependencies are evaluated in import-declaration order, so keep those
-  two `import` lines in that order.
 - There is deliberately no `ScriptProcessorNode` fallback: it is deprecated and
   runs on the main thread, so it cannot honour the allocation-free 128-sample
   contract. If you need one anyway, call `process_block(input, output)` from

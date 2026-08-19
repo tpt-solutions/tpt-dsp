@@ -2,7 +2,7 @@
 
 A pure-Rust, real-time-safe DSP framework. Dual-licensed MIT / Apache-2.0. © TPT Solutions.
 
-_Last synced: 2026-08-07. Reconciled with the actual code in `tpt-dsp-*/src`. The codebase has advanced well beyond the previous "Last synced" snapshot — SIMD, RTL-SDR, FM demod, resampling, the `viz`/`wasm` crates, benchmark suites, the benchmark report and an architecture guide were all committed. This revision marks those as done and records the new web pedalboard UI + Pages deploy workflow. See "Known Gaps" at the end for genuinely open items and external blockers._
+_Last synced: 2026-08-19. Reconciled with the actual code in `tpt-dsp-*/src`. The codebase has advanced well beyond the previous "Last synced" snapshot — SIMD, RTL-SDR, FM demod, resampling, the `viz`/`wasm` crates, benchmark suites, the benchmark report and an architecture guide were all committed. The 2026-08-19 review's Phase 4 follow-through (robustness fixes, CI hardening, DX tooling) is now complete; the remaining unchecked items are all external-blocker tasks (GitHub push, Pages enablement, crates.io publish, Cortex-M hardware, live GUI render). See "Known Gaps" at the end for genuinely open items and external blockers._
 
 ---
 
@@ -135,6 +135,33 @@ _Last synced: 2026-08-07. Reconciled with the actual code in `tpt-dsp-*/src`. Th
 
 - [x] Run `cargo-deny` on every new dependency addition — _CI `deny` job runs default + `--all-features` on push/PR and a weekly schedule_
 - [x] Keep `no_std` compatibility verified for `tpt-dsp-core` as features are added — _CI `embedded` job; `simd` feature fixed to not break stable builds_
+
+---
+
+## Phase 4: Robustness, Security Hardening & Adoption Tooling (2026-08-19)
+
+_From a full-project review: security audit, stub inventory, and adoption/DX assessment. See the review's plan for detail; tracked here for follow-through._
+
+### Robustness fixes
+- [x] `tpt-dsp-analysis/src/spectrum.rs` `peak_bin()` — replaced `partial_cmp().unwrap()` (panics on NaN) with `total_cmp` so malformed IQ-derived spectra can't crash a real-time analysis thread
+- [x] Add a regression test for `peak_bin` with a NaN-containing input
+- [x] `tpt-dsp-viz/src/pipeline.rs:249,263,277` — `state.lock().unwrap()` in `cpal` audio-input callbacks; switch to `.lock().unwrap_or_else(|e| e.into_inner())` so a mutex poisoned by an unrelated panic doesn't crash every subsequent audio callback
+- [x] `tpt-dsp-io/src/iq.rs` `IqStream::feed`/`IqStream` — document that the buffer grows unboundedly if the caller never calls `drain` (not exercised by `tcp.rs`, which uses the bounded `IqReassembler` path instead)
+
+### CI security hardening
+- [x] `.github/workflows/ci.yml` — add a top-level `permissions: contents: read` block (defense-in-depth; matches the least-privilege pattern already used in `pages.yml`)
+
+### Adoption / DX tooling
+- [x] Add a root `justfile` (`just ci`, `just test`, `just examples`) to de-duplicate the command list currently repeated across README/CONTRIBUTING.md/AGENTS.md
+- [x] Add `CHANGELOG.md` (Keep-a-Changelog format, `[Unreleased]` section) ahead of the eventual v0.1.0 crates.io publish
+- [x] Add `.github/ISSUE_TEMPLATE/bug_report.md` + `feature_request.md` and `.github/PULL_REQUEST_TEMPLATE.md`
+- [x] Add an `examples/` directory + one runnable example each for `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-control` (only `tpt-dsp-io` has one today)
+- [x] Root README — link the `www/` pedalboard demo (once Pages is live) and add a short positioning note vs. `fundsp`/`dasp`/`cpal`
+
+### Noted for a future, separate pass (not bundled into this cleanup)
+- `tpt-dsp-cli` — terminal tool to pipe WAV/IQ files through filters/FFT/analysis
+- `nih-plug`-based CLAP/VST3 wrapper example around `tpt-dsp-audio`
+- pyo3 Python bindings for `tpt-dsp-analysis`/`tpt-dsp-core`
 
 ---
 
