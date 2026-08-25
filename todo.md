@@ -2,7 +2,7 @@
 
 A pure-Rust, real-time-safe DSP framework. Dual-licensed MIT / Apache-2.0. © TPT Solutions.
 
-_Last synced: 2026-08-20. Reconciled with the actual code in `tpt-dsp-*/src`. Three previously-deferred "future pass" crates are now implemented: `tpt-dsp-cli` (WAV/IQ pipe tool, a workspace member), and `tpt-dsp-nihplug` (CLAP/VST3 wrapper, uses nice-plug) and `tpt-dsp-py` (pyo3 Python bindings). The latter two are intentionally excluded from the main workspace (see root `Cargo.toml` `exclude`) and verified as standalone workspaces. All original workspace gates (`fmt`/`build`/`test`/`clippy`/`deny`/`doc`) remain green._
+_Last synced: 2026-08-26. Reconciled with the actual code in `tpt-dsp-*/src`. Three previously-deferred "future pass" crates are now implemented: `tpt-dsp-cli` (WAV/IQ pipe tool, a workspace member), and `tpt-dsp-nihplug` (CLAP/VST3 wrapper, uses nice-plug) and `tpt-dsp-py` (pyo3 Python bindings). The latter two are intentionally excluded from the main workspace (see root `Cargo.toml` `exclude`) and verified as standalone workspaces. All original workspace gates (`fmt`/`build`/`test`/`clippy`/`deny`/`doc`) remain green._
 
 ---
 
@@ -17,7 +17,7 @@ _Last synced: 2026-08-20. Reconciled with the actual code in `tpt-dsp-*/src`. Th
 - [x] Add `deny.toml` (cargo-deny config blocking GPL/LGPL copyleft dependencies)
 - [x] Set up GitHub Actions CI: build, test, clippy, fmt, cargo-deny across native, `wasm32-unknown-unknown`, and `thumbv7em-none-eabihf` targets
 - [x] Fill in Cargo.toml metadata (authors, license, repository) for each crate
-- [ ] Push initial repo to GitHub — _local commits only; blocked on remote/credentials. Run once the GitHub remote exists._
+- [x] Push initial repo to GitHub — _done 2026-08-26: `origin` = `github.com/tpt-solutions/tpt-dsp`; all commits pushed through `63710a7` (Phase 5 adoption/DX tooling). Working tree clean._
 
 ---
 
@@ -231,8 +231,7 @@ gaps that were not previously tracked._
 - Verified for `IirFilter`, `Eq`, `ConvolutionReverb`, `OutlierDetector` (pre-allocated scratch), and the pedalboard hot path (`process_internal_block`, counting-allocator test). `OutlierDetector` is still O(n log n) per sample, not O(1).
 
 **Still open / external blockers**
-- Push initial repo to GitHub — needs a remote + credentials.
-- Deploy web pedalboard to GitHub Pages — workflow exists; needs the repo's Pages setting = "GitHub Actions".
+- Deploy web pedalboard to GitHub Pages — workflow exists and is pushed; verified 2026-08-26 that `https://tpt-solutions.github.io/tpt-dsp/` still returns 404, so the repo's Pages setting must be switched to "GitHub Actions" in the web UI (not doable via git). Once live, finish the last README task: move the demo link/badge to the top of the file.
 - `v0.1.0` publish to crates.io — needs publish token; all 7 crates are now implemented and release-ready (the `tpt-dsp-viz` desktop UI builds, tests and clips clean — a live render check on a GUI machine is the only remaining verification).
 - Cortex-M `embedded-hal` validation — needs physical hardware; not runnable here.
 - Benchmark report vs JUCE / libsamplerate — intentionally deferred (both are C libraries); `BENCHMARKS.md` documents the pure-Rust `rubato` comparison instead.
