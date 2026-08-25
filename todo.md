@@ -165,6 +165,58 @@ _From a full-project review: security audit, stub inventory, and adoption/DX ass
 
 ---
 
+## Phase 5: Adoption & DX (2026-08-26)
+
+_From a platform review: the codebase and its own status docs are unusually
+well-tracked already (see "Known Gaps" below); this phase captures adoption/DX
+gaps that were not previously tracked._
+
+- [x] `docs/QUICKSTART.md` (or a new README section) — a single runnable
+  "clone → build → hear/see output" path, e.g. `just example tpt-dsp-audio
+  synth_eq`, distinct from the README's isolated code snippets
+  _(added 2026-08-26: `docs/QUICKSTART.md`, covering build, every crate's
+  example, library usage and the local wasm pedalboard)_
+- [x] Comparison table in the README (columns: `no_std`, real-time guarantee,
+  RF/SDR support, plugin export) against `cpal`/`dasp`/`fundsp`/JUCE,
+  alongside (not necessarily replacing) the existing prose comparison
+  _(added 2026-08-26: table at the top of "How does tpt-dsp compare?", with
+  the former bullet points kept as prose notes below it)_
+- [x] `cargo-generate` template (or a `templates/` dir with
+  `cargo-generate.toml`) for a new effect crate / CLI pipeline skeleton,
+  pre-wired to the workspace's zero-alloc scratch pattern and
+  `#![warn(missing_docs)]` convention
+  _(added 2026-08-26: `templates/dsp-effect-crate/` — use with
+  `cargo generate --path templates/dsp-effect-crate -n my-effect`; excluded
+  from the workspace in root `Cargo.toml` because of its `{{crate_name}}`
+  placeholders)_
+- [x] Minimal `tpt-dsp-viz` example (smallest custom-waterfall usage) —
+  `core`/`audio`/`analysis`/`control`/`io` each have one `examples/` entry;
+  `viz` currently has none of its own
+  _(added 2026-08-26: `tpt-dsp-viz/examples/custom_waterfall.rs`, driving
+  `VizApp` directly over a bounded channel with `run_synthetic`)_
+- [ ] README — move the GitHub Pages demo link/badge to the top of the file
+  (once Pages is enabled), not only under "Web demo"
+  _— still blocked on the repo's Pages setting = "GitHub Actions"._
+
+### Automation & dependency hygiene
+- [x] `AGENTS.md` — fixed the stale "`tpt-dsp-viz` is an empty stub" paragraph
+  (viz has been implemented since 2026-08-07; the doc hadn't been updated)
+- [x] Ran `cargo machete` against the workspace — found and removed unused
+  `tpt-dsp-core` dependencies from `tpt-dsp-control`, `tpt-dsp-viz`, and
+  `tpt-dsp-wasm` (`control`'s was already noted in `ARCHITECTURE.md` §7; the
+  other two were new findings). Also dropped the now-dangling `tpt_dsp_core`
+  intra-doc link from `tpt-dsp-viz/src/lib.rs`. Verified `cargo machete`
+  reports clean and `cargo build --workspace --all-features` still succeeds.
+- [x] Add a `cargo-machete` step to `.github/workflows/ci.yml` (new `machete`
+  job, mirroring the `deny` job's `taiki-e/install-action` pattern) now that
+  the workspace passes it clean, so unused deps don't creep back in
+- [x] Add `.github/dependabot.yml` — `cargo` ecosystem for the root workspace
+  plus the excluded `tpt-dsp-nihplug`/`tpt-dsp-py` standalone workspaces
+  (weekly), and a `github-actions` ecosystem entry for `ci.yml`/`pages.yml`
+  action version bumps
+
+---
+
 ## Known Gaps (last updated 2026-08-20)
 
 **Build/test health (all green)**

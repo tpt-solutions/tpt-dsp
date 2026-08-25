@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # Workspace Cargo dependencies (root manifest covers all members; the
+  # nihplug/py standalone workspaces are excluded from the main build but
+  # still worth tracking for advisories).
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: "cargo"
+    directory: "/tpt-dsp-nihplug"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: "cargo"
+    directory: "/tpt-dsp-py"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+
+  # GitHub Actions used by ci.yml / pages.yml.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10

@@ -17,7 +17,6 @@ default = []
 audio = ["dep:cpal"]
 
 [dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
 tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.1.0", default-features = false }
 crossbeam-channel = { workspace = true }
 egui = "0.36"

@@ -129,19 +129,27 @@ python -m http.server 8080 --directory www   # open http://localhost:8080
 
 ## How does tpt-dsp compare?
 
-- **vs. [`cpal`](https://github.com/rustaudio/cpal):** `cpal` is audio
-  *transport* only — it moves samples to/from a device. `tpt-dsp` is the
-  *processing* layer that runs on those samples (and on RF/control data).
-  `tpt-dsp-io` uses `cpal` under the hood for the audio source.
-- **vs. [`dasp`](https://github.com/RustAudio/dasp):** `dasp` is a broad,
-  trait-based DSP toolkit with a friendly sample/Signal API. `tpt-dsp` is
-  narrower but emphasises a hard real-time contract (pre-allocated,
-  allocation-free hot paths) and `no_std`/embedded support.
-- **vs. [`fundsp`](https://github.com/SamiPerttu/fundsp):** `fundsp` offers
-  a composable, lazy audio-graph DSL with deep node support. `tpt-dsp` is a
-  lower-level, allocation-averse primitives library that also spans RF/SDR
-  (FM demod, IQ parsing, decimation) and control (PID, input shaping,
-  kinematics), and is verified on bare-metal Cortex-M.
+| | `no_std` | Real-time guarantee | RF/SDR support | Plugin export |
+| --- | --- | --- | --- | --- |
+| **`tpt-dsp`** | ✅ (`core`) | ✅ allocation-free hot paths, verified by counting-allocator tests | ✅ IQ parsing, FM demod, FIR decimation, TCP/synthetic sources | ⚠️ via `nihplug` wrapper crate (CLAP/VST3) |
+| [`cpal`](https://github.com/rustaudio/cpal) | ❌ | transport only | ❌ | ❌ |
+| [`dasp`](https://github.com/RustAudio/dasp) | ✅ | sample-level, no scheduler contract | ❌ | ❌ |
+| [`fundsp`](https://github.com/SamiPerttu/fundsp) | ❌ | lock-free graph, allocations at build time | ❌ | ❌ |
+| [JUCE](https://juce.com/) (C++) | ❌ | ✅ | partial (via add-ons) | ✅ (AU/VST3/LV2/AAX) |
+
+Notes on the table: `cpal` is audio *transport* only — it moves samples
+to/from a device; `tpt-dsp` is the *processing* layer that runs on those
+samples (and on RF/control data), and `tpt-dsp-io` uses `cpal` under the hood
+for its audio source. `dasp` is a broad, trait-based DSP toolkit with a
+friendly sample/Signal API; `tpt-dsp` is narrower but emphasises a hard
+real-time contract (pre-allocated, allocation-free hot paths) and
+`no_std`/embedded support. `fundsp` offers a composable, lazy audio-graph DSL
+with deep node support; `tpt-dsp` is a lower-level, allocation-averse
+primitives library that also spans RF/SDR (FM demod, IQ parsing, decimation)
+and control (PID, input shaping, kinematics), verified on bare-metal Cortex-M.
+JUCE is the mature C++ reference point — plugin-ready out of the box but not
+Rust and not `no_std`.
+
 
 ## `no_std` / embedded
 

@@ -22,6 +22,9 @@ members = [
 exclude = [
     "tpt-dsp-nihplug",
     "tpt-dsp-py",
+    # cargo-generate template (its Cargo.toml contains `{{crate_name}}` placeholders
+    # and is only instantiated via `cargo generate --path templates/dsp-effect-crate`).
+    "templates",
 ]
 
 [workspace.package]

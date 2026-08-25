@@ -1,0 +1,3 @@
+[template]
+description = "A real-time-safe DSP effect crate skeleton pre-wired to the tpt-dsp zero-allocation conventions."
+ignore = ["target"]

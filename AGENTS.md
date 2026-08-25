@@ -56,10 +56,16 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
   PID/shaping/kinematics code does not call into it.
 - **`tpt-dsp-wasm`** — core + audio; the Web Audio pedalboard
   (`Waveshaper → Delay → ConvolutionReverb → Eq`) driven from `www/` via an `AudioWorklet`.
-- **`tpt-dsp-viz` is an empty stub**: `src/lib.rs` is a license comment and `src/main.rs`
-  is `fn main() {}`, despite its README and `todo.md` describing an egui waterfall UI. It
-  still drags `egui`/`eframe` (0.36) into every `--workspace` build, which forces the
+- **`tpt-dsp-viz` is implemented**: `app.rs` (`VizApp`, an `eframe::App`) renders a
+  scrolling waterfall (`Spectrogram`, colour-mapped via `colormap.rs`) plus a live dB
+  spectrum line, peak-frequency/dB readout, and a pause toggle. `pipeline.rs` streams
+  `SpectrumFrame`s from a producer thread over a `crossbeam-channel`: `run_synthetic`
+  (deterministic multi-tone + noise, no hardware needed) or, under the `audio` feature,
+  `run_audio_input` (`cpal` default input device, F32/I16/U16, mono downmix). It still
+  drags `egui`/`eframe` (0.36) into every `--workspace` build, which forces the
   workspace `rust-version` up to 1.85; `viz` inherits that via `rust-version.workspace = true`.
+  A live (on-screen) render check still needs a machine with a display — not verified in
+  this headless environment, though it builds, tests, and clips clean.
 - **`tpt-dsp-cli`** — a command-line WAV/IQ DSP pipeline (`src/main.rs` + `src/lib.rs`)
   built on the framework; depends on `core`/`io`/`audio` and is a normal workspace member.
 - **`tpt-dsp-nihplug`** and **`tpt-dsp-py`** are **excluded** from the default workspace

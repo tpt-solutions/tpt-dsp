@@ -20,7 +20,6 @@ default = []
 async = ["dep:wasm-bindgen-futures"]
 
 [dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
 tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.1.0" }
 wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true, optional = true }

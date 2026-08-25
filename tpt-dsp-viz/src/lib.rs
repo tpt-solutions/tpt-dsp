@@ -1,12 +1,10 @@
 //! Real-time waterfall spectrum and live spectrum-line desktop UI.
 //!
 //! `tpt-dsp-viz` renders live signal displays with [`egui`]/[`eframe`] on top
-//! of [`tpt_dsp_core`] and [`tpt_dsp_analysis`]. A capture/generator thread
-//! streams analysed [`SpectrumFrame`]s to the UI over a `crossbeam-channel`;
-//! [`run`] wires that thread to a [`VizApp`] and shows the waterfall plus the
-//! live spectrum line.
+//! of [`tpt_dsp_analysis`]. A capture/generator thread streams analysed
+//! [`SpectrumFrame`]s to the UI over a `crossbeam-channel`; [`run`] wires that
+//! thread to a [`VizApp`] and shows the waterfall plus the live spectrum line.
 //!
-//! [`tpt_dsp_core`]: tpt_dsp_core
 //! [`tpt_dsp_analysis`]: tpt_dsp_analysis
 
 #![warn(missing_docs)]

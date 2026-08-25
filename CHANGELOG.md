@@ -26,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tpt-dsp-py` — pyo3 Python bindings exposing `rms`, `zero_crossing_rate`,
   `spectral_centroid`, `spectrum`, `fm_demod` and `analyze` as the `tpt_dsp`
   extension module. Also **excluded** from the main workspace.
+- `docs/QUICKSTART.md` — a single clone → build → run path through the
+  examples, library usage and the local web pedalboard.
+- README comparison table (`no_std` / real-time guarantee / RF-SDR / plugin
+  export) against `cpal`, `dasp`, `fundsp` and JUCE, alongside the prose
+  comparison notes.
+- `templates/dsp-effect-crate/` — a cargo-generate skeleton for new effect
+  crates, pre-wired to the zero-allocation scratch pattern and
+  `#![warn(missing_docs)]` (excluded from the workspace).
+- `tpt-dsp-viz/examples/custom_waterfall.rs` — minimal custom-waterfall usage
+  driving `VizApp` directly over a bounded channel.
 
 ### Changed
 - `tpt-dsp-analysis`: `peak_bin` now uses a total order over `f32`, so a

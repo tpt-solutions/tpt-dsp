@@ -119,3 +119,15 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: cargo doc
         run: cargo doc --workspace --all-features --no-deps
+
+  machete:
+    name: Unused dependencies (cargo-machete)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-machete
+        uses: taiki-e/install-action@cargo-machete
+      - name: cargo machete
+        run: cargo machete
