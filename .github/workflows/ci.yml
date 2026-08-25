@@ -22,7 +22,7 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -34,7 +34,7 @@ jobs:
     name: Build / Test / Clippy (native)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -55,7 +55,7 @@ jobs:
     name: Build (wasm32-unknown-unknown)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install stable toolchain + wasm target
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -70,7 +70,7 @@ jobs:
     name: Build (thumbv7em-none-eabihf, no_std)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install stable toolchain + thumb target
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -92,7 +92,7 @@ jobs:
     name: License / advisory audit (cargo-deny)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-deny
@@ -113,7 +113,7 @@ jobs:
     name: Docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
@@ -124,7 +124,7 @@ jobs:
     name: Unused dependencies (cargo-machete)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
       - name: Install cargo-machete

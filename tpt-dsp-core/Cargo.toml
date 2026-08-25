@@ -43,7 +43,7 @@ crossbeam-channel = { workspace = true, optional = true }
 # implementations for the sample-rate-conversion comparison in
 # `benches/resampling_bench.rs`. They are never linked into the library.
 audioadapter-buffers = "5.2"
-criterion = "0.5"
+criterion = "0.8"
 rubato = "1.0.1"
 
 [[bench]]
