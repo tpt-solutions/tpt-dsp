@@ -42,7 +42,7 @@ crossbeam-channel = { workspace = true, optional = true }
 # `rubato` (MIT) and its buffer-adapter crate are benchmark-only reference
 # implementations for the sample-rate-conversion comparison in
 # `benches/resampling_bench.rs`. They are never linked into the library.
-audioadapter-buffers = "2.0"
+audioadapter-buffers = "5.2"
 criterion = "0.5"
 rubato = "1.0.1"
 
