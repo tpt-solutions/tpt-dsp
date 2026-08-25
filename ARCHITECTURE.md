@@ -60,7 +60,7 @@ audio    │ analysis   io
 | `tpt-dsp-audio` | Oscillators & synthesis, effects, audio graph, real-time engine. | No (uses `std::vec`) |
 | `tpt-dsp-analysis` | Spectrum analysis, time-series stats, features, spectrogram/waterfall, async stream adapters. | No (uses `std`; `async` feature pulls `tokio`/`futures`) |
 | `tpt-dsp-control` | PID, input shaping (ZVD), trajectory kinematics. | No |
-| `tpt-dsp-io` | IQ byte-stream parsing (always available), cpal audio out, serial reader, async TCP IQ server (feature-gated). | No |
+| `tpt-dsp-io` | IQ byte-stream parsing (always available), built-in audio I/O, serial reader, async TCP IQ server (feature-gated). | No |
 
 ---
 
@@ -130,7 +130,7 @@ Target: a browser/WASM audio engine driving a pedalboard chain.
 
 ```
 Source (Oscillator / mic) ─▶ Distortion (Waveshaper)
-        ─▶ Delay ─▶ Reverb (ConvolutionReverb) ─▶ EQ (Eq) ─▶ Sink (cpal / Web Audio)
+        ─▶ Delay ─▶ Reverb (ConvolutionReverb) ─▶ EQ (Eq) ─▶ Sink (built-in audio / Web Audio)
 ```
 
 Building blocks already available in `tpt-dsp-audio` (all mono, in-place
@@ -192,7 +192,7 @@ Building blocks now present:
   `Spectrogram` as a scrolling `egui` texture (colour-mapped by `colormap` —
   black → blue → cyan → yellow → red) and the latest frame as a live spectrum
   line, with peak-frequency/dB readout and a pause toggle. `run_audio_input`
-  (under the `audio` feature) captures the default input device via `cpal`,
+  (under the `audio` feature) captures the default input device via the built-in WASAPI backend,
   downmixing F32/I16/U16 streams to mono. The only per-frame allocation is the
   `Vec<f32>` of dB values sent over the channel.
 
@@ -268,7 +268,7 @@ and an async-std adapter submodule exist; verify `Cargo.toml` feature wiring
 | Module | Key types | Feature |
 | --- | --- | --- |
 | `iq` | `parse_iq`, `IqFormat`, `IqStream` | always |
-| `audio` | `run_output`, `list_output_devices` | `audio` (cpal) — **output only, mono f32, no capture/duplex/device selection** |
+| `audio` | `run_output`, `list_output_devices` | `audio` (built-in native backend) — **output only, mono f32, no capture/duplex/device selection** |
 | `serial` | `SerialReader` | `serial` — **open/read only, no write/enumeration/timeout/framing** |
 | `tcp` | `serve_iq` | `tcp` — **single-connection** async IQ server |
 
@@ -310,7 +310,7 @@ async adapters and grow-only scratch in `IirFilter`/`Eq`.
 - DCT: direct O(N²) only (no fast DCT).
 - Hand-rolled `fft`: power-of-two only (use `FftPlan`/RustFFT for arbitrary
   lengths).
-- I/O: cpal output-only mono; serial read-only; `tcp` single-connection; no
+- I/O: built-in WASAPI output mono (+ capture); serial read-only; `tcp` single-connection; no
   cross-read buffering for mid-sample splits beyond `IqStream`.
 - `tpt-dsp-control` depends on `tpt-dsp-core` but does not currently use it.
 - `portable-simd` FFT/complex optimization: **not started**.
@@ -350,7 +350,7 @@ Three crates wrap the framework for use outside Rust:
   (specs parse the same `tpt-dsp-audio` effects), `demod` FM-demodulates raw IQ
   to WAV, `spectrum` averages a one-sided magnitude spectrum and reports
   dominant frequency, peak dB, RMS, zero-crossing rate and spectral centroid,
-  and `info` prints file metadata. WAV I/O uses `hound`; IQ parsing uses
+  and `info` prints file metadata. WAV I/O uses `tpt-dsp-io`'s built-in RIFF/WAVE module; IQ parsing uses
   `tpt-dsp-io`.
 - **`tpt-dsp-nihplug`** (excluded) — a CLAP/VST3 plugin wrapping the
   `tpt-dsp-audio` pedalboard (Waveshaper → Delay → ConvolutionReverb → 3-band

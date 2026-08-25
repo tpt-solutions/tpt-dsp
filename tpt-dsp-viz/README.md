@@ -22,7 +22,7 @@ blocks to the UI thread without blocking the render loop.
 
 | Feature  | Default | Description                                          |
 | -------- | ------- | ---------------------------------------------------- |
-| `audio`  | ✗       | Live capture from a system audio device via `cpal`.  |
+| `audio`  | ✗       | Live capture from the system audio device via the built-in audio backend.  |
 
 With the default features the crate exposes the visualization primitives; enable
 `audio` to pull samples directly from a microphone/loopback device.
@@ -52,7 +52,7 @@ scrolling waterfall spectrogram (colour-mapped black → blue → cyan → yello
 red) and a live dB spectrum line, with a peak-frequency/dB readout and a pause
 toggle. With no hardware attached it renders a deterministic synthetic
 multi-tone + noise signal; pass `--features audio -- --audio` to capture from
-the default system audio input device via `cpal` instead.
+the default system audio input device via the built-in backend instead.
 
 ## Building
 

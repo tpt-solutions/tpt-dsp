@@ -2,7 +2,8 @@
 //!
 //! Run with `cargo bench -p tpt-dsp-core --bench filter_bench`.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use tpt_dsp_core::{
     convolve, process_biquad, Biquad, BiquadCoeffs, BiquadType, ConvolvePlan, FftConvolver, Fir,
     FirDesign, IirFilter,

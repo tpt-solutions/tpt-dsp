@@ -239,3 +239,10 @@ gaps that were not previously tracked._
 - Three new crates added on 2026-08-20: `tpt-dsp-cli` (workspace member; `filter`/`demod`/`spectrum`/`info` over WAV/IQ), `tpt-dsp-nihplug` and `tpt-dsp-py` (both **excluded** from the main workspace in root `Cargo.toml` `exclude`). `tpt-dsp-nihplug` uses `nice-plug` (the maintained fork of `nih-plug`, which is no longer on crates.io) to export CLAP + VST3; `tpt-dsp-py` builds a `tpt_dsp` pyo3 extension module (`extension-module` + `abi3-py38`). Verified separately: `cargo build`/`clippy` inside each dir, and the py module imports and runs under Python 3.13.
 
 (End of file)
+
+## Dependency Licensing Policy (MIT/Apache-2.0 purity)
+
+- [x] Replace `hound` (Apache-2.0-only) with the built-in RIFF/WAVE module in `tpt-dsp-io/src/wav.rs` - _done 2026-08-26: `read_wav_f32_path`/`write_wav_f32_path` (+ reader/writer variants) normalise to `f32`; PCM 8/16/24/32-bit and IEEE float 32/64 read, WAVE_FORMAT_EXTENSIBLE supported, 32-bit float written; CLI migrated; `hound` removed from `[workspace.dependencies]`._
+## Long-term: clean-room audio I/O
+
+- [ ] **Clean-room rewrite of `cpal` in pure Rust, built internally** - `cpal` is Apache-2.0-only, which blocks MIT-only redistribution when the `audio` feature is enabled. Status 2026-08-26: **`cpal` fully removed from the tree.** `tpt-dsp-io/src/audio/` now implements shared-mode WASAPI directly in-tree (`backend_windows.rs`: hand-declared COM vtables/GUIDs, event-driven render + capture, `AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM`, Windows 10+; other platforms return a documented stub error). Public API: `run_output`, `run_input`, `has_default_input`, `list_output_devices` / `list_input_devices`. `tpt-dsp-viz` migrated off cpal onto `run_input`. Remaining work: macOS (CoreAudio) and Linux (ALSA/PipeWire) native backends, friendly device names via the property store, device selection.

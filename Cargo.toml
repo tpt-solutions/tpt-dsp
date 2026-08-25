@@ -46,7 +46,6 @@ categories = ["multimedia::audio", "science", "no-std"]
 [workspace.dependencies]
 # CLI / example tooling crates (workspace members only).
 clap = { version = "4", features = ["derive"] }
-hound = "3"
 anyhow = "1"
 # `default-features = false` is required here (not in the member manifest):
 # cargo silently ignores a member-level `default-features = false` when the
@@ -56,7 +55,6 @@ num-complex = { version = "0.4", default-features = false }
 num-traits = { version = "0.2", default-features = false }
 rustfft = { version = "6.2", default-features = false }
 crossbeam-channel = "0.5"
-cpal = "0.18"
 serialport = "4.6"
 tokio = { version = "1", features = ["sync", "time", "io-util", "rt", "net"] }
 futures = "0.3"

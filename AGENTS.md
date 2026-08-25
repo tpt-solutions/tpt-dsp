@@ -61,7 +61,7 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
   spectrum line, peak-frequency/dB readout, and a pause toggle. `pipeline.rs` streams
   `SpectrumFrame`s from a producer thread over a `crossbeam-channel`: `run_synthetic`
   (deterministic multi-tone + noise, no hardware needed) or, under the `audio` feature,
-  `run_audio_input` (`cpal` default input device, F32/I16/U16, mono downmix). It still
+  `run_audio_input` (default input device via the built-in backend, any format converted to f32, mono downmix). It still
   drags `egui`/`eframe` (0.36) into every `--workspace` build, which forces the
   workspace `rust-version` up to 1.85; `viz` inherits that via `rust-version.workspace = true`.
   A live (on-screen) render check still needs a machine with a display — not verified in

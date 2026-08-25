@@ -33,8 +33,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
   server (feature `tcp`).
 - `rtlsdr`: `RtlSdrSource` + `RtlSdrConfig`. A documented stub unless a driver is
   wired in behind the `rtl-sdr` feature.
-- `audio` (feature `audio`): cpal-based real-time output via `run_output` and
-  `list_output_devices`.
+- `audio` (feature `audio`): Built-in dependency-free real-time output via `run_output` and
+  `list_output_devices` (WASAPI on Windows; other platforms stubbed).
 - `serial` (feature `serial`): `SerialReader`, a serial-port byte reader.
 
 [Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD

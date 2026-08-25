@@ -2,7 +2,8 @@
 //!
 //! Run with `cargo bench -p tpt-dsp-audio --bench synth_bench`.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use tpt_dsp_audio::{Adsr, FmSynth, Oscillator, SubtractiveVoice, Waveform, Wavetable};
 
 const FS: f32 = 48_000.0;

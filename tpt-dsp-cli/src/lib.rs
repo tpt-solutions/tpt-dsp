@@ -29,7 +29,9 @@ use tpt_dsp_audio::{ConvolutionReverb, Curve, Delay, Eq, Waveshaper};
 use tpt_dsp_core::{
     windowed, Biquad, BiquadType, Complex32, FIRDecimator, FftPlan, FmDemodulator, WindowType,
 };
-use tpt_dsp_io::{parse_iq, IqFormat};
+use tpt_dsp_io::{
+    parse_iq, read_wav_f32_path, write_wav_f32_path, IqFormat, SampleFormat, WavSpec,
+};
 
 /// Decoded WAV audio: one `f32` sample buffer per channel, normalised to
 /// `[-1, 1]`.
@@ -43,50 +45,35 @@ pub struct WavData {
 
 /// Read a WAV file, converting every channel to `f32` in `[-1, 1]`.
 pub fn read_wav(path: &Path) -> Result<WavData> {
-    let mut reader =
-        hound::WavReader::open(path).with_context(|| format!("open wav `{}`", path.display()))?;
-    let spec = reader.spec();
-    let num_channels = spec.channels as usize;
+    let data = read_wav_f32_path(path).with_context(|| format!("open wav `{}`", path.display()))?;
+    let num_channels = data.spec.channels as usize;
     let mut channels: Vec<Vec<f32>> = vec![Vec::new(); num_channels];
-    match spec.sample_format {
-        hound::SampleFormat::Float => {
-            for (i, sample) in reader.samples::<f32>().flatten().enumerate() {
-                channels[i % num_channels].push(sample);
-            }
-        }
-        hound::SampleFormat::Int => {
-            let scale = ((1i64 << (spec.bits_per_sample - 1)) as f32).max(1.0);
-            for (i, sample) in reader.samples::<i32>().flatten().enumerate() {
-                channels[i % num_channels].push(sample as f32 / scale);
-            }
-        }
+    for (i, sample) in data.interleaved.iter().enumerate() {
+        channels[i % num_channels].push(*sample);
     }
-    let sample_rate = spec.sample_rate;
     Ok(WavData {
-        sample_rate,
+        sample_rate: data.spec.sample_rate,
         channels,
     })
 }
 
 /// Write `f32` WAV audio (32-bit float, channel-major interleaving).
 pub fn write_wav(path: &Path, data: &WavData) -> Result<()> {
-    let spec = hound::WavSpec {
+    let frames = data.channels.iter().map(Vec::len).min().unwrap_or(0);
+    let spec = WavSpec {
         channels: data.channels.len() as u16,
         sample_rate: data.sample_rate,
         bits_per_sample: 32,
-        sample_format: hound::SampleFormat::Float,
+        sample_format: SampleFormat::Float,
     };
-    let mut writer = hound::WavWriter::create(path, spec)
-        .with_context(|| format!("create wav `{}`", path.display()))?;
-    let frames = data.channels.iter().map(Vec::len).min().unwrap_or(0);
+    let mut interleaved = Vec::with_capacity(frames * spec.channels as usize);
     for i in 0..frames {
         for channel in &data.channels {
-            writer
-                .write_sample(channel[i])
-                .context("write wav sample")?;
+            interleaved.push(channel[i]);
         }
     }
-    writer.finalize().context("finalize wav")?;
+    write_wav_f32_path(path, &spec, &interleaved)
+        .with_context(|| format!("create wav `{}`", path.display()))?;
     Ok(())
 }
 

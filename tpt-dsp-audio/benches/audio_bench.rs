@@ -2,7 +2,8 @@
 //!
 //! Run with `cargo bench -p tpt-dsp-audio --bench audio_bench`.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use tpt_dsp_audio::{
     generate_decay_ir, AudioGraph, AudioNode, ClosureNode, ClosureSink, ClosureSource,
     ConvolutionReverb, Curve, Delay, Eq, Oscillator, Passthrough, RealtimeEngine, Waveform,

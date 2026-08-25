@@ -12,11 +12,12 @@
 //! Run with `cargo bench -p tpt-dsp-core --bench resampling_bench`.
 
 use audioadapter_buffers::owned::InterleavedOwned;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use rubato::{
     calculate_cutoff, Async, Fft, FixedAsync, FixedSync, PolynomialDegree, Resampler,
     SincInterpolationParameters, SincInterpolationType, WindowFunction,
 };
+use std::hint::black_box;
 use tpt_dsp_core::{FIRDecimator, Fir, FirDesign};
 
 const CHUNK: usize = 1024;
@@ -36,7 +37,7 @@ fn sinc_params() -> SincInterpolationParameters {
     let window = WindowFunction::Blackman2;
     SincInterpolationParameters {
         sinc_len: SINC_LEN,
-        f_cutoff: calculate_cutoff(SINC_LEN, window),
+        f_cutoff: Some(calculate_cutoff::<f32>(SINC_LEN, window)),
         interpolation: SincInterpolationType::Cubic,
         oversampling_factor: OVERSAMPLING,
         window,
@@ -92,7 +93,7 @@ fn bench_decimate_2x(c: &mut Criterion) {
     bench_rubato(
         &mut group,
         BenchmarkId::new("rubato/fft_sync", CHUNK),
-        Box::new(Fft::<f32>::new(48_000, 24_000, CHUNK, 2, 1, FixedSync::Input).unwrap()),
+        Box::new(Fft::<f32>::new(48_000, 24_000, CHUNK, 2, FixedSync::Input).unwrap()),
     );
     bench_rubato(
         &mut group,
@@ -153,7 +154,7 @@ fn bench_arbitrary_ratio(c: &mut Criterion) {
     bench_rubato(
         &mut group,
         BenchmarkId::new("rubato/fft_sync", CHUNK),
-        Box::new(Fft::<f32>::new(48_000, 44_100, CHUNK, 2, 1, FixedSync::Input).unwrap()),
+        Box::new(Fft::<f32>::new(48_000, 44_100, CHUNK, 2, FixedSync::Input).unwrap()),
     );
     bench_rubato(
         &mut group,

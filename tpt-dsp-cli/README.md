@@ -27,7 +27,7 @@ tpt-dsp-cli info     --input iq.u8 --format i16le
   peaks); optionally dumps the spectrum to CSV.
 - **`info`** — print WAV header metadata or IQ file size / format.
 
-WAV I/O uses `hound`; IQ parsing uses `tpt-dsp-io`.
+WAV I/O uses `tpt-dsp-io`'s built-in RIFF/WAVE module; IQ parsing uses `tpt-dsp-io`.
 
 ## Build
 

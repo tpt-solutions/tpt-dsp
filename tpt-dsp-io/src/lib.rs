@@ -7,8 +7,13 @@
 //! - `tcp` — [`TcpIqSource`], a blocking [`IqSource`] over any reader, and
 //!   (feature `tcp`) the async [`serve_iq`] server.
 //! - `rtlsdr` — [`RtlSdrSource`]; a documented stub unless a driver is wired in
+//! - `wav` — built-in RIFF/WAVE reader/writer (`read_wav_f32_path`,
+//!   `write_wav_f32_path`) normalising samples to `f32` in `[-1, 1]`. Replaces
+//!   the former `hound` dependency (Apache-2.0-only) so the tree stays
+//!   MIT/Apache-2.0 only.
 //!   behind the `rtl-sdr` feature.
-//! - `audio` (feature `audio`) — cpal-based real-time output stream.
+//! - `audio` (feature `audio`) — built-in dependency-free audio I/O
+//!   (`run_output`, `run_input`, device enumeration); WASAPI on Windows.
 //! - `serial` (feature `serial`) — serial-port byte reader.
 //!
 //! # Ingesting samples
@@ -33,6 +38,7 @@ mod iq;
 mod rtlsdr;
 mod source;
 mod tcp;
+mod wav;
 
 #[cfg(feature = "audio")]
 mod audio;
@@ -43,9 +49,15 @@ pub use iq::{parse_iq, IqFormat, IqReassembler, IqStream, Reassembled, MAX_BYTES
 pub use rtlsdr::{RtlSdrConfig, RtlSdrSource};
 pub use source::{IqError, IqSource, SyntheticIqSource};
 pub use tcp::TcpIqSource;
+pub use wav::{
+    read_wav_f32_path, read_wav_f32_reader, write_wav_f32_path, write_wav_f32_writer, SampleFormat,
+    WavData, WavError, WavSpec,
+};
 
 #[cfg(feature = "audio")]
-pub use audio::{list_output_devices, run_output};
+pub use audio::{
+    has_default_input, list_input_devices, list_output_devices, run_input, run_output, AudioError,
+};
 #[cfg(feature = "serial")]
 pub use serial::SerialReader;
 #[cfg(feature = "tcp")]

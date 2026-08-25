@@ -22,7 +22,6 @@ tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.1.0" }
 tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.1.0" }
 tpt-dsp-io = { path = "../tpt-dsp-io", version = "0.1.0" }
 clap = { workspace = true }
-hound = { workspace = true }
 anyhow = { workspace = true }
 
 [dev-dependencies]

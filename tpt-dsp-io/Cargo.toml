@@ -14,7 +14,7 @@ readme = "README.md"
 
 [features]
 default = []
-audio = ["dep:cpal"]
+audio = []
 serial = ["dep:serialport"]
 tcp = ["dep:tokio"]
 # Selects the RTL-SDR hardware backend. No driver crate can currently be
@@ -24,7 +24,6 @@ rtl-sdr = []
 
 [dependencies]
 tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
-cpal = { workspace = true, optional = true }
 serialport = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 

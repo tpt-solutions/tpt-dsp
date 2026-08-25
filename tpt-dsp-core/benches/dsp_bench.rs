@@ -7,7 +7,8 @@
 //! vectorised path with
 //! `cargo +nightly bench -p tpt-dsp-core --features simd --bench dsp_bench`.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use std::hint::black_box;
 use tpt_dsp_core::{
     complex_add_simd, complex_mul_simd, dct_ii, dct_iii, dct_iv, exp_i, fft, fft_inplace,
     fft_inplace_f32, hilbert, ifft_inplace, magnitude, magnitude_simd, magnitude_squared, phase,

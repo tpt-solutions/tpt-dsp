@@ -49,7 +49,7 @@ pub fn run(source: Source) -> eframe::Result<()> {
     let source_label = match source {
         Source::Synthetic => "synthetic (multi-tone + noise)",
         #[cfg(feature = "audio")]
-        Source::Audio => "audio input (cpal)",
+        Source::Audio => "audio input (built-in WASAPI/native backend)",
     }
     .to_string();
 

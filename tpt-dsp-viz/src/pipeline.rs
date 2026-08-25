@@ -194,117 +194,57 @@ impl AudioCapture {
 /// Run live capture from the default system audio input device on a background
 /// thread, analysing windows and sending frames until `stop` is set.
 ///
-/// Enabled by the `audio` feature. F32 / I16 / U16 input formats are handled;
-/// multi-channel streams are downmixed to mono by averaging.
+/// Enabled by the `audio` feature. Any native input format is converted to
+/// `f32` by the built-in backend; multi-channel streams are downmixed to mono
+/// by averaging.
 #[cfg(feature = "audio")]
 pub fn run_audio_input(
     config: SpectrumConfig,
     sender: Sender<SpectrumFrame>,
     stop: Arc<AtomicBool>,
 ) {
-    use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-    use cpal::Sample;
+    use std::sync::mpsc;
 
-    let host = cpal::default_host();
-    let device = match host.default_input_device() {
-        Some(d) => d,
-        None => {
-            eprintln!("tpt-dsp-viz: no default audio input device; falling back to synthetic");
-            run_synthetic(config, sender, stop);
-            return;
-        }
-    };
-    let input_config = match device.default_input_config() {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("tpt-dsp-viz: no input config ({e}); falling back to synthetic");
-            run_synthetic(config, sender, stop);
-            return;
-        }
-    };
-    let sample_rate = input_config.sample_rate().0 as f32;
-    let channels = input_config.channels() as usize;
-    let sample_format = input_config.sample_format();
-    let stream_config: cpal::StreamConfig = input_config.into();
+    if !tpt_dsp_io::has_default_input() {
+        eprintln!("tpt-dsp-viz: no default audio input device; falling back to synthetic");
+        run_synthetic(config, sender, stop);
+        return;
+    }
+
+    let (stop_tx, stop_rx) = mpsc::channel::<()>();
+    {
+        let stop_flag = Arc::clone(&stop);
+        thread::spawn(move || {
+            while !stop_flag.load(Ordering::SeqCst) {
+                thread::sleep(Duration::from_millis(50));
+            }
+            let _ = stop_tx.send(());
+        });
+    }
 
     let capture = AudioCapture {
         analyzer: RealtimeSpectrumAnalyzer::new(SpectrumConfig {
-            sample_rate,
+            sample_rate: config.sample_rate,
             ..config
         }),
         accumulator: Vec::new(),
         sender,
     };
     let state = Arc::new(std::sync::Mutex::new(capture));
-    let err_fn = |e: cpal::StreamError| eprintln!("tpt-dsp-viz: audio stream error: {e}");
-
-    let stream = match sample_format {
-        cpal::SampleFormat::F32 => device.build_input_stream(
-            &stream_config,
-            {
-                let state = state.clone();
-                move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                    state
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .ingest_interleaved(data.iter().copied(), channels);
-                }
-            },
-            err_fn,
-            None,
-        ),
-        cpal::SampleFormat::I16 => device.build_input_stream(
-            &stream_config,
-            {
-                let state = state.clone();
-                move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                    state
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .ingest_interleaved(data.iter().map(|&x| f32::from_sample(x)), channels);
-                }
-            },
-            err_fn,
-            None,
-        ),
-        cpal::SampleFormat::U16 => device.build_input_stream(
-            &stream_config,
-            {
-                let state = state.clone();
-                move |data: &[u16], _: &cpal::InputCallbackInfo| {
-                    state
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .ingest_interleaved(data.iter().map(|&x| f32::from_sample(x)), channels);
-                }
-            },
-            err_fn,
-            None,
-        ),
-        other => {
-            eprintln!("tpt-dsp-viz: unsupported sample format {other:?}");
-            return;
-        }
-    };
-
-    let stream = match stream {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("tpt-dsp-viz: failed to build audio stream ({e})");
-            return;
-        }
-    };
-    if let Err(e) = stream.play() {
-        eprintln!("tpt-dsp-viz: failed to start audio stream ({e})");
-        return;
+    let callback_state = Arc::clone(&state);
+    let result = tpt_dsp_io::run_input(
+        move |interleaved: &[f32], channels: usize| {
+            callback_state
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .ingest_interleaved(interleaved.iter().copied(), channels);
+        },
+        &stop_rx,
+    );
+    if let Err(e) = result {
+        eprintln!("tpt-dsp-viz: audio input failed ({e}); stopping capture");
     }
-
-    while !stop.load(Ordering::SeqCst) {
-        thread::sleep(Duration::from_millis(100));
-    }
-    let _ = stream; // keep the stream alive until the window closes
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
