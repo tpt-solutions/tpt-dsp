@@ -165,7 +165,7 @@ macro_rules! vt_call {
         #[allow(unused_mut)]
         let mut tpt_n = 0usize;
         $(
-            tpt_args[tpt_n] = ArgUsize::into_usize(&$arg);
+            tpt_args[tpt_n] = ArgUsize::to_usize(&$arg);
             tpt_n += 1;
         )*
         call_vt($obj, $idx, tpt_args, tpt_n)
@@ -175,50 +175,50 @@ macro_rules! vt_call {
 /// Coerce an FFI argument to its pointer-width machine representation.
 pub(crate) trait ArgUsize {
     /// Machine word passed in a register for this argument.
-    fn into_usize(&self) -> usize;
+    fn to_usize(&self) -> usize;
 }
 impl ArgUsize for usize {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self
     }
 }
 impl ArgUsize for isize {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self as usize
     }
 }
 impl ArgUsize for u32 {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self as usize
     }
 }
 impl ArgUsize for i32 {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self as usize
     }
 }
 impl ArgUsize for u16 {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self as usize
     }
 }
 impl<T> ArgUsize for &T {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self as *const T as usize
     }
 }
 impl<T> ArgUsize for &mut T {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self as *const T as usize
     }
 }
 impl<T> ArgUsize for *const T {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self as usize
     }
 }
 impl<T> ArgUsize for *mut T {
-    fn into_usize(&self) -> usize {
+    fn to_usize(&self) -> usize {
         *self as usize
     }
 }
