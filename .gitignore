@@ -7,3 +7,8 @@ Cargo.lock
 *.wasm
 pkg/
 node_modules/
+
+# scratch build/debug logs
+/ac_*.txt
+/viz_*.txt
+/gate_*.txt

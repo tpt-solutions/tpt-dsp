@@ -153,15 +153,139 @@ extern "system" {
 
 /// Invoke COM vtable slot `idx` with pointer-sized arguments. Every method we
 /// call returns an `HRESULT`; out-values come back through pointer arguments.
+///
+/// Each argument is coerced to its pointer-width representation by
+/// [`ArgUsize`] (values pass through, references/pointers pass their address),
+/// and the call goes through a *non-variadic*, arity-matched `extern "system"`
+/// signature so no variadic-call assumptions are involved.
 macro_rules! vt_call {
     ($obj:expr, $idx:expr $(, $arg:expr)* $(,)?) => {{
-        let vt: *mut usize = *($obj as *mut *mut usize);
-        let slot: unsafe extern "system" fn(*mut c_void, ...) -> HRESULT =
-            core::mem::transmute(*vt.add($idx));
-        let hr: HRESULT = slot($obj $(, $arg)*);
-        hr
+        #[allow(unused_mut)]
+        let mut tpt_args = [0usize; ARITY_MAX];
+        #[allow(unused_mut)]
+        let mut tpt_n = 0usize;
+        $(
+            tpt_args[tpt_n] = ArgUsize::into_usize(&$arg);
+            tpt_n += 1;
+        )*
+        call_vt($obj, $idx, tpt_args, tpt_n)
     }};
 }
+
+/// Coerce an FFI argument to its pointer-width machine representation.
+pub(crate) trait ArgUsize {
+    /// Machine word passed in a register for this argument.
+    fn into_usize(&self) -> usize;
+}
+impl ArgUsize for usize {
+    fn into_usize(&self) -> usize {
+        *self
+    }
+}
+impl ArgUsize for isize {
+    fn into_usize(&self) -> usize {
+        *self as usize
+    }
+}
+impl ArgUsize for u32 {
+    fn into_usize(&self) -> usize {
+        *self as usize
+    }
+}
+impl ArgUsize for i32 {
+    fn into_usize(&self) -> usize {
+        *self as usize
+    }
+}
+impl ArgUsize for u16 {
+    fn into_usize(&self) -> usize {
+        *self as usize
+    }
+}
+impl<T> ArgUsize for &T {
+    fn into_usize(&self) -> usize {
+        *self as *const T as usize
+    }
+}
+impl<T> ArgUsize for &mut T {
+    fn into_usize(&self) -> usize {
+        *self as *const T as usize
+    }
+}
+impl<T> ArgUsize for *const T {
+    fn into_usize(&self) -> usize {
+        *self as usize
+    }
+}
+impl<T> ArgUsize for *mut T {
+    fn into_usize(&self) -> usize {
+        *self as usize
+    }
+}
+
+/// Call vtable slot `idx` on `obj` with 0..=6 pointer-sized integer arguments
+/// through an exactly-typed `extern "system"` function pointer.
+///
+/// # SAFETY
+/// `obj` must point at a live COM object whose vtable slot `idx` has signature
+/// `HRESULT (*)(this, A0..An)` where each `Ai` is pointer-sized, and every
+/// argument must already be in its machine representation (see [`ArgUsize`]).
+pub(crate) unsafe fn call_vt(
+    obj: *mut c_void,
+    idx: usize,
+    args: [usize; ARITY_MAX],
+    n: usize,
+) -> HRESULT {
+    // Trailing elements beyond `n` are zero-filled and ignored per arity.
+    let vt: *mut usize = *(obj as *mut *mut usize);
+    match n {
+        0 => {
+            let f: extern "system" fn(*mut c_void) -> HRESULT = core::mem::transmute(*vt.add(idx));
+            f(obj)
+        }
+        1 => {
+            let f: extern "system" fn(*mut c_void, usize) -> HRESULT =
+                core::mem::transmute(*vt.add(idx));
+            f(obj, args[0])
+        }
+        2 => {
+            let f: extern "system" fn(*mut c_void, usize, usize) -> HRESULT =
+                core::mem::transmute(*vt.add(idx));
+            f(obj, args[0], args[1])
+        }
+        3 => {
+            let f: extern "system" fn(*mut c_void, usize, usize, usize) -> HRESULT =
+                core::mem::transmute(*vt.add(idx));
+            f(obj, args[0], args[1], args[2])
+        }
+        4 => {
+            let f: extern "system" fn(*mut c_void, usize, usize, usize, usize) -> HRESULT =
+                core::mem::transmute(*vt.add(idx));
+            f(obj, args[0], args[1], args[2], args[3])
+        }
+        5 => {
+            let f: extern "system" fn(*mut c_void, usize, usize, usize, usize, usize) -> HRESULT =
+                core::mem::transmute(*vt.add(idx));
+            f(obj, args[0], args[1], args[2], args[3], args[4])
+        }
+        6 => {
+            let f: extern "system" fn(
+                *mut c_void,
+                usize,
+                usize,
+                usize,
+                usize,
+                usize,
+                usize,
+            ) -> HRESULT = core::mem::transmute(*vt.add(idx));
+            f(obj, args[0], args[1], args[2], args[3], args[4], args[5])
+        }
+        _ => unreachable!("vt_call! supports at most ARITY_MAX arguments"),
+    }
+}
+
+/// Maximum argument count supported by [`call_vt`] (plus `this`).
+pub(crate) const ARITY_MAX: usize = 6;
 
 /// Release a COM object (vtable slot 2); returns the resulting refcount.
 unsafe fn release(obj: *mut c_void) -> u32 {
