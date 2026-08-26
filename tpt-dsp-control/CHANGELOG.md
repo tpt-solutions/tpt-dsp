@@ -9,15 +9,13 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
-### Added
-- `pid_speed_hold` example: a PID controller holding a simulated DC motor at a
-  100 rpm setpoint with output limiting and back-calculation anti-windup.
-
-## [0.1.0]
+## [0.1.0] - 2026-08-26
 
 ### Added
 - Initial release of the real-time control-theory crate built on `tpt-dsp-core`.
   All algorithms are deterministic, allocation-free and updated once per tick.
+- `pid_speed_hold` example: a PID controller holding a simulated DC motor at a
+  100 rpm setpoint with output limiting and back-calculation anti-windup.
 - `Pid`: discrete PID controller with selectable anti-windup strategy
   (`AntiWindup::Clamping` / `AntiWindup::BackCalculation`) and output limiting.
 - `InputShaper`: Zero Vibration Derivative (ZVD) input shaping that convolves a

@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 
-## [0.1.0]
+## [Unreleased]
+
+## [0.1.0] - 2026-08-26
 
 ### Added
 - Initial release: a command-line WAV/IQ DSP pipeline built on `tpt-dsp-core`,
@@ -24,4 +26,5 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
   `demod_iq`, `analyze_real`/`analyze_complex`, `write_spectrum_csv`) usable
   independently of the CLI binary.
 
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

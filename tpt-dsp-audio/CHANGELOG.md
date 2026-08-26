@@ -9,14 +9,12 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
-### Added
-- `synth_eq` example: an FM synthesis voice (`FmSynth`) shaped by a 3-band `Eq`.
-
-## [0.1.0]
+## [0.1.0] - 2026-08-26
 
 ### Added
 - Initial release of the synthesis, effects and real-time audio-graph crate built
   on `tpt-dsp-core`.
+- `synth_eq` example: an FM synthesis voice (`FmSynth`) shaped by a 3-band `Eq`.
 - Oscillators & synthesis: `Oscillator` (selectable `Waveform`), band-limited
   `Wavetable`, 2-operator `FmSynth`, and `SubtractiveVoice` (oscillator → filter → amp).
 - Effects: `Waveshaper` (configurable `Curve`), `Delay` (feedback + wet/dry mix),

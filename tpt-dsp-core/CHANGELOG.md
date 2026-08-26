@@ -9,15 +9,13 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
-### Added
-- `biquad_lowpass` example: design a low-pass `Biquad`, filter a mixed 1 kHz + 6 kHz
-  tone, then locate the surviving tone with a reusable `FftPlan`.
-
-## [0.1.0]
+## [0.1.0] - 2026-08-26
 
 ### Added
 - Initial release of the `no_std`, `#![forbid(unsafe_code)]` math engine that every
   other `tpt-dsp-*` crate builds on.
+- `biquad_lowpass` example: design a low-pass `Biquad`, filter a mixed 1 kHz + 6 kHz
+  tone, then locate the surviving tone with a reusable `FftPlan`.
 - Complex math helpers: `exp_i`, `magnitude`, `magnitude_squared`, `phase`,
   `rotate`, and SIMD `complex_add_simd` / `complex_mul_simd` / `magnitude_simd`.
 - Transforms: `fft` / `ifft` / `fft_inplace` / `fft_inplace_f32` / `ifft_inplace`,

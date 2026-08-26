@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-26
+
+Initial public release of `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`,
+`tpt-dsp-control`, `tpt-dsp-io`, `tpt-dsp-viz`, `tpt-dsp-wasm` and
+`tpt-dsp-cli` to crates.io. `tpt-dsp-nihplug` and `tpt-dsp-py` remain
+unpublished (see [PUBLISHING.md](PUBLISHING.md)).
+
 ### Added
 - Native audio backends for all three desktop platforms in `tpt-dsp-io/src/audio/`,
   with no external audio-crate dependency:
@@ -73,3 +80,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Regression test covering `peak_bin` behaviour with NaN-containing input.
 
 [Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0
