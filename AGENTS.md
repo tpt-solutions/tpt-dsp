@@ -75,6 +75,18 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
   separately with `cargo build` inside their own directories.
 - `tpt-dsp-io`'s `rtl-sdr` feature is a **stubbed backend** — it only changes the error
   `RtlSdrSource` reports; there is no USB driver. Use `SyntheticIqSource`/`TcpIqSource`.
+- **Audio I/O is fully in-tree; `cpal` is gone.** `tpt-dsp-io/src/audio/` is split into
+  `backend_windows.rs` (shared-mode WASAPI, hand-declared COM vtables), `backend_linux.rs`
+  (raw ALSA UAPI ioctls on `/dev/snd`, no libasound), `backend_mac.rs` (CoreAudio
+  AudioUnits via hand-declared `extern "C"` bindings) and `backend_stub.rs`. The
+  `audio` feature has **zero external dependencies** — do not re-add an audio-crate
+  dependency (that was removed for MIT-only redistribution reasons). COM vtable calls
+  must go through `vt_call!`/`call_vt` (non-variadic, per-arity signatures); a variadic
+  transmuted call type miscompiles under release optimization (fixed 2026-08-26).
+  Device enumeration/selection API: `run_output(_on_device)` / `run_input(_on_device)`,
+  `list_*_devices`. WAV read/write lives in `tpt-dsp-io/src/wav.rs` (`hound` was also
+  replaced by this in-tree module). Linux/macOS backends are compile-checked only —
+  runtime validation needs real hardware on those platforms.
 
 ## Rules that break things if ignored
 

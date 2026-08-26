@@ -10,13 +10,42 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 ## [Unreleased]
 
 ### Added
+- macOS audio backend (`backend_mac.rs`): CoreAudio AudioUnits — default-output
+  playback and HALOutput capture through hand-declared `extern "C"` bindings to
+  the system `AudioToolbox`/`CoreAudio` frameworks (no `coreaudio-sys`, no
+  wrapper crates). Compile-checked for `x86_64-apple-darwin`; runtime validation
+  on real hardware still pending.
+- Linux audio backend (`backend_linux.rs`): raw ALSA UAPI ioctls directly on
+  `/dev/snd/pcmC*D*p|c` — no libasound linkage, blocking `RW_INTERLEAVED`
+  transfers, FLOAT_LE/S32_LE/S16_LE format negotiation, XRUN recovery, and
+  device enumeration via a `/dev/snd` scan with `/proc/asound` card names.
+- Cross-platform device selection: `run_output_on_device` / `run_input_on_device`
+  plus `list_output_devices` / `list_input_devices`, matching devices by exact
+  name or case-insensitive substring on all three platforms.
+- `wav` module (`src/wav.rs`): built-in RIFF/WAVE reader/writer replacing the
+  `hound` dependency — PCM 8/16/24/32-bit and IEEE float 32/64 input,
+  WAVE_FORMAT_EXTENSIBLE support, 32-bit float output, normalised to `f32`
+  (`read_wav_f32_path` / `write_wav_f32_path` and reader/writer variants).
 - `sdr_pipeline` example: end-to-end IQ source → FIR decimation → FM demodulation
   → audio decimation, against the built-in generator or a live `rtl_tcp` server.
 
 ### Changed
+- **`cpal` fully removed from the tree**; the `audio` feature now has zero
+  external dependencies (shared-mode WASAPI on Windows, raw ALSA UAPI on Linux
+  and CoreAudio AudioUnits on macOS, all implemented in-tree). This resolves
+  the Apache-2.0-only licensing constraint for MIT-only redistribution.
 - Documented that `IqStream::feed` grows its internal buffer without bound if the
   caller never calls `drain`; the bounded `IqReassembler` is the recommended
   streaming path.
+
+### Fixed
+- Windows audio backend buffer handling and device enumeration.
+- Release-profile WASAPI capture crash (`0xC0000005` in `ntdll.dll`): COM
+  vtable methods were invoked through a *variadic* transmuted function-pointer
+  type, which is not ABI-safe under optimization. `vt_call!` now coerces each
+  argument to a machine word and dispatches through exactly-typed non-variadic
+  per-arity signatures (`call_vt`). Verified with repeated release runs of live
+  capture on Windows hardware.
 
 ## [0.1.0]
 

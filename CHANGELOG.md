@@ -8,6 +8,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Native audio backends for all three desktop platforms in `tpt-dsp-io/src/audio/`,
+  with no external audio-crate dependency:
+  - macOS CoreAudio AudioUnits (`backend_mac.rs`) — default-output playback and
+    HALOutput capture via hand-declared `extern "C"` bindings to the system
+    `AudioToolbox`/`CoreAudio` frameworks; device enumeration via
+    `kAudioHardwarePropertyDevices`.
+  - Linux raw ALSA UAPI (`backend_linux.rs`) — ioctls directly on
+    `/dev/snd/pcmC*D*p|c`, blocking `RW_INTERLEAVED` transfers, FLOAT/S32/S16 format
+    negotiation, XRUN recovery and `/proc/asound`-based device enumeration.
+- Cross-platform device selection API: `run_output_on_device` / `run_input_on_device`
+  plus `list_output_devices` / `list_input_devices` (friendly names from the MMDevice
+  property store on Windows, `/proc/asound` on Linux, CoreAudio property queries on
+  macOS).
+- `tpt-dsp-io/src/wav.rs` — built-in RIFF/WAVE reader/writer replacing the `hound`
+  crate: PCM 8/16/24/32-bit and IEEE float 32/64 input, WAVE_FORMAT_EXTENSIBLE
+  support, 32-bit float output, normalised to `f32`; CLI migrated to it.
 - `justfile` with `ci`, `test`, `examples` and cross-platform recipes
   (`no_std`, `wasm`) to de-duplicate the command list repeated in
   README / CONTRIBUTING.md / AGENTS.md.
@@ -38,10 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   driving `VizApp` directly over a bounded channel.
 
 ### Changed
+- **`cpal` fully removed from the tree.** The `audio` feature of `tpt-dsp-io` now has
+  zero external dependencies, resolving the Apache-2.0-only licensing constraint for
+  MIT-only redistribution.
 - `tpt-dsp-analysis`: `peak_bin` now uses a total order over `f32`, so a
   NaN/Inf value in the magnitude spectrum (malformed IQ-derived data) can no
   longer panic the real-time analysis path.
-- `tpt-dsp-viz`: the `cpal` audio-input callbacks recover from a poisoned
+- `tpt-dsp-viz`: the audio-input callbacks recover from a poisoned
   mutex (`lock().unwrap_or_else(|e| e.into_inner())`) instead of unwrapping,
   so a panic on another thread no longer crashes every subsequent callback.
 - `tpt-dsp-io`: documented that `IqStream::feed` grows the internal buffer

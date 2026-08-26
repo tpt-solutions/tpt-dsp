@@ -36,7 +36,7 @@ Dual licensed under **MIT** and **Apache-2.0**. © TPT Solutions.
 | `tpt-dsp-audio`      | Oscillators, wavetable/FM/subtractive synthesis, waveshaping, delay, reverb, EQ, audio graph, real-time engine. |
 | `tpt-dsp-analysis`   | Spectrum analysis, peak detection, spectrograms, moving averages, EMA, outlier detection, RMS, spectral centroid, async (tokio/futures) adapters. |
 | `tpt-dsp-control`    | PID with anti-windup, input shaping (ZVD), trapezoidal & jerk-limited trajectory planning. |
-| `tpt-dsp-io`         | IQ byte-stream parsing, built-in dependency-free audio I/O (WASAPI on Windows, raw ALSA UAPI on Linux), serial reader, async TCP IQ server. |
+| `tpt-dsp-io`         | IQ byte-stream parsing, built-in dependency-free audio I/O — shared-mode WASAPI on Windows, raw ALSA UAPI on Linux, CoreAudio AudioUnits on macOS, all implemented in-tree with no external audio crates — plus RIFF/WAVE read/write, serial reader and async TCP IQ server. |
 
 ## Architecture
 
@@ -142,8 +142,10 @@ python -m http.server 8080 --directory www   # open http://localhost:8080
 
 Notes on the table: `cpal` is audio *transport* only — it moves samples
 to/from a device; `tpt-dsp` is the *processing* layer that runs on those
-samples (and on RF/control data), and `tpt-dsp-io` uses `cpal` under the hood
-for its audio source. `dasp` is a broad, trait-based DSP toolkit with a
+samples (and on RF/control data). `tpt-dsp-io` implements its own audio
+transport in-tree (shared-mode WASAPI, raw ALSA UAPI and CoreAudio
+AudioUnits) with no external audio-crate dependency, so the `audio`
+feature adds zero third-party code. `dasp` is a broad, trait-based DSP toolkit with a
 friendly sample/Signal API; `tpt-dsp` is narrower but emphasises a hard
 real-time contract (pre-allocated, allocation-free hot paths) and
 `no_std`/embedded support. `fundsp` offers a composable, lazy audio-graph DSL

@@ -10,7 +10,9 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 ## [Unreleased]
 
 ### Changed
-- The cpal audio-input callbacks now recover from a poisoned mutex
+- Audio input now uses `tpt-dsp-io`'s in-tree WASAPI backend instead of `cpal`,
+  which has been fully removed from the tree.
+- The audio-input callbacks recover from a poisoned mutex
   (`lock().unwrap_or_else(|e| e.into_inner())`) instead of unwrapping, so a panic
   on another thread no longer crashes every subsequent callback.
 
