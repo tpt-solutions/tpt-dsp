@@ -12,14 +12,14 @@ path-depends on is live at the version it requests).
 
 | Crate | Latest published version | Published | Notes |
 |---|---|---|---|
-| `tpt-dsp-core` | 0.1.0 | ☐ | No dependencies; publish first. |
-| `tpt-dsp-audio` | 0.1.0 | ☐ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-analysis` | 0.1.0 | ☐ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-control` | 0.1.0 | ☐ | No path dependencies. |
-| `tpt-dsp-io` | 0.1.0 | ☐ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-viz` | 0.1.0 | ☐ | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
-| `tpt-dsp-wasm` | 0.1.0 | ☐ | Depends on `tpt-dsp-audio`. |
-| `tpt-dsp-cli` | 0.1.0 | ☐ | Depends on `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-core` | 0.1.0 | ☑ | No dependencies; published first. |
+| `tpt-dsp-audio` | 0.1.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-analysis` | 0.1.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-control` | 0.1.0 | ☑ | No path dependencies. |
+| `tpt-dsp-io` | 0.1.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-viz` | 0.1.0 | ☑ | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-wasm` | 0.1.0 | ☑ | Depends on `tpt-dsp-audio`. |
+| `tpt-dsp-cli` | 0.1.0 | ☑ | Depends on `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-io`. |
 
 ### Intentionally not published
 
@@ -58,4 +58,4 @@ path-depends on is live at the version it requests).
 
 | Date | Version | Crates | Notes |
 |---|---|---|---|
-| _pending_ | 0.1.0 | all eight workspace crates listed above | First public release. |
+| 2026-08-26 | 0.1.0 | all eight workspace crates listed above | First public release. Published in dependency order (core → control/audio/analysis/io → viz/wasm/cli); crates.io's new-crate rate limit forced a few minutes' wait between the `viz`, `wasm` and `cli` uploads. |
