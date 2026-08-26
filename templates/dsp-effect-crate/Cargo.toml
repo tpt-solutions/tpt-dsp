@@ -9,4 +9,9 @@ publish = false
 
 [dependencies]
 # Keep default-features off unless you need std conveniences; the core crate is no_std.
+# Intentionally unused by the skeleton itself: it is here so generated crates can
+# start importing `tpt_dsp_core` immediately. cargo-machete is told to skip it.
 tpt-dsp-core = { version = "0.1", path = "../../tpt-dsp-core" }
+
+[package.metadata.cargo-machete]
+ignored = ["tpt-dsp-core"]

@@ -2,6 +2,9 @@
 
 A pure-Rust, real-time-safe digital signal processing framework.
 
+**Web pedalboard demo:** [https://tpt-solutions.github.io/tpt-dsp/](https://tpt-solutions.github.io/tpt-dsp/)
+(distortion → delay → reverb → EQ, running entirely in the browser via WebAssembly).
+
 `tpt-dsp` provides the building blocks for audio, RF/SDR, control and
 telemetry DSP: FFT/DCT/Hilbert transforms, filters (biquad/FIR/IIR),
 convolution, windowing, oscillators and synthesis, spectrum analysis,
@@ -33,7 +36,7 @@ Dual licensed under **MIT** and **Apache-2.0**. © TPT Solutions.
 | `tpt-dsp-audio`      | Oscillators, wavetable/FM/subtractive synthesis, waveshaping, delay, reverb, EQ, audio graph, real-time engine. |
 | `tpt-dsp-analysis`   | Spectrum analysis, peak detection, spectrograms, moving averages, EMA, outlier detection, RMS, spectral centroid, async (tokio/futures) adapters. |
 | `tpt-dsp-control`    | PID with anti-windup, input shaping (ZVD), trapezoidal & jerk-limited trajectory planning. |
-| `tpt-dsp-io`         | IQ byte-stream parsing, cpal audio output, serial reader, async TCP IQ server. |
+| `tpt-dsp-io`         | IQ byte-stream parsing, built-in dependency-free audio I/O (WASAPI on Windows, raw ALSA UAPI on Linux), serial reader, async TCP IQ server. |
 
 ## Architecture
 
@@ -118,9 +121,9 @@ graph.run(100); // render 100 blocks
 
 The `tpt-dsp-wasm` crate powers a browser guitar-pedalboard
 (Waveshaper → Delay → ConvolutionReverb → EQ) running inside an
-`AudioWorklet`. Once the repo's GitHub Pages "GitHub Actions" source is
-enabled, the live demo is served from the [`www/`](www) directory — see
-[`.github/workflows/pages.yml`](.github/workflows/pages.yml). Locally:
+`AudioWorklet`. The live demo is served from the [`www/`](www) directory at
+[https://tpt-solutions.github.io/tpt-dsp/](https://tpt-solutions.github.io/tpt-dsp/)
+(see [`.github/workflows/pages.yml`](.github/workflows/pages.yml)). Locally:
 
 ```sh
 wasm-pack build tpt-dsp-wasm --target web --out-dir ../www/pkg

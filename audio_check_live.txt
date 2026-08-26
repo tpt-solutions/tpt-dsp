@@ -1,0 +1,17 @@
+   Compiling tpt-dsp-io v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-io)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.70s
+     Running `target\debug\examples\audio_check.exe`
+has_default_input: true
+output devices:
+  - Realtek Digital Output (Realtek(R) Audio)
+  - Speakers (Realtek(R) Audio)
+  - C24F390 (NVIDIA High Definition Audio)
+input devices:
+  - Microphone (C922 Pro Stream Webcam)
+  - Microphone (Realtek(R) Audio)
+default output tone: ok
+specific output tone:   playing on device "Realtek Digital Output (Realtek(R) Audio)"
+ok
+default input: ok - 71006 samples (2 ch), rms=0.016997, peak=1.019521
+  capturing from device "Microphone (C922 Pro Stream Webcam)"
+specific input: ok - 92126 samples (2 ch), rms=0.000437, peak=0.008813

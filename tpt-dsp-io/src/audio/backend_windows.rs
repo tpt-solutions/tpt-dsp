@@ -10,10 +10,12 @@
 
 use std::ffi::c_void;
 use std::slice;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
 use super::AudioError;
+
+type ReadySender = Sender<Result<(), AudioError>>;
 
 // ---------------------------------------------------------------- constants
 
@@ -88,6 +90,37 @@ const IID_IAUDIO_CAPTURE_CLIENT: Guid = guid(
     0x48A0,
     [0xA4, 0xDE, 0x18, 0x5C, 0x39, 0x5C, 0xD3, 0x17],
 );
+/// `PKEY_Device_FriendlyName` — property key of the human-readable endpoint
+/// name (`{a45c254e-df1c-4efd-8020-67d146a850e0}`, pid 14).
+const PKEY_DEVICE_FRIENDLY_NAME: PropertyKey = PropertyKey {
+    fmtid: guid(
+        0xA45C254E,
+        0xDF1C,
+        0x4EFD,
+        [0x80, 0x20, 0x67, 0xD1, 0x46, 0xA8, 0x50, 0xE0],
+    ),
+    pid: 14,
+};
+
+/// Minimal `PROPERTYKEY`.
+#[repr(C)]
+struct PropertyKey {
+    fmtid: Guid,
+    pid: u32,
+}
+
+/// Minimal `PROPVARIANT`: only `VT_LPWSTR` reads are performed, so the union
+/// is modelled as the wide-string pointer plus one trailing word of padding.
+#[repr(C)]
+struct PropVariant {
+    vt: u16,
+    _pad: [u8; 6],
+    pwsz_val: *mut u16,
+    _rest: [u64; 1],
+}
+
+const VT_LPWSTR: u16 = 31;
+const STGM_READ: u32 = 0;
 
 // --------------------------------------------------------------- win32 fns
 
@@ -102,6 +135,7 @@ extern "system" {
         out: *mut *mut c_void,
     ) -> HRESULT;
     fn CoTaskMemFree(p: *mut c_void);
+    fn PropVariantClear(pv: *mut PropVariant) -> HRESULT;
 }
 
 #[link(name = "kernel32")]
@@ -189,6 +223,39 @@ unsafe fn device_id(dev: *mut c_void) -> Result<String, AudioError> {
     Ok(s)
 }
 
+/// Friendly endpoint name via `IMMDevice::OpenPropertyStore` (slot 4) +
+/// `IPropertyStore::GetValue` (slot 5). Falls back to `Err` when the property
+/// is missing or not a wide string; callers substitute a placeholder.
+unsafe fn device_friendly_name(dev: *mut c_void) -> Result<String, AudioError> {
+    let mut store: *mut c_void = std::ptr::null_mut();
+    let hr = vt_call!(dev, 4, STGM_READ, &mut store); // OpenPropertyStore
+    if hr < 0 || store.is_null() {
+        return Err(err("IMMDevice::OpenPropertyStore", hr));
+    }
+    let mut pv = PropVariant {
+        vt: 0,
+        _pad: [0; 6],
+        pwsz_val: std::ptr::null_mut(),
+        _rest: [0],
+    };
+    let hr = vt_call!(store, 5, &PKEY_DEVICE_FRIENDLY_NAME, &mut pv); // GetValue
+    let result = if hr >= 0 && pv.vt == VT_LPWSTR && !pv.pwsz_val.is_null() {
+        let mut len = 0usize;
+        while *pv.pwsz_val.add(len) != 0 {
+            len += 1;
+        }
+        Ok(String::from_utf16_lossy(slice::from_raw_parts(
+            pv.pwsz_val,
+            len,
+        )))
+    } else {
+        Err(err("IPropertyStore::GetValue(FriendlyName)", hr))
+    };
+    PropVariantClear(&mut pv);
+    release(store);
+    result
+}
+
 pub(crate) fn list_devices(capture: bool) -> Result<Vec<String>, AudioError> {
     com_init()?;
     let flow = if capture { FLOW_CAPTURE } else { FLOW_RENDER };
@@ -212,9 +279,12 @@ pub(crate) fn list_devices(capture: bool) -> Result<Vec<String>, AudioError> {
         for i in 0..count as usize {
             let mut dev: *mut c_void = std::ptr::null_mut();
             if vt_call!(coll, 4, i, &mut dev) >= 0 && !dev.is_null() {
-                match device_id(dev) {
-                    Ok(id) => names.push(id),
-                    Err(_) => names.push(format!("device {i}")),
+                match device_friendly_name(dev) {
+                    Ok(name) => names.push(name),
+                    Err(_) => match device_id(dev) {
+                        Ok(id) => names.push(id),
+                        Err(_) => names.push(format!("device {i}")),
+                    },
                 }
                 release(dev);
             }
@@ -223,6 +293,67 @@ pub(crate) fn list_devices(capture: bool) -> Result<Vec<String>, AudioError> {
         release(enumerator);
         Ok(names)
     }
+}
+
+/// Resolve an endpoint by identifier or (case-insensitive) friendly-name
+/// substring and return its `IAudioClient`. Returns the *default* endpoint's
+/// client when `device` is `None`.
+///
+/// # SAFETY
+/// Same COM invariants as [`default_audio_client`].
+unsafe fn audio_client_for(flow: usize, device: Option<&str>) -> Result<*mut c_void, AudioError> {
+    let Some(query) = device else {
+        return default_audio_client(flow);
+    };
+    let enumerator = create_enumerator()?;
+    // Endpoint identifiers look like `{0.0.0.00000000}.{...}` — try a direct
+    // GetDevice first so exact IDs work without enumeration.
+    let mut dev: *mut c_void = std::ptr::null_mut();
+    if query.starts_with('{') {
+        let wide: Vec<u16> = query.encode_utf16().chain(std::iter::once(0)).collect();
+        let hr = vt_call!(enumerator, 5, wide.as_ptr(), &mut dev); // GetDevice
+        if hr < 0 {
+            dev = std::ptr::null_mut();
+        }
+    }
+    if dev.is_null() {
+        // Fall back to a case-insensitive substring match over IDs and
+        // friendly names of the active endpoints for this flow.
+        let mut coll: *mut c_void = std::ptr::null_mut();
+        let hr = vt_call!(enumerator, 3, flow, DEVICE_STATE_ACTIVE, &mut coll);
+        if hr < 0 {
+            release(enumerator);
+            return Err(err("IMMDeviceEnumerator::EnumAudioEndpoints", hr));
+        }
+        let mut count: u32 = 0;
+        vt_call!(coll, 3, &mut count);
+        let needle = query.to_lowercase();
+        for i in 0..count as usize {
+            let mut candidate: *mut c_void = std::ptr::null_mut();
+            if vt_call!(coll, 4, i, &mut candidate) < 0 || candidate.is_null() {
+                continue;
+            }
+            let id = device_id(candidate).unwrap_or_default();
+            let name = device_friendly_name(candidate).unwrap_or_default();
+            if id.to_lowercase().contains(&needle) || name.to_lowercase().contains(&needle) {
+                dev = candidate;
+                break;
+            }
+            release(candidate);
+        }
+        release(coll);
+    }
+    release(enumerator);
+    if dev.is_null() {
+        return Err(AudioError(format!("no audio device matching {query:?}")));
+    }
+    let mut client: *mut c_void = std::ptr::null_mut();
+    let hr = vt_call!(dev, 3, &IID_IAUDIO_CLIENT, CLSCTX_ALL, 0, &mut client); // Activate
+    release(dev);
+    if hr < 0 || client.is_null() {
+        return Err(err("IMMDevice::Activate(IAudioClient)", hr));
+    }
+    Ok(client)
 }
 
 pub(crate) fn has_default_input() -> bool {
@@ -305,25 +436,44 @@ pub(crate) fn run_output<F>(
 where
     F: FnMut(&mut [f32]) + Send + 'static,
 {
+    run_output_on_device(None, sample_rate, block_size, callback, stop)
+}
+
+pub(crate) fn run_output_on_device<F>(
+    device: Option<&str>,
+    sample_rate: u32,
+    block_size: u32,
+    callback: F,
+    stop: &Receiver<()>,
+) -> Result<(), AudioError>
+where
+    F: FnMut(&mut [f32]) + Send + 'static,
+{
     com_init()?;
     let device_event = EventHandle::create()?;
     let stop_event = EventHandle::create()?;
     let (ready_tx, ready_rx) = channel::<Result<(), AudioError>>();
     let dev_ev = device_event.0 as usize;
     let stop_ev = stop_event.0 as usize;
+    let device = device.map(str::to_owned);
+    let ready_for_loop = ready_tx.clone();
     let handle = thread::spawn(move || {
-        let result = unsafe {
+        unsafe {
             output_loop(
+                device.as_deref(),
                 sample_rate,
                 block_size,
                 callback,
                 dev_ev as *mut c_void,
                 stop_ev as *mut c_void,
+                &ready_for_loop,
             )
-        };
-        let _ = ready_tx.send(result);
+        }
+        // The final outcome is recovered via `handle.join()` below; the
+        // ready channel only carries the start handshake.
     });
 
+    // Blocks until the stream reports started (Ok) or failed (Err).
     ready_rx
         .recv()
         .map_err(|_| AudioError("audio output thread died".into()))??;
@@ -331,18 +481,21 @@ where
     // Block the caller until the producer asks us to stop, then tear down.
     let _ = stop.recv();
     stop_event.signal();
-    let _ = handle.join();
-    Ok(())
+    handle
+        .join()
+        .map_err(|_| AudioError("audio output thread panicked".into()))?
 }
 
 unsafe fn output_loop(
+    device: Option<&str>,
     sample_rate: u32,
     block_size: u32,
     mut callback: impl FnMut(&mut [f32]),
     device_event: *mut c_void,
     stop_event: *mut c_void,
+    ready: &ReadySender,
 ) -> Result<(), AudioError> {
-    let client = default_audio_client(FLOW_RENDER)?;
+    let client = audio_client_for(FLOW_RENDER, device)?;
     let result = drive_render(
         client,
         sample_rate,
@@ -350,11 +503,14 @@ unsafe fn output_loop(
         &mut callback,
         device_event,
         stop_event,
+        ready,
     );
     release(client);
     result
 }
 
+/// Thin wrapper so every failure before the stream starts is reported on
+/// `ready` exactly once (the inner function sends `Ok` after `Start`).
 unsafe fn drive_render(
     client: *mut c_void,
     sample_rate: u32,
@@ -362,6 +518,31 @@ unsafe fn drive_render(
     callback: &mut dyn FnMut(&mut [f32]),
     device_event: *mut c_void,
     stop_event: *mut c_void,
+    ready: &ReadySender,
+) -> Result<(), AudioError> {
+    let result = drive_render_started(
+        client,
+        sample_rate,
+        block_size,
+        callback,
+        device_event,
+        stop_event,
+        ready,
+    );
+    if result.is_err() {
+        let _ = ready.send(result.clone());
+    }
+    result
+}
+
+unsafe fn drive_render_started(
+    client: *mut c_void,
+    sample_rate: u32,
+    block_size: u32,
+    callback: &mut dyn FnMut(&mut [f32]),
+    device_event: *mut c_void,
+    stop_event: *mut c_void,
+    ready: &ReadySender,
 ) -> Result<(), AudioError> {
     let format = WaveFormatEx {
         format_tag: WAVE_FORMAT_IEEE_FLOAT,
@@ -400,6 +581,9 @@ unsafe fn drive_render(
         teardown();
         return Err(err("IAudioClient::Start", hr));
     }
+    // The stream is live; unblock the control thread so it can honour the
+    // caller's stop channel while the loop below runs.
+    let _ = ready.send(Ok(()));
 
     loop {
         let woke = WaitForSingleObject(device_event, WAIT_SLICE_MS);
@@ -441,25 +625,49 @@ pub(crate) fn run_input<C>(callback: C, stop: &Receiver<()>) -> Result<(), Audio
 where
     C: FnMut(&[f32], usize) + Send + 'static,
 {
+    run_input_on_device(None, callback, stop)
+}
+
+pub(crate) fn run_input_on_device<C>(
+    device: Option<&str>,
+    callback: C,
+    stop: &Receiver<()>,
+) -> Result<(), AudioError>
+where
+    C: FnMut(&[f32], usize) + Send + 'static,
+{
     com_init()?;
     let device_event = EventHandle::create()?;
     let stop_event = EventHandle::create()?;
     let (ready_tx, ready_rx) = channel::<Result<(), AudioError>>();
     let dev_ev = device_event.0 as usize;
     let stop_ev = stop_event.0 as usize;
+    let device = device.map(str::to_owned);
+    let ready_for_loop = ready_tx.clone();
     let handle = thread::spawn(move || {
-        let result = unsafe { input_loop(callback, dev_ev as *mut c_void, stop_ev as *mut c_void) };
-        let _ = ready_tx.send(result);
+        unsafe {
+            input_loop(
+                device.as_deref(),
+                callback,
+                dev_ev as *mut c_void,
+                stop_ev as *mut c_void,
+                &ready_for_loop,
+            )
+        }
+        // The final outcome is recovered via `handle.join()` below; the
+        // ready channel only carries the start handshake.
     });
 
+    // Blocks until the stream reports started (Ok) or failed (Err).
     ready_rx
         .recv()
         .map_err(|_| AudioError("audio input thread died".into()))??;
 
     let _ = stop.recv();
     stop_event.signal();
-    let _ = handle.join();
-    Ok(())
+    handle
+        .join()
+        .map_err(|_| AudioError("audio input thread panicked".into()))?
 }
 
 #[repr(C)]
@@ -474,11 +682,27 @@ struct WaveFormatEx {
 }
 
 unsafe fn input_loop(
+    device: Option<&str>,
     mut callback: impl FnMut(&[f32], usize),
     device_event: *mut c_void,
     stop_event: *mut c_void,
+    ready: &ReadySender,
 ) -> Result<(), AudioError> {
-    let client = default_audio_client(FLOW_CAPTURE)?;
+    let result = input_loop_running(device, &mut callback, device_event, stop_event, ready);
+    if result.is_err() {
+        let _ = ready.send(result.clone());
+    }
+    result
+}
+
+unsafe fn input_loop_running(
+    device: Option<&str>,
+    callback: &mut dyn FnMut(&[f32], usize),
+    device_event: *mut c_void,
+    stop_event: *mut c_void,
+    ready: &ReadySender,
+) -> Result<(), AudioError> {
+    let client = audio_client_for(FLOW_CAPTURE, device)?;
     let mut mix: *mut WaveFormatEx = std::ptr::null_mut();
     let mut hr = vt_call!(client, 8, &mut mix); // GetMixFormat
     if hr < 0 || mix.is_null() {
@@ -521,6 +745,9 @@ unsafe fn input_loop(
         release(client);
         return Err(err("IAudioClient::Start", hr));
     }
+    // The stream is live; unblock the control thread so it can honour the
+    // caller's stop channel while the loop below runs.
+    let _ = ready.send(Ok(()));
 
     let mut converted: Vec<f32> = Vec::new();
     loop {

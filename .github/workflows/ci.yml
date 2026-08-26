@@ -40,6 +40,11 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      # --all-features enables tpt-dsp-io/serial (serialport -> libudev-sys)
+      # and tpt-dsp-io/audio (cpal -> alsa-sys); both build scripts locate
+      # their C libraries through pkg-config, so the -dev packages must exist.
+      - name: Install system libraries (libudev, alsa)
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev
       - name: cargo build
         run: cargo build --workspace --all-features
       - name: cargo test
@@ -117,6 +122,10 @@ jobs:
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # Same reason as the `native` job: cargo doc runs with --all-features,
+      # which pulls serialport (libudev) and cpal (alsa).
+      - name: Install system libraries (libudev, alsa)
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev libasound2-dev
       - name: cargo doc
         run: cargo doc --workspace --all-features --no-deps
 

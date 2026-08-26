@@ -1,0 +1,332 @@
+fmt=0
+    Checking tpt-dsp-io v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-io)
+    Checking tpt-dsp-cli v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-cli)
+    Checking tpt-dsp-viz v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-viz)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.11s
+clippy=0
+   Compiling tpt-dsp-io v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-io)
+   Compiling tpt-dsp-viz v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-viz)
+   Compiling tpt-dsp-cli v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 27s
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_analysis-fb464e4b31cc63ef.exe)
+
+running 46 tests
+test async_adapters::tests::sink_pipeline_applies_gain ... ok
+test async_adapters::tests::in_place_pipeline_reuses_buffers ... ok
+test async_adapters::tokio::tests::channel_in_place_pipeline ... ok
+test async_adapters::tokio::tests::channel_gain_pipeline ... ok
+test async_adapters::tokio::tests::stream_pipeline_terminates ... ok
+test features::tests::centroid_of_high_freq_is_high ... ok
+test async_adapters::tokio::tests::stream_round_trip_through_analyzer ... ok
+test features::tests::centroid_of_low_freq_is_low ... ok
+test features::tests::zero_crossing_rate_of_alternating ... ok
+test features::tests::rms_of_const_is_abs_value ... ok
+test spectrogram::tests::as_image_flattens_in_order ... ok
+test features::tests::zero_crossing_rate_of_dc_is_zero ... ok
+test features::tests::rms_of_unit_sine_is_about_sqrt_half ... ok
+test spectrum::tests::averaging_smooths_towards_frames ... ok
+test spectrogram::tests::ring_overwrites_oldest ... ok
+test spectrogram::tests::rows_are_chrono_ordered ... ok
+test spectrum::tests::db_to_linear_roundtrips ... ok
+test spectrum::tests::dominant_frequency_maps_bins ... ok
+test async_adapters::async_std::tests::stream_round_trip_through_analyzer ... ok
+test async_adapters::async_std::tests::channel_in_place_pipeline ... ok
+test async_adapters::async_std::tests::channel_gain_pipeline ... ok
+test spectrum::tests::find_peaks_ignores_below_threshold ... ok
+test spectrum::tests::geometry_helpers_are_consistent ... ok
+test spectrum::tests::find_peaks_locates_singletons ... ok
+test spectrum::tests::linear_to_db_matches_reference ... ok
+test spectrum::tests::parabolic_interpolate_finds_vertex ... ok
+test spectrum::tests::peak_bin_does_not_panic_on_nan ... ok
+test spectrum::tests::parabolic_interpolate_handles_edges_and_flats ... ok
+test spectrum::tests::invalid_averaging_is_rejected - should panic ... ok
+test spectrum::tests::peak_at_interpolates_secondary_tones ... ok
+test spectrum::tests::process_rejects_wrong_block_size - should panic ... ok
+test spectrum::tests::linear_averaging_is_a_cumulative_mean ... ok
+test spectrum::tests::silence_stays_at_the_db_floor ... ok
+test timeseries::tests::ema_converges ... ok
+test spectrum::tests::no_averaging_replaces_previous_frame ... ok
+test timeseries::tests::ema_steps_toward_new_value ... ok
+test spectrum::tests::sine_level_tracks_amplitude ... ok
+test spectrum::tests::set_averaging_switches_mode ... ok
+test timeseries::tests::moving_average_tracks_mean ... ok
+test spectrum::tests::sine_peaks_at_expected_bin ... ok
+test spectrum::tests::reset_clears_average_and_reseeds ... ok
+test timeseries::tests::outlier_detector_flags_spike ... ok
+test timeseries::tests::running_mean_matches_reference ... ok
+test spectrum::tests::time_constant_averaging_matches_exponential ... ok
+test spectrum::tests::interpolation_resolves_sub_bin_frequency ... ok
+test spectrum::tests::exponential_averaging_converges ... ok
+
+test result: ok. 46 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_audio-f0f023afc2adc569.exe)
+
+running 31 tests
+test delay::tests::feedback_decay_produces_trailing_echos ... ok
+test delay::tests::impulse_echoes_after_delay ... ok
+test delay::tests::silence_delayed_silence ... ok
+test engine::tests::gain_callback_scales_block ... ok
+test engine::tests::process_block_uses_internal_buffer ... ok
+test engine::tests::render_produces_requested_frames ... ok
+test envelope::tests::attack_reaches_one ... ok
+test envelope::tests::release_returns_to_zero ... ok
+test envelope::tests::sustain_holds_level ... ok
+test eq::tests::with_shelves_builds_expected_stage_count ... ok
+test eq::tests::flat_eq_preserves_signal ... ok
+test eq::tests::band_boost_increases_energy_near_band ... ok
+test fm::tests::nonzero_index_changes_spectrum ... ok
+test fm::tests::zero_index_is_plain_carrier ... ok
+test fm::tests::output_stays_bounded ... ok
+test graph::tests::graph_runs_source_through_gain_node_to_sink ... ok
+test graph::tests::passthrough_chain_is_transparent ... ok
+test oscillator::tests::sine_zero_crosses_once_per_period ... ok
+test oscillator::tests::square_stays_within_bounds ... ok
+test reverb::tests::identity_kernel_is_passthrough ... ok
+test oscillator::tests::phase_is_periodic ... ok
+test reverb::tests::reverb_of_impulse_is_ir_shape ... ok
+test waveshaper::tests::hard_clip_bounds_output ... ok
+test reverb::tests::output_is_finite_for_noise ... ok
+test waveshaper::tests::tanh_soft_clips_large_input ... ok
+test waveshaper::tests::unity_gain_at_small_signal ... ok
+test waveshaper::tests::zero_mix_passthrough ... ok
+test wavetable::tests::sine_table_matches_direct_sine ... ok
+test subtractive::tests::output_is_finite ... ok
+test wavetable::tests::table_is_periodic ... ok
+test subtractive::tests::note_produces_sound_then_decays ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_cli-e9824ca430ef3333.exe)
+
+running 5 tests
+test tests::chain_lowpass_attenuates_a_wav ... ok
+test tests::effect_spec_parsing ... ok
+test tests::analyze_real_finds_sine_peak ... ok
+test tests::demod_roundtrip_is_finite ... ok
+test tests::wav_roundtrip_preserves_length ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\tpt_dsp_cli-9fc16daeabc79c66.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_control-1b5255e69e690607.exe)
+
+running 11 tests
+test input_shaping::tests::impulse_gains_sum_to_one ... ok
+test input_shaping::tests::step_reaches_final_value ... ok
+test input_shaping::tests::is_linear ... ok
+test input_shaping::tests::undamped_shaper_has_three_equal_impulses ... ok
+test kinematics::tests::trapezoidal_reaches_goal_with_zero_final_velocity ... ok
+test kinematics::tests::trapezoidal_triangular_when_short ... ok
+test pid::tests::back_calculation_stays_bounded_and_recovers ... ok
+test kinematics::tests::jerk_limiter_position_matches_integrated_velocity ... ok
+test pid::tests::output_is_clamped ... ok
+test kinematics::tests::jerk_limiter_tracks_velocity_within_limits ... ok
+test pid::tests::converges_to_setpoint ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_core-adf71b2b2c59b210.exe)
+
+running 56 tests
+test complex::tests::exp_i_has_unit_magnitude ... ok
+test complex::tests::magnitude_squared_matches ... ok
+test complex::tests::rotate_is_correct ... ok
+test convolution::tests::convolution_with_impulse_returns_input ... ok
+test convolution::tests::convolve_matches_direct ... ok
+test convolution::tests::convolve_plan_matches_direct ... ok
+test dct::tests::dct_ii_of_constant_is_scaled ... ok
+test convolution::tests::fft_convolver_matches_direct_stream ... ok
+test dct::tests::dct_iv_orthogonality_roundtrip ... ok
+test dct::tests::dct_ii_then_iii_roundtrips ... ok
+test demod::tests::phase_delta_wraps_correctly ... ok
+test demod::tests::demod_tracks_constant_frequency_offset ... ok
+test demod::tests::tick_matches_process_across_blocks ... ok
+test demod::tests::unmodulated_carrier_demodulates_to_zero ... ok
+test demod::tests::phase_to_audio_normalizes_to_full_scale ... ok
+test demod::tests::demod_recovers_modulating_tone ... ok
+test fft::tests::f64_matches_naive ... ok
+test fft::tests::impulse_is_flat_spectrum ... ok
+test fft::tests::fft_matches_naive ... ok
+test fft::tests::power_of_two_helpers ... ok
+test filters::tests::biquad_dc_gain_of_lowpass_is_one ... ok
+test fft::tests::roundtrip_various_lengths ... ok
+test filters::tests::allpass_preserves_magnitude ... ok
+test filters::tests::iir_cascade_runs_and_resets ... ok
+test fft::tests::f32_specialised_matches_generic ... ok
+test hilbert::tests::analytic_signal_envelope_is_flat ... ok
+test hilbert::tests::transformer_wrapper_roundtrip ... ok
+test hilbert::tests::hilbert_shifts_sine_to_cosine ... ok
+test plan::tests::inplace_matches_out_of_place ... ok
+test plan::tests::inverse_roundtrip ... ok
+test plan::tests::plan_matches_reference_fft ... ok
+test resample::tests::decimator_downsamples_by_factor ... ok
+test resample::tests::decimator_output_length_tracks_phase ... ok
+test filters::tests::peaking_gain_is_applied ... ok
+test ring::tests::capacity_is_len_minus_one ... ok
+test ring::tests::clear_empties ... ok
+test ring::tests::front_peeks_without_removing ... ok
+test resample::tests::decimator_state_carries_across_blocks ... ok
+test ring::tests::push_pop_roundtrip ... ok
+test ring::tests::wraps_around ... ok
+test simd::tests::mul_alias_dispatches ... ok
+test simd::tests::scalar_fallback_magnitude ... ok
+test resample::tests::decimator_supports_f64 ... ok
+test simd::tests::scalar_fallback_mul_and_add ... ok
+test spsc::tests::bounded_overflow_rejects ... ok
+test spsc::tests::bounded_send_recv ... ok
+test spsc::tests::recv_after_drop_is_disconnected ... ok
+test spsc::tests::split_halves_work ... ok
+test windows::tests::blackman_has_lower_side_lobe_midpoint ... ok
+test windows::tests::hamming_endpoints_are_nonzero ... ok
+test windows::tests::hann_endpoints_are_near_zero ... ok
+test windows::tests::partial_output_preserves_tail ... ok
+test filters::tests::lowpass_attenuates_high_frequency ... ok
+test windows::tests::windows_normalized_to_correct_scale ... ok
+test filters::tests::fir_lowpass_rejects_high_frequencies ... ok
+test resample::tests::decimator_attenuates_above_new_nyquist ... ok
+
+test result: ok. 56 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\debug_biquad.rs (target\debug\deps\debug_biquad-aafac0e09e0c3051.exe)
+
+running 1 test
+test debug ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_io-6fdf5b28c4f1b779.exe)
+
+running 30 tests
+test iq::tests::i16_le_roundtrip ... ok
+test iq::tests::partial_trailing_sample_ignored ... ok
+test iq::tests::reassembler_reports_unconsumed_bytes_when_output_is_full ... ok
+test iq::tests::reassembler_handles_wide_formats ... ok
+test iq::tests::reassembler_recovers_samples_split_mid_sample ... ok
+test iq::tests::u8_roundtrip ... ok
+test iq::tests::stream_reassembles_split_chunks ... ok
+test rtlsdr::tests::open_reports_the_missing_backend ... ok
+test rtlsdr::tests::stub_recv_fails_without_touching_the_buffer ... ok
+test source::tests::boxed_source_forwards_recv ... ok
+test source::tests::error_display_mentions_feature ... ok
+test source::tests::synthetic_source_honours_limit ... ok
+test source::tests::synthetic_source_is_continuous_across_wrap ... ok
+test tcp::tests::source_drains_buffer_before_reading_again ... ok
+test tcp::tests::source_reports_eof_as_zero ... ok
+test tcp::tests::source_reassembles_samples_split_across_reads ... ok
+test wav::tests::extensible_float_header_is_accepted ... ok
+test tcp::tests::source_reassembles_wide_samples_and_survives_tiny_reads ... ok
+test wav::tests::float_roundtrip_is_exact ... ok
+test wav::tests::non_wav_magic_is_rejected ... ok
+test wav::tests::pcm16_roundtrip_normalises_to_unit_range ... ok
+test wav::tests::pcm24_sign_extension_works ... ok
+test wav::tests::pcm8_unsigned_maps_to_unit_range ... ok
+test wav::tests::truncated_file_is_rejected ... ok
+test wav::tests::unknown_chunks_are_skipped_and_padding_honoured ... ok
+test wav::tests::writer_rejects_non_float_spec ... ok
+test wav::tests::path_roundtrip_matches_hound_semantics ... ok
+test tcp::async_tests::serve_iq_reassembles_writes_split_mid_sample ... ok
+test tcp::tests::connect_streams_from_a_real_socket ... ok
+test tcp::async_tests::tcp_iq_roundtrip_parses_samples ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests\streaming.rs (target\debug\deps\streaming-72f2499f90954e9f.exe)
+
+running 1 test
+test synthetic_stream_runs_frame_drop_free_at_full_rate ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_viz-a23d02e9b3481816.exe)
+
+running 7 tests
+test colormap::tests::endpoints_and_stops_are_exact ... ok
+test colormap::tests::interpolation_is_monotonic_in_green_above_midpoint ... ok
+test colormap::tests::out_of_range_clamps ... ok
+test pipeline::tests::synthetic_block_is_correct_length ... ok
+test pipeline::tests::synthetic_is_deterministic ... ok
+test pipeline::tests::analyze_block_finds_sine_peak ... ok
+test pipeline::tests::synthetic_is_bounded ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\main.rs (target\debug\deps\tpt_dsp_viz-0950899cb8ff241d.exe)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_wasm-dd1824ad0f67b970.exe)
+
+running 7 tests
+test pedalboard::tests::counting_allocator_actually_sees_allocations ... ok
+test pedalboard::tests::fully_dry_chain_is_near_transparent ... ok
+test pedalboard::tests::silence_in_silence_out ... ok
+test pedalboard::tests::process_handles_arbitrary_lengths ... ok
+test pedalboard::tests::demo_render_returns_requested_frames ... ok
+test pedalboard::tests::chain_output_is_finite_and_bounded ... ok
+test pedalboard::tests::process_block_128_does_not_allocate ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+   Doc-tests tpt_dsp_analysis
+
+running 1 test
+test tpt-dsp-analysis\src\spectrum.rs - spectrum::RealtimeSpectrumAnalyzer (line 255) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+
+   Doc-tests tpt_dsp_audio
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tpt_dsp_cli
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tpt_dsp_control
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tpt_dsp_core
+
+running 3 tests
+test tpt-dsp-core\src\ring.rs - ring::RingBuffer (line 41) ... ok
+test tpt-dsp-core\src\demod.rs - demod::FmDemodulator (line 47) ... ok
+test tpt-dsp-core\src\resample.rs - resample::FIRDecimator (line 30) ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s
+
+   Doc-tests tpt_dsp_io
+
+running 2 tests
+test tpt-dsp-io\src\tcp.rs - tcp::TcpIqSource (line 30) - compile ... ok
+test tpt-dsp-io\src\iq.rs - iq::IqReassembler (line 98) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.29s
+
+   Doc-tests tpt_dsp_viz
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests tpt_dsp_wasm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+test=0

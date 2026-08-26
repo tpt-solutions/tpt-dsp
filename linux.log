@@ -1,0 +1,11 @@
+    Checking tpt-dsp-io v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-io)
+warning: constant `ESTRPIPE_RAW` is never used
+  --> tpt-dsp-io\src\audio\backend_linux.rs:91:7
+   |
+91 | const ESTRPIPE_RAW: i32 = 86;
+   |       ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `tpt-dsp-io` (lib) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.36s

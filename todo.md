@@ -194,9 +194,9 @@ gaps that were not previously tracked._
   `viz` currently has none of its own
   _(added 2026-08-26: `tpt-dsp-viz/examples/custom_waterfall.rs`, driving
   `VizApp` directly over a bounded channel with `run_synthetic`)_
-- [ ] README — move the GitHub Pages demo link/badge to the top of the file
+- [x] README — move the GitHub Pages demo link/badge to the top of the file
   (once Pages is enabled), not only under "Web demo"
-  _— still blocked on the repo's Pages setting = "GitHub Actions"._
+  _— done 2026-08-26: demo confirmed live; link added at the top of `README.md`._
 
 ### Automation & dependency hygiene
 - [x] `AGENTS.md` — fixed the stale "`tpt-dsp-viz` is an empty stub" paragraph
@@ -231,7 +231,7 @@ gaps that were not previously tracked._
 - Verified for `IirFilter`, `Eq`, `ConvolutionReverb`, `OutlierDetector` (pre-allocated scratch), and the pedalboard hot path (`process_internal_block`, counting-allocator test). `OutlierDetector` is still O(n log n) per sample, not O(1).
 
 **Still open / external blockers**
-- Deploy web pedalboard to GitHub Pages — workflow exists and is pushed; verified 2026-08-26 that `https://tpt-solutions.github.io/tpt-dsp/` still returns 404, so the repo's Pages setting must be switched to "GitHub Actions" in the web UI (not doable via git). Once live, finish the last README task: move the demo link/badge to the top of the file.
+- Deploy web pedalboard to GitHub Pages — **done 2026-08-26: live at `https://tpt-solutions.github.io/tpt-dsp/`; demo link moved to the top of `README.md`.**
 - `v0.1.0` publish to crates.io — needs publish token; all 7 crates are now implemented and release-ready (the `tpt-dsp-viz` desktop UI builds, tests and clips clean — a live render check on a GUI machine is the only remaining verification).
 - Cortex-M `embedded-hal` validation — needs physical hardware; not runnable here.
 - Benchmark report vs JUCE / libsamplerate — intentionally deferred (both are C libraries); `BENCHMARKS.md` documents the pure-Rust `rubato` comparison instead.
@@ -245,4 +245,4 @@ gaps that were not previously tracked._
 - [x] Replace `hound` (Apache-2.0-only) with the built-in RIFF/WAVE module in `tpt-dsp-io/src/wav.rs` - _done 2026-08-26: `read_wav_f32_path`/`write_wav_f32_path` (+ reader/writer variants) normalise to `f32`; PCM 8/16/24/32-bit and IEEE float 32/64 read, WAVE_FORMAT_EXTENSIBLE supported, 32-bit float written; CLI migrated; `hound` removed from `[workspace.dependencies]`._
 ## Long-term: clean-room audio I/O
 
-- [ ] **Clean-room rewrite of `cpal` in pure Rust, built internally** - `cpal` is Apache-2.0-only, which blocks MIT-only redistribution when the `audio` feature is enabled. Status 2026-08-26: **`cpal` fully removed from the tree.** `tpt-dsp-io/src/audio/` now implements shared-mode WASAPI directly in-tree (`backend_windows.rs`: hand-declared COM vtables/GUIDs, event-driven render + capture, `AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM`, Windows 10+; other platforms return a documented stub error). Public API: `run_output`, `run_input`, `has_default_input`, `list_output_devices` / `list_input_devices`. `tpt-dsp-viz` migrated off cpal onto `run_input`. Remaining work: macOS (CoreAudio) and Linux (ALSA/PipeWire) native backends, friendly device names via the property store, device selection.
+- [ ] **Clean-room rewrite of `cpal` in pure Rust, built internally** - `cpal` is Apache-2.0-only, which blocks MIT-only redistribution when the `audio` feature is enabled. Status 2026-08-26: **`cpal` fully removed from the tree.** `tpt-dsp-io/src/audio/` now implements shared-mode WASAPI directly in-tree (`backend_windows.rs`: hand-declared COM vtables/GUIDs, event-driven render + capture, `AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM`, Windows 10+) and a Linux backend (`backend_linux.rs`, 2026-08-26): raw ALSA UAPI ioctls on `/dev/snd/pcmC*D*p|c` — no libasound linkage, blocking `RW_INTERLEAVED` transfers, FLOAT_LE/S32_LE/S16_LE negotiation, XRUN recovery, device enumeration via a `/dev/snd` scan + `/proc/asound` card names (compile-checked on `x86_64-unknown-linux-gnu`; runtime validation still needs a Linux machine with sound hardware). Friendly names via the MMDevice property store and a device-selection API (`run_output_on_device` / `run_input_on_device`) landed 2026-08-26 for both platforms. **macOS backend landed 2026-08-26** (`backend_mac.rs`): CoreAudio AudioUnits — the default-output unit (`'auol'/'def '`) for playback with a mono `f32` client format, and a HALOutput unit (`'auol'/'hal '`) for capture (input I/O on element 1, render callback on output scope element 1 calling `AudioUnitRender` on bus 1) — all through hand-declared `extern "C"` bindings to the system `AudioToolbox`/`CoreAudio`/`CoreFoundation` frameworks; no `coreaudio-sys`, no wrapper crates. Device enumeration via `kAudioHardwarePropertyDevices` + `kAudioObjectPropertyName`, selection by exact name or case-insensitive substring. Compile-checked for `x86_64-apple-darwin`; all workspace gates remain green. Public API: `run_output`, `run_input`, `has_default_input`, `list_output_devices` / `list_input_devices`, plus the `_on_device` variants (all three platforms). Remaining work: live runtime validation of the macOS and Linux backends on machines with real sound hardware.

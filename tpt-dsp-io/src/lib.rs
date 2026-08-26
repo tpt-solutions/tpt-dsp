@@ -56,7 +56,8 @@ pub use wav::{
 
 #[cfg(feature = "audio")]
 pub use audio::{
-    has_default_input, list_input_devices, list_output_devices, run_input, run_output, AudioError,
+    has_default_input, list_input_devices, list_output_devices, run_input, run_input_on_device,
+    run_output, run_output_on_device, AudioError,
 };
 #[cfg(feature = "serial")]
 pub use serial::SerialReader;

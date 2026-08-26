@@ -1,0 +1,51 @@
+   Compiling tpt-dsp-io v0.1.0 (D:\Programming\1PRODUCTION\Open Source\tpt-dsp\tpt-dsp-io)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.52s
+     Running unittests src\lib.rs (target\debug\deps\tpt_dsp_io-a550f3e2eea7a10c.exe)
+
+running 28 tests
+test iq::tests::i16_le_roundtrip ... ok
+test iq::tests::partial_trailing_sample_ignored ... ok
+test iq::tests::reassembler_reports_unconsumed_bytes_when_output_is_full ... ok
+test iq::tests::reassembler_handles_wide_formats ... ok
+test iq::tests::reassembler_recovers_samples_split_mid_sample ... ok
+test iq::tests::stream_reassembles_split_chunks ... ok
+test iq::tests::u8_roundtrip ... ok
+test rtlsdr::tests::open_reports_the_missing_backend ... ok
+test rtlsdr::tests::stub_recv_fails_without_touching_the_buffer ... ok
+test source::tests::boxed_source_forwards_recv ... ok
+test source::tests::error_display_mentions_feature ... ok
+test source::tests::synthetic_source_honours_limit ... ok
+test source::tests::synthetic_source_is_continuous_across_wrap ... ok
+test tcp::tests::source_drains_buffer_before_reading_again ... ok
+test tcp::tests::source_reports_eof_as_zero ... ok
+test tcp::tests::source_reassembles_samples_split_across_reads ... ok
+test wav::tests::extensible_float_header_is_accepted ... ok
+test wav::tests::float_roundtrip_is_exact ... ok
+test tcp::tests::source_reassembles_wide_samples_and_survives_tiny_reads ... ok
+test wav::tests::non_wav_magic_is_rejected ... ok
+test wav::tests::pcm16_roundtrip_normalises_to_unit_range ... ok
+test wav::tests::pcm24_sign_extension_works ... ok
+test wav::tests::pcm8_unsigned_maps_to_unit_range ... ok
+test wav::tests::unknown_chunks_are_skipped_and_padding_honoured ... ok
+test wav::tests::writer_rejects_non_float_spec ... ok
+test wav::tests::truncated_file_is_rejected ... ok
+test wav::tests::path_roundtrip_matches_hound_semantics ... ok
+test tcp::tests::connect_streams_from_a_real_socket ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests\streaming.rs (target\debug\deps\streaming-51d92a954daf3074.exe)
+
+running 1 test
+test synthetic_stream_runs_frame_drop_free_at_full_rate ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+
+   Doc-tests tpt_dsp_io
+
+running 2 tests
+test tpt-dsp-io\src\tcp.rs - tcp::TcpIqSource (line 30) - compile ... ok
+test tpt-dsp-io\src\iq.rs - iq::IqReassembler (line 98) ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+

@@ -268,7 +268,7 @@ and an async-std adapter submodule exist; verify `Cargo.toml` feature wiring
 | Module | Key types | Feature |
 | --- | --- | --- |
 | `iq` | `parse_iq`, `IqFormat`, `IqStream` | always |
-| `audio` | `run_output`, `list_output_devices` | `audio` (built-in native backend) — **output only, mono f32, no capture/duplex/device selection** |
+| `audio` | `run_output`, `run_input`, `run_output_on_device`, `run_input_on_device`, `list_output_devices`, `list_input_devices` | `audio` (built-in native backends: WASAPI on Windows, raw ALSA UAPI on Linux) — **mono f32 output, capture input, device selection; no duplex** |
 | `serial` | `SerialReader` | `serial` — **open/read only, no write/enumeration/timeout/framing** |
 | `tcp` | `serve_iq` | `tcp` — **single-connection** async IQ server |
 
