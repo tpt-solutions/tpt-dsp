@@ -10,15 +10,30 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use std::hint::black_box;
 use tpt_dsp_core::{
-    complex_add_simd, complex_mul_simd, dct_ii, dct_iii, dct_iv, exp_i, fft, fft_inplace,
-    fft_inplace_f32, hilbert, ifft_inplace, magnitude, magnitude_simd, magnitude_squared, phase,
-    rotate, twiddles, windowed, FftPlan, FmDemodulator, RingBuffer, SpscQueue, WindowType, C32,
-    C64,
+    amdf_pitch, autocorrelation, autocorrelation_pitch, classify_tonal_bins, complex_add_simd,
+    complex_mul_simd, dct_ii, dct_iii, dct_iv, exp_i, fft, fft_inplace, fft_inplace_f32,
+    fft_bin_bark_bands, hilbert, hz_range_to_period_samples, hz_to_bark, ifft_inplace, imdct,
+    levinson_durbin, magnitude, magnitude_simd, magnitude_squared, mdct, nearest_vector,
+    nearest_vector_accelerated, noise_shape_step, phase, predict, residual, rotate,
+    simultaneous_masking, synthesize, twiddles, windowed, DistanceMetric, FastDctIvPlan,
+    FastMdctPlan, FftPlan, FmDemodulator, RingBuffer, SpscQueue, WindowType, C32, C64,
 };
 
 const FFT_SIZES: [usize; 5] = [128, 256, 1024, 4096, 16384];
 const DCT_SIZES: [usize; 3] = [64, 256, 1024];
 const HILBERT_SIZES: [usize; 3] = [256, 1024, 4096];
+// Matches Pulse/Aura's MDCT half-sizes (todo.md §5.1's "Initial target
+// sizes"), i.e. the block sizes that actually matter for this bench.
+const MDCT_SIZES: [usize; 6] = [128, 256, 512, 1024, 2048, 4096];
+// Matches Aura's LPC order range (default 16, max 32 — see
+// `codecs/aura/src/lib.rs`), against its default block size (1024).
+const LPC_ORDERS: [usize; 3] = [8, 16, 32];
+const LPC_BLOCK_SIZE: usize = 1024;
+// (entries, dim) pairs matching todo.md's own target codebook sizes: Vox
+// §31 ("1024 entries") and Whisper §34 ("4096-entry dictionary"). Vector
+// dimension isn't pinned by either spec yet, so these are representative
+// stand-ins (a CELP-style excitation vector / a small pixel patch).
+const VQ_CODEBOOKS: [(usize, usize); 2] = [(1024, 10), (4096, 16)];
 
 fn signal_f32(n: usize) -> Vec<f32> {
     (0..n)
@@ -161,6 +176,201 @@ fn bench_dct(c: &mut Criterion) {
         });
         group.bench_with_input(BenchmarkId::new("dct_iv_f32", n), &n, |b, _| {
             b.iter(|| dct_iv(black_box(&input), black_box(&mut out)))
+        });
+        let mut fast_plan = FastDctIvPlan::new(n);
+        group.bench_with_input(BenchmarkId::new("dct_iv_fast_f32", n), &n, |b, _| {
+            b.iter(|| fast_plan.forward(black_box(&input), black_box(&mut out)))
+        });
+    }
+    group.finish();
+}
+
+/// Direct O(N²) `mdct`/`imdct` vs the FFT-backed `FastMdctPlan` (todo.md
+/// §5.1 "Benchmark scalar vs optimized"), at Pulse/Aura's actual block
+/// sizes.
+fn bench_mdct(c: &mut Criterion) {
+    let mut group = c.benchmark_group("mdct");
+    for &n in MDCT_SIZES.iter() {
+        let two_n = 2 * n;
+        let input = signal_f32(two_n);
+        let spec_in = signal_f32(n);
+        let mut spec_out = vec![0.0f32; n];
+        let mut time_out = vec![0.0f32; two_n];
+        let mut fast_plan = FastMdctPlan::new(n);
+
+        group.throughput(Throughput::Elements(two_n as u64));
+        group.bench_with_input(BenchmarkId::new("forward_direct_f32", n), &n, |b, _| {
+            b.iter(|| mdct(black_box(&input), black_box(&mut spec_out)))
+        });
+        group.bench_with_input(BenchmarkId::new("forward_fast_f32", n), &n, |b, _| {
+            b.iter(|| fast_plan.forward(black_box(&input), black_box(&mut spec_out)))
+        });
+        group.bench_with_input(BenchmarkId::new("inverse_direct_f32", n), &n, |b, _| {
+            b.iter(|| imdct(black_box(&spec_in), black_box(&mut time_out)))
+        });
+        group.bench_with_input(BenchmarkId::new("inverse_fast_f32", n), &n, |b, _| {
+            b.iter(|| fast_plan.inverse(black_box(&spec_in), black_box(&mut time_out)))
+        });
+    }
+    group.finish();
+}
+
+/// `autocorrelation` + `levinson_durbin` (LPC analysis) and `predict`/
+/// `residual`/`synthesize` (todo.md §6 "Add benchmarks"), at Aura's actual
+/// LPC orders and block size.
+fn bench_lpc(c: &mut Criterion) {
+    let input = signal_f64(LPC_BLOCK_SIZE);
+
+    let mut group = c.benchmark_group("lpc/analysis_f64");
+    for &order in LPC_ORDERS.iter() {
+        let mut r = vec![0.0f64; order + 1];
+        let mut coeffs = vec![0.0f64; order];
+        let mut scratch = vec![0.0f64; order];
+        group.throughput(Throughput::Elements(LPC_BLOCK_SIZE as u64));
+        group.bench_with_input(BenchmarkId::new("autocorrelation", order), &order, |b, &order| {
+            b.iter(|| autocorrelation(black_box(&input), black_box(order), black_box(&mut r)))
+        });
+        // Autocorrelation of a real signal decays toward zero at higher
+        // lags, so `r` from the loop above is a realistic (not synthetic)
+        // input for Levinson-Durbin.
+        autocorrelation(&input, order, &mut r);
+        group.bench_with_input(BenchmarkId::new("levinson_durbin", order), &order, |b, _| {
+            b.iter(|| levinson_durbin(black_box(&r), black_box(&mut coeffs), black_box(&mut scratch)))
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("lpc/predict_residual_synthesize_f64");
+    let order = 16usize;
+    let coeffs: Vec<f64> = (0..order).map(|i| 0.9 / (i as f64 + 1.0)).collect();
+    let mut res = vec![0.0f64; LPC_BLOCK_SIZE];
+    let mut back = vec![0.0f64; LPC_BLOCK_SIZE];
+    group.throughput(Throughput::Elements(LPC_BLOCK_SIZE as u64));
+    group.bench_function(BenchmarkId::new("predict", order), |b| {
+        b.iter(|| predict(black_box(&input[..order]), black_box(&coeffs)))
+    });
+    group.bench_function(BenchmarkId::new("residual", order), |b| {
+        b.iter(|| residual(black_box(&input), black_box(&coeffs), black_box(&mut res)))
+    });
+    residual(&input, &coeffs, &mut res);
+    group.bench_function(BenchmarkId::new("synthesize", order), |b| {
+        b.iter(|| synthesize(black_box(&res), black_box(&coeffs), black_box(&mut back)))
+    });
+    group.finish();
+}
+
+/// `autocorrelation_pitch`/`amdf_pitch` (todo.md §7 "Benchmark"), at a
+/// Vox-realistic 16kHz/40ms speech frame searched over the full
+/// SPEECH_MIN/MAX_F0_HZ range.
+fn bench_pitch(c: &mut Criterion) {
+    let sample_rate = 16_000.0f64;
+    let frame = signal_f64(640); // 40ms @ 16kHz
+    let (min_p, max_p) = hz_range_to_period_samples(sample_rate, 50.0, 500.0);
+
+    let mut group = c.benchmark_group("pitch_f64");
+    group.throughput(Throughput::Elements(frame.len() as u64));
+    group.bench_function("autocorrelation_pitch", |b| {
+        b.iter(|| autocorrelation_pitch(black_box(&frame), black_box(min_p), black_box(max_p), black_box(0.3)))
+    });
+    group.bench_function("amdf_pitch", |b| {
+        b.iter(|| amdf_pitch(black_box(&frame), black_box(min_p), black_box(max_p), black_box(0.3)))
+    });
+    group.finish();
+}
+
+fn query_f32(dim: usize) -> Vec<f32> {
+    (0..dim).map(|i| (i as f32 * 0.037).cos() + 0.2 * (i as f32 * 0.21).sin()).collect()
+}
+
+/// Linear vs. early-exit-accelerated `nearest_vector` (todo.md §8
+/// "Benchmark linear search"), at Vox's and Whisper's target codebook
+/// sizes.
+fn bench_vq(c: &mut Criterion) {
+    let mut group = c.benchmark_group("vq_f32");
+    for &(entries, dim) in VQ_CODEBOOKS.iter() {
+        let codebook = signal_f32(entries * dim);
+        let query = query_f32(dim);
+        let label = format!("{entries}x{dim}");
+        group.throughput(Throughput::Elements(entries as u64));
+        group.bench_with_input(BenchmarkId::new("nearest_linear", &label), &(entries, dim), |b, _| {
+            b.iter(|| {
+                nearest_vector(
+                    black_box(&codebook),
+                    black_box(dim),
+                    black_box(&query),
+                    black_box(DistanceMetric::SquaredEuclidean),
+                )
+            })
+        });
+        group.bench_with_input(BenchmarkId::new("nearest_accelerated", &label), &(entries, dim), |b, _| {
+            b.iter(|| {
+                nearest_vector_accelerated(
+                    black_box(&codebook),
+                    black_box(dim),
+                    black_box(&query),
+                    black_box(DistanceMetric::SquaredEuclidean),
+                )
+            })
+        });
+    }
+    group.finish();
+}
+
+/// `simultaneous_masking` (the O(bands²) core of the psychoacoustic
+/// model) and `classify_tonal_bins`, at realistic sizes: ~25 Bark bands
+/// (the full audible range) and a 1024-bin power spectrum (matching
+/// Aura's default MDCT block half-size). todo.md §10.2 "benchmark".
+fn bench_psychoacoustic(c: &mut Criterion) {
+    let sample_rate = 48_000.0f32;
+    let num_bands = 25;
+    let band_bark: Vec<f32> = (0..num_bands).map(|i| i as f32).collect();
+    let band_energy: Vec<f32> = (0..num_bands).map(|i| 1.0 + i as f32 * 10.0).collect();
+    let band_tonal: Vec<bool> = (0..num_bands).map(|i| i % 3 == 0).collect();
+    let mut excitation = vec![0.0f32; num_bands];
+
+    let mut group = c.benchmark_group("psychoacoustic_f32");
+    group.throughput(Throughput::Elements((num_bands * num_bands) as u64));
+    group.bench_function("simultaneous_masking_25_bands", |b| {
+        b.iter(|| {
+            for slot in excitation.iter_mut() {
+                *slot = 0.0;
+            }
+            simultaneous_masking(
+                black_box(&band_energy),
+                black_box(&band_bark),
+                black_box(&band_tonal),
+                black_box(&band_bark),
+                black_box(&mut excitation),
+            )
+        })
+    });
+
+    let power_spectrum = signal_f32(1024).iter().map(|&x| x * x + 1.0).collect::<Vec<f32>>();
+    let mut tonal = vec![false; 1024];
+    group.throughput(Throughput::Elements(1024));
+    group.bench_function("classify_tonal_bins_1024", |b| {
+        b.iter(|| classify_tonal_bins(black_box(&power_spectrum), black_box(7.0), black_box(&mut tonal)))
+    });
+
+    let mut bands = vec![0usize; 1024 / 2 + 1];
+    group.bench_function("fft_bin_bark_bands_1024", |b| {
+        b.iter(|| fft_bin_bark_bands(black_box(sample_rate), black_box(1024), black_box(&mut bands)))
+    });
+    group.bench_function("hz_to_bark", |b| b.iter(|| hz_to_bark(black_box(1234.5f32))));
+    group.finish();
+}
+
+/// `noise_shape_step` (todo.md §11 "Add benchmark"), at Aura-realistic
+/// orders (a plain first-order shaper and a higher-order one matching
+/// its LPC order range).
+fn bench_noise_shaping(c: &mut Criterion) {
+    let quantize = |x: f32| x.round();
+    let mut group = c.benchmark_group("noise_shaping_f32");
+    for &order in &[1usize, 16] {
+        let feedback = vec![0.5f32; order];
+        let mut history = vec![0.0f32; order];
+        group.bench_with_input(BenchmarkId::new("noise_shape_step", order), &order, |b, _| {
+            b.iter(|| noise_shape_step(black_box(0.3f32), black_box(&feedback), black_box(&mut history), quantize))
         });
     }
     group.finish();
@@ -345,6 +555,12 @@ criterion_group!(
     bench_fft_plan_nonpow2,
     bench_twiddles,
     bench_dct,
+    bench_mdct,
+    bench_lpc,
+    bench_pitch,
+    bench_vq,
+    bench_psychoacoustic,
+    bench_noise_shaping,
     bench_hilbert,
     bench_windows,
     bench_complex_ops,

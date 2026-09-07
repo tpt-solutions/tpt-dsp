@@ -313,7 +313,9 @@ async adapters and grow-only scratch in `IirFilter`/`Eq`.
 - I/O: built-in WASAPI output mono (+ capture); serial read-only; `tcp` single-connection; no
   cross-read buffering for mid-sample splits beyond `IqStream`.
 - `tpt-dsp-control` depends on `tpt-dsp-core` but does not currently use it.
-- `portable-simd` FFT/complex optimization: **not started**.
+- `portable-simd` FFT/complex optimization: **implemented**, nightly-gated
+  (see §10) — CI's `native` job builds `--all-features` on *stable*, so it
+  only ever exercises the scalar fallback, never the vectorised path.
 
 **Roadmap status (marked "(planned)" above):**
 - MVP 1 (WASM guitar pedal UI + wasm-bindgen + GitHub Pages) — **done**.
@@ -367,3 +369,225 @@ the main `deny.toml` allow-list, and the Python module links Python
 (`extension-module`) so it cannot be built or tested by the `cargo
 build/test --workspace` gate. Both are verified as standalone workspaces
 (`cargo build` / `cargo clippy` inside each directory).
+
+---
+
+## 10. SIMD: architecture support & feature detection (2026-09-07)
+
+`tpt-dsp-core::simd` (§5.1) has two implementations behind one API: a scalar
+fallback (`simd_scalar.rs`, always available, the default) and a
+`core::simd`-based vectorised one (`simd.rs`, nightly-only via the `simd`
+feature). `lib.rs` picks between them at compile time — see §5.1 and the
+module docs on `simd.rs` for the mechanics.
+
+### Supported architectures
+
+`core::simd` is a *portable* SIMD abstraction: there is exactly one source
+file, and LLVM lowers its `f32x4` operations to whatever vector instructions
+the compilation target provides. No per-architecture code exists or is
+needed.
+
+| Target | Baseline vector ISA used | Status |
+| --- | --- | --- |
+| x86 / x86_64 | SSE2 (guaranteed baseline on `x86_64-*`) | Compiles; not exercised in CI (see below) |
+| ARM / AArch64 | NEON (guaranteed baseline on `aarch64-*`) | Compiles; not exercised in CI |
+| wasm32 | `simd128`, if the target build enables it | Not currently built with `simd` on in CI |
+| RISC-V | RVV once LLVM/rustc give it stable tier support | Not yet targeted; no code changes expected — the same portable source should pick it up |
+
+Wider ISA levels (AVX2/AVX-512 on x86_64, SVE on AArch64) are a **build-time**
+choice for whoever compiles the final binary (`-C target-cpu=native` or an
+explicit `-C target-feature=...`), not something `tpt-dsp-core` selects
+itself. Without such a flag, a release build gets only the guaranteed
+baseline for its target triple.
+
+Practical gap: the `simd` cargo feature requires nightly to actually take the
+`core::simd` path (via the `tpt_portable_simd` cfg from `build.rs`), but every
+CI job builds on the *stable* toolchain — including the `native` job's
+`cargo build --workspace --all-features`. So `--all-features` in CI always
+resolves `simd` back to the scalar fallback; the vectorised path is compiled
+and tested only when a contributor runs it locally on nightly. This is a real
+coverage gap, not a design conclusion — added here as an accurate account of
+current CI, not a target for this section's remaining work.
+
+### Runtime feature detection
+
+There is deliberately no `is_x86_feature_detected!`/`is_aarch64_feature_detected!`-style
+runtime dispatch to a wider ISA in this crate, for two independent reasons:
+
+1. **`tpt-dsp-core` is `#![forbid(unsafe_code)]`** (§3.4). The standard
+   runtime-multiversioning pattern — detect a CPU feature at runtime, then
+   call into a function marked `#[target_feature(enable = "avx2")]` — requires
+   an `unsafe` call at the call site (the compiler cannot itself prove the
+   feature check dominates the call). That pattern is unavailable here by the
+   crate's own safety policy, not an oversight.
+2. **`core::simd` does not runtime-dispatch.** It compiles to one fixed set of
+   vector instructions, chosen by the target build's compile-time flags. There
+   is no "detect AVX2 at runtime and take a wider path" mode to plug in — the
+   only lever is the target-feature/target-cpu flags passed when the
+   *consuming* binary is built.
+
+The nightly-vs-stable check in `build.rs` (setting `tpt_portable_simd`) is a
+different kind of check — a toolchain capability probe, not a CPU-feature
+probe — and remains the only "detection" this crate performs. Given the two
+points above, runtime CPU-feature dispatch is judged **not appropriate** for
+`tpt-dsp-core` as designed; a consumer that wants AVX2/AVX-512/SVE codegen
+gets it by building the final binary with the matching `-C target-cpu`/
+`-C target-feature` flags, same as they would for any other portable-SIMD
+crate.
+
+---
+
+## 11. Real-time / Offline execution profiles (2026-09-07)
+
+`todo.md` §14 asks for two things: explicit definitions of a **Real-time**
+and an **Offline** execution profile, and a statement of which APIs satisfy
+which. This section is that statement. It supersedes §3's looser prose with a
+crate-by-crate table; §3 remains the canonical *reasoning* behind the
+allocation caveats this section only classifies.
+
+### 11.1 Profile definitions
+
+**Real-time profile** — safe to call from a hard-real-time callback (an audio
+device callback, an SDR sample-block callback, a control-loop tick):
+
+1. **No allocation** — no heap traffic once the caller-owned/pre-allocated
+   buffers exist.
+2. **No blocking** — never waits on a lock, a channel, an I/O readiness event,
+   or another thread.
+3. **No I/O** — no file, socket, serial, or audio-device syscalls.
+4. **No unbounded work** — per-call cost does not include an operation whose
+   cost class is worse than the caller's fixed block size implies (in
+   particular, no `O(n log n)`+ step hiding behind an apparently `O(n)` API).
+5. **Caller-owned memory** — buffers are supplied or pre-allocated at
+   construction; a function/struct never grows its own storage during
+   `process`/`tick`.
+6. **Deterministic execution bounds where possible** — every loop terminates
+   within a bound computable from the input size or a fixed constant, so a
+   worst-case execution time exists even if the typical-case count varies
+   with data (a bisection search that exits early on most inputs still
+   satisfies this if its *worst* case is capped).
+
+**Offline profile** — anything not required to meet the above; explicitly
+permits:
+
+1. Dynamic allocation (per-call, not just at construction).
+2. Larger/growable scratch buffers.
+3. Parallel processing.
+4. Expensive RDO-style search (e.g. re-trying several encodings and keeping
+   the best).
+
+Criteria 1-4 of the real-time profile are graded **strictly on the whole
+workspace surface** below — a single real, reachable exception is enough to
+leave a criterion unchecked in `todo.md`, even where the exception lives in a
+clearly-labelled non-real-time convenience API. That is a deliberate reading:
+"real-time profile" is a promise about what a *type* does, and a type that
+exposes both a blocking and a non-blocking method makes that promise only for
+the non-blocking half.
+
+### 11.2 Where each criterion currently holds
+
+- **No allocation**: true in steady state for the free-function and
+  pre-allocated-struct idioms (§3.1); **not unconditional** — `tpt-dsp-
+  analysis`'s `async_adapters` allocate a `Vec<f32>` per frame, and
+  `IirFilter`/`Eq` reallocate scratch the first time a block is larger than
+  any seen before (§3.2).
+- **No blocking**: true for every free function and struct `process`/`tick`
+  method in `tpt-dsp-core`, `-audio`, `-analysis` (sync path) and `-control`;
+  **not unconditional** — `SpscQueue`/`Producer`/`Consumer` deliberately also
+  expose blocking `send`/`recv` (crossbeam-backed) alongside the real-time-
+  safe `try_send`/`try_recv` (`spsc.rs`'s own doc comments already label each
+  method), and `tpt-dsp-analysis::async_adapters` blocks on an async runtime
+  (`block_on`/`.await`) by design — it is a streaming/offline adapter, not a
+  real-time one.
+- **No I/O**: true for every type in `tpt-dsp-core`, `-audio`, `-analysis`,
+  `-control` — none of the four touch a file, socket, serial port, or audio
+  device. **Not** true of `tpt-dsp-io`, whose entire purpose is I/O
+  (`audio::run_output`/`run_input`, `serial::SerialReader`, `tcp::serve_iq`);
+  those are driver/setup functions that call into a caller-supplied
+  real-time-safe processing closure, not processing functions themselves —
+  the I/O happens in the driver loop around the callback, never inside it.
+- **No unbounded work**: true for the large majority (fixed cost proportional
+  to input length: biquad/PID/EMA are `O(1)` per sample, FIR/convolution/
+  windowing/features are `O(n)`, FFT/DCT/MDCT/LPC autocorrelation are
+  `O(n log n)`/`O(n²)` but bounded by the caller's chosen block size);
+  **known exception** — `tpt-dsp-analysis::OutlierDetector::push` re-sorts its
+  window every sample (`O(n log n)` per sample, not `O(1)`, §3.2). Adjacent
+  but out of the real-time surface: `tpt-dsp-io::IqStream::feed` grows its
+  internal buffer without bound if the caller never calls `drain` — a
+  buffering/ingestion concern, not a per-block processing one, but worth
+  naming here since it is the other unbounded-growth path in the workspace.
+- **Caller-owned memory**: true everywhere, no known exception — the
+  dominant idiom across every crate (§3.1).
+- **Deterministic execution bounds where possible**: true everywhere audited.
+  Every loop in `tpt-dsp-core` has a fixed or input-derived cap — FFT/DCT
+  loop over `n`, `lsp.rs`'s root-finding grid search stops at a fixed
+  `grid_points` and refines each root with an unconditional 40-iteration
+  bisection, `simd.rs`'s vectorised loops process `len - len % LANES` then a
+  bounded scalar tail. No polling loop, `while true`, or unbounded recursion
+  exists anywhere in `tpt-dsp-core`/`-audio`/`-analysis`/`-control`. This
+  criterion is about *worst-case* boundedness, so `OutlierDetector`'s
+  data-independent `O(n log n)` sort satisfies it even though it fails the
+  stricter "no unbounded work" reading above.
+
+### 11.3 Per-crate / per-API classification
+
+| Crate / module | Representative API | Profile |
+| --- | --- | --- |
+| `core::complex` | `Complex32`/`Complex64`, `magnitude`, `phase`, `exp_i`, `rotate` | Real-time |
+| `core::fft` | `fft`, `ifft`, `fft_inplace`, `twiddles` | Real-time (recomputes twiddles per call — wasteful, not unbounded; prefer `FftPlan` for repeated transforms, §3.2) |
+| `core::plan` (`std`) | `FftPlan::new` | Offline (allocates plan + scratch) |
+| `core::plan` (`std`) | `FftPlan::process`/`process_inplace` | Real-time (reuses the scratch from `new`) |
+| `core::dct` | `dct_ii`/`dct_iii`/`dct_iv` | Real-time (`O(n²)`, alloc-free, bounded by caller's `n`) |
+| `core::mdct` (`std`) | `FastMdctPlan`/`FastDctIvPlan::new` | Offline (allocates an `FftPlan` internally) |
+| `core::mdct` (`std`) | `FastMdctPlan`/`FastDctIvPlan::process` | Real-time |
+| `core::hilbert` | `hilbert` (free fn) | Real-time |
+| `core::hilbert` (`alloc`) | `HilbertTransformer::new` | Offline (allocates `work`/`scratch`) |
+| `core::hilbert` (`alloc`) | `HilbertTransformer::process` | Real-time |
+| `core::windows` | `windowed` | Real-time |
+| `core::filters` | `Biquad`/`process_biquad` | Real-time |
+| `core::filters` (`alloc`) | `Fir::new`, `IirFilter::new` | Offline (allocates coefficient/scratch storage) |
+| `core::filters` (`alloc`) | `Fir`/`IirFilter::process` | Real-time (scratch reallocates only the first time a block exceeds every prior size seen, §3.2) |
+| `core::convolution` | `convolve` (direct) | Real-time |
+| `core::convolution` (`alloc`) | `ConvolvePlan::new`, `FftConvolver::new` | Offline |
+| `core::convolution` (`alloc`) | `ConvolvePlan`/`FftConvolver::process` | Real-time |
+| `core::ring` | `RingBuffer` (all methods) | Real-time (lock-free, single-owner) |
+| `core::spsc` (`std`) | `SpscQueue::bounded`/`unbounded` | Offline (channel construction) |
+| `core::spsc` (`std`) | `try_send`/`try_recv` | Real-time |
+| `core::spsc` (`std`) | `send`/`recv` (blocking variants) | Offline (blocks by design — an explicit non-real-time convenience) |
+| `core::demod` | `FmDemodulator`, `phase_delta`, `phase_to_audio` | Real-time |
+| `core::resample` (`alloc`) | `FIRDecimator::new` | Offline |
+| `core::resample` (`alloc`) | `FIRDecimator::process` | Real-time |
+| `core::lpc` (`alloc`) | `LpcAnalyzer::new` | Offline (allocates `r`/`scratch`) |
+| `core::lpc` (`alloc`) | `LpcAnalyzer::analyze`, free fns `autocorrelation`/`levinson_durbin`/`predict`/`residual`/`synthesize` | Real-time (write into caller-supplied `out`/`coeffs_out` slices) |
+| `core::lsp` | `lpc_to_lsp`, `lsp_to_lpc`, `lsp_is_stable`, `lsp_interpolate` | Real-time (fixed-iteration bisection + a `grid_points`-bounded search, §11.2 — but conventionally called encoder-side, not on an audio callback) |
+| `core::vq` | `nearest_vector`, `nearest_vector_accelerated`, `vq_encode`/`vq_decode` | Real-time (operates on caller-supplied codebook/output slices) |
+| `core::bark`/`psychoacoustic` | `hz_to_bark`, `simultaneous_masking`, `combined_threshold_db`, ... | Real-time (pure per-band arithmetic on caller slices) — used encoder-side, but not disqualified by anything in its own implementation |
+| `core::noise_shaping` | `NoiseShaper::new` | Offline (allocates `error_history`) |
+| `core::noise_shaping` | `NoiseShaper::step` | Real-time |
+| `core::pitch` | `autocorrelation_pitch`, `amdf_pitch` | Real-time (bounded by the caller's search-range slice) |
+| `core::simd` | `complex_mul_simd`/`complex_add_simd`/`magnitude_simd`/`fft_butterfly` | Real-time |
+| `audio::{oscillator,wavetable,fm,subtractive,waveshaper,delay,eq,envelope}` | `new` (most) | Offline (pre-allocates any owned buffer, e.g. `Wavetable`'s table) |
+| `audio::{...}` | `process`/`tick` | Real-time |
+| `audio::reverb::ConvolutionReverb` | `new` | Offline (builds on `FftConvolver::new`) |
+| `audio::reverb::ConvolutionReverb` | `process` | Real-time |
+| `audio::graph::AudioGraph` | `new` | Offline (allocates two scratch `Vec<f32>`, §3.2) |
+| `audio::graph::AudioGraph` | `run`/`tick` | Real-time |
+| `audio::engine::RealtimeEngine` | `run` (drives a `FnMut` per fixed block) | Real-time, contingent on the caller's closure also meeting the profile |
+| `analysis::spectrum::RealtimeSpectrumAnalyzer` | `new` | Offline |
+| `analysis::spectrum::RealtimeSpectrumAnalyzer` | `process`/`peak` | Real-time |
+| `analysis::features` | `rms`, `zero_crossing_rate`, `spectral_centroid`(`_normalized`) | Real-time |
+| `analysis::timeseries` | `MovingAverage`, `RunningMean`, `Ema` | Real-time (`O(1)` per sample) |
+| `analysis::timeseries` | `OutlierDetector::push` | Real-time-capable but **not `O(1)`** — see §11.2; budget for `O(n log n)` in the window size before using it on a hard-real-time thread |
+| `analysis::spectrogram::Spectrogram` | `new` | Offline (allocates the ring) |
+| `analysis::spectrogram::Spectrogram` | `push_row`/frame access | Real-time |
+| `analysis::async_adapters` (`async`) | `process_channel`, `process_stream`, tokio/async-std submodules | Offline (blocks on an async runtime; allocates a `Vec<f32>` per frame, §3.2) |
+| `control::pid::Pid` | `update` | Real-time (`O(1)`) |
+| `control::input_shaping::InputShaper` | `tick` | Real-time |
+| `control::kinematics::JerkLimiter` | `update` | Real-time |
+| `control::kinematics::TrapezoidalProfile` | `at` | Real-time |
+| `io::iq` | `parse_iq` | Real-time (writes into a caller-supplied `&mut [Complex32]`, no I/O of its own) |
+| `io::iq::IqStream` | `feed`/`drain` | Offline-leaning — `feed` grows its buffer unboundedly if `drain` is never called (documented risk); use the bounded `IqReassembler` for a real-time-safe ingestion path |
+| `io::audio` | `run_output`/`run_input`, `list_*_devices` | Offline (blocking hardware I/O and device-list syscalls; these *drive* a real-time-safe callback, they are not one) |
+| `io::serial::SerialReader` | `read` | Offline (blocking hardware I/O) |
+| `io::tcp::serve_iq` | — | Offline (async network I/O) |
+| `viz::pipeline` | `run_synthetic`/`run_audio_input` | Offline (spawns threads, `thread::sleep`-paced, and the audio-input path locks a `Mutex` around captured samples) — a UI producer thread, not a hot DSP path |

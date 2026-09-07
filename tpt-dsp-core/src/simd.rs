@@ -12,6 +12,16 @@
 //!
 //! Everything here is `core`-only and allocation-free, so it also works under
 //! `--no-default-features --features simd`.
+//!
+//! # Architecture support
+//!
+//! `core::simd` is a portable abstraction, not an architecture-specific one:
+//! this same source builds for x86/x86_64 (SSE2 baseline), ARM/AArch64 (NEON
+//! baseline) and wasm32 (`simd128`, given the target feature), and will pick
+//! up RISC-V once its vector extension reaches stable tier support in LLVM.
+//! There is no per-architecture code path here or an `is_*_feature_detected!`
+//! runtime dispatch — see `ARCHITECTURE.md` §10 in the workspace root for why
+//! that would need `unsafe`, which this crate forbids.
 
 #![cfg(feature = "simd")]
 

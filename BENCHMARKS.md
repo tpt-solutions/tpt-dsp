@@ -8,7 +8,7 @@ external implementation on the same workload.
 
 | Crate | Bench file | Coverage |
 | --- | --- | --- |
-| `tpt-dsp-core` | `dsp_bench.rs` | FFT/DCT/Hilbert, windows, complex math, FM demod, ring & SPSC buffers |
+| `tpt-dsp-core` | `dsp_bench.rs` | FFT/DCT/MDCT (direct vs `FastMdctPlan`)/LPC/pitch/VQ (linear vs accelerated)/psychoacoustic model/noise shaping/Hilbert, windows, complex math, FM demod, ring & SPSC buffers |
 | `tpt-dsp-core` | `filter_bench.rs` | Biquad (block / free-fn / per-sample / design), IIR cascade, FIR, convolution (direct / FFT / overlap-add) |
 | `tpt-dsp-core` | `resampling_bench.rs` | `FIRDecimator` vs `rubato` (FFT / sinc / poly), integer-factor + arbitrary-ratio |
 | `tpt-dsp-audio` | `audio_bench.rs` | Reverb, EQ (3/10 band, shelves), delay, waveshaper, pedalboard chain, `AudioGraph`, `RealtimeEngine` |
@@ -86,6 +86,100 @@ Other transforms (1024-sample `f32` block unless noted):
 | `complex/magnitude/1024` | 4.78 µs | 215 Melem/s |
 | `complex/phase/1024` | 8.06 µs | 127 Melem/s |
 | `fm_demod/4096` | 42.2 µs | 97.0 Melem/s |
+
+MDCT/IMDCT: direct O(N²) (`mdct`/`imdct`) vs the FFT-backed `FastMdctPlan`
+(todo.md §5.1), at Pulse/Aura's actual block half-sizes (`f32`, `--quick`
+mode, so treat as order-of-magnitude like the rest of this page):
+
+| Half-size N | direct forward | fast forward | direct inverse | fast inverse | speedup |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 512 | 3.21 ms | 1.58 µs | 3.25 ms | 1.22 µs | ~2000–2600× |
+| 1024 | 12.27 ms | 3.25 µs | 12.60 ms | 2.64 µs | ~3800–4800× |
+| 2048 | 50.26 ms | 7.42 µs | 49.35 ms | 6.10 µs | ~6800–8100× |
+| 4096 | 195.5 ms | 15.2 µs | 197.4 ms | 13.0 µs | ~12900–15200× |
+
+The gap widens with N because the direct path is O(N²) while the fast path
+is one O(N log N) FFT plus O(N) twiddle multiplies. Run
+`cargo bench -p tpt-dsp-core --bench dsp_bench -- mdct` for current numbers.
+
+LPC (`f64`): `autocorrelation` + `levinson_durbin` at Aura's actual LPC
+orders (8/16/32, default 16, max 32), against its default 1024-sample
+block; `predict`/`residual`/`synthesize` at order 16 (`--quick` mode):
+
+| Benchmark | time (median) |
+| --- | ---: |
+| `lpc/analysis_f64/autocorrelation/8` | 3.71 µs |
+| `lpc/analysis_f64/levinson_durbin/8` | 70.1 ns |
+| `lpc/analysis_f64/autocorrelation/16` | 7.09 µs |
+| `lpc/analysis_f64/levinson_durbin/16` | 187 ns |
+| `lpc/analysis_f64/autocorrelation/32` | 13.4 µs |
+| `lpc/analysis_f64/levinson_durbin/32` | 521 ns |
+| `lpc/predict_residual_synthesize_f64/predict/16` | 4.90 ns |
+| `lpc/predict_residual_synthesize_f64/residual/16` | 7.51 µs |
+| `lpc/predict_residual_synthesize_f64/synthesize/16` | 9.27 µs |
+
+`autocorrelation` (O(N·order)) dominates LPC analysis cost, not
+`levinson_durbin` (O(order²)) — expected, since `order` is much smaller
+than the 1024-sample block. Run
+`cargo bench -p tpt-dsp-core --bench dsp_bench -- lpc` for current numbers.
+
+Pitch estimation (`f64`): `autocorrelation_pitch`/`amdf_pitch` over a
+Vox-realistic 16kHz/40ms (640-sample) frame, searched across the full
+`SPEECH_MIN_F0_HZ`-`SPEECH_MAX_F0_HZ` range (`--quick` mode):
+
+| Benchmark | time (median) |
+| --- | ---: |
+| `pitch_f64/autocorrelation_pitch` | 53.1 µs |
+| `pitch_f64/amdf_pitch` | 52.8 µs |
+
+Both are O(range × frame length) single-pass scans, so their cost is
+comparable; at 0.13% of a 40ms frame budget, either is comfortably
+real-time-safe for Vox. Run
+`cargo bench -p tpt-dsp-core --bench dsp_bench -- pitch` for current
+numbers.
+
+Vector quantisation (`f32`): linear vs. early-exit-accelerated
+`nearest_vector` (squared Euclidean), at Vox's and Whisper's own target
+codebook sizes (todo.md §31/§34 — vector dimension isn't pinned by either
+spec yet, so 10/16 are representative stand-ins) (`--quick` mode):
+
+| Codebook (entries × dim) | linear scan | accelerated | speedup |
+| --- | ---: | ---: | ---: |
+| 1024 × 10 | 2.89 µs | 0.97 µs | ~3.0× |
+| 4096 × 16 | 16.5 µs | 4.60 µs | ~3.6× |
+
+The accelerated speedup is data-dependent (it comes from abandoning a
+codeword's partial distance as soon as it can't win), so treat this as
+representative, not a guarantee, for a different codebook/query
+distribution. Run `cargo bench -p tpt-dsp-core --bench dsp_bench --
+vq_f32` for current numbers.
+
+Psychoacoustic model (`f32`): `simultaneous_masking` across the full
+audible range (25 Bark bands, so O(25²) masker-vs-target pairs),
+`classify_tonal_bins` over a 1024-bin power spectrum (Aura's default MDCT
+block half-size), and the cheap frequency-scale helpers (`--quick` mode):
+
+| Benchmark | time (median) |
+| --- | ---: |
+| `psychoacoustic_f32/simultaneous_masking_25_bands` | 6.72 µs |
+| `psychoacoustic_f32/classify_tonal_bins_1024` | 594 ns |
+| `psychoacoustic_f32/fft_bin_bark_bands_1024` | 1.85 µs |
+| `psychoacoustic_f32/hz_to_bark` | 0.87 ns |
+
+Run `cargo bench -p tpt-dsp-core --bench dsp_bench -- psychoacoustic` for
+current numbers.
+
+Noise shaping (`f32`): `noise_shape_step` at a plain first-order shaper
+and a higher order matching Aura's LPC order range (`--quick` mode):
+
+| Benchmark | time (median) |
+| --- | ---: |
+| `noise_shaping_f32/noise_shape_step/1` | 4.87 ns |
+| `noise_shaping_f32/noise_shape_step/16` | 16.5 ns |
+
+Scales linearly with order (one multiply-add per feedback tap), as
+expected. Run `cargo bench -p tpt-dsp-core --bench dsp_bench --
+noise_shaping` for current numbers.
 
 Buffers:
 
