@@ -125,9 +125,13 @@ mod tests {
         let n = 16usize;
         for x in 0..8i64 {
             for y in 0..8i64 {
-                let direct = (core::f64::consts::PI / n as f64 * (x as f64 / 2.0) * (y as f64 / 2.0)).cos();
+                let direct =
+                    (core::f64::consts::PI / n as f64 * (x as f64 / 2.0) * (y as f64 / 2.0)).cos();
                 let reduced: f64 = cos_pi_over_n(n, x, y);
-                assert!((direct - reduced).abs() < 1e-9, "x={x} y={y}: direct={direct} reduced={reduced}");
+                assert!(
+                    (direct - reduced).abs() < 1e-9,
+                    "x={x} y={y}: direct={direct} reduced={reduced}"
+                );
             }
         }
     }
@@ -142,8 +146,12 @@ mod tests {
         let n = 1024usize;
         let two_x = 2 * 2047 + 1 + n as i64; // mdct's `2m+1+n` at m = 2n-1
         let two_y = 2 * 571 + 1; // mdct's `2k+1` at k = 571
-        let direct = (core::f64::consts::PI / n as f64 * (two_x as f64 / 2.0) * (two_y as f64 / 2.0)).cos();
+        let direct =
+            (core::f64::consts::PI / n as f64 * (two_x as f64 / 2.0) * (two_y as f64 / 2.0)).cos();
         let reduced: f64 = cos_pi_over_n(n, two_x, two_y);
-        assert!((direct - reduced).abs() < 1e-9, "direct={direct} reduced={reduced}");
+        assert!(
+            (direct - reduced).abs() < 1e-9,
+            "direct={direct} reduced={reduced}"
+        );
     }
 }

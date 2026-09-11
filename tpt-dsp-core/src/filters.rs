@@ -4,6 +4,30 @@
 //! allocation-free. Coefficient-owning structs ([`Fir`], [`IirFilter`])
 //! require the `alloc` feature; the single-stage [`Biquad`] is fully
 //! `no_std`.
+//!
+//! # Numerical contract (§12)
+//!
+//! - **Input domain**: `BiquadCoeffs::design` requires `fs > 0` and `f0` in
+//!   `(0, fs/2]` (see its own `# Panics`); the processing functions
+//!   (`process_biquad`, `Biquad`/`Fir`/`IirFilter` methods) accept any
+//!   finite sample values and any coefficients — a filter is just a linear
+//!   recurrence, so it has no domain restriction of its own beyond what its
+//!   coefficients' stability requires (an unstable/marginally-stable design
+//!   can still amplify without bound; that's a property of the requested
+//!   coefficients, not a bug in the processing functions).
+//! - **Output domain**: unbounded for the same reason — a stable filter's
+//!   steady-state output is bounded by its gain times the input's bound,
+//!   but this module makes no runtime claim about stability, since that
+//!   depends entirely on caller-supplied coefficients.
+//! - **Precision / acceptable error**: RBJ cookbook designs are verified
+//!   against their intended analog response — the all-pass design holds
+//!   unit amplitude to `1e-3` (`allpass_...amplitude`) and a shelf/peaking
+//!   design's DC gain matches its target to `1e-6` (`...dc_gain`). These
+//!   are frequency-response spot checks on specific designs, not a general
+//!   error bound for arbitrary coefficients — precision for `process_biquad`/
+//!   `Fir`/`IirFilter` themselves is bounded only by the caller's own
+//!   `f32`/`f64` choice, since the recurrence is exact arithmetic on
+//!   whatever coefficients and samples are supplied.
 
 use num_traits::Float;
 

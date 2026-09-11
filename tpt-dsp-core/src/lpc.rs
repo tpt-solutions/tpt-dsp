@@ -20,6 +20,23 @@
 //! first sample is never predicted), and [`synthesize`] mirrors the same
 //! truncation, making the two exact inverses of one another regardless of
 //! where the coefficients came from.
+//!
+//! # Numerical contract (§12)
+//!
+//! - **Output domain**: `autocorrelation` and `levinson_durbin`'s returned
+//!   error energy are non-negative for real input (sums of squares /
+//!   variance-reduction steps); LPC coefficients, `predict`, `residual`,
+//!   and `synthesize` outputs are otherwise unbounded — finite input
+//!   produces finite output, with no fixed range.
+//! - **Precision / acceptable error**: `levinson_durbin` recovers the exact
+//!   coefficients of an idealized pure-tone autocorrelation to `1e-9` in
+//!   `f64` (`levinson_durbin_predicts_pure_tone`); `predict`/`residual` are
+//!   plain finite sums of the input's own values, so they inherit whatever
+//!   precision the caller's samples and coefficients already carry (no
+//!   additional tolerance to budget for); `residual` then `synthesize` is
+//!   an *exact* algebraic inverse (`residual_then_synthesize_is_identity`,
+//!   `1e-12` in `f64`, i.e. accumulated floating-point rounding only, not a
+//!   modeling approximation).
 
 use num_traits::Float;
 
@@ -30,7 +47,11 @@ use num_traits::Float;
 ///
 /// Panics if `out.len() != order + 1`.
 pub fn autocorrelation<F: Float>(x: &[F], order: usize, out: &mut [F]) {
-    assert_eq!(out.len(), order + 1, "autocorrelation output must have order+1 entries");
+    assert_eq!(
+        out.len(),
+        order + 1,
+        "autocorrelation output must have order+1 entries"
+    );
     for (k, slot) in out.iter_mut().enumerate() {
         let mut acc = F::zero();
         if k < x.len() {
@@ -63,7 +84,11 @@ pub fn autocorrelation<F: Float>(x: &[F], order: usize, out: &mut [F]) {
 pub fn levinson_durbin<F: Float>(r: &[F], coeffs_out: &mut [F], scratch: &mut [F]) -> F {
     assert!(!r.is_empty(), "autocorrelation sequence must be non-empty");
     let order = r.len() - 1;
-    assert_eq!(coeffs_out.len(), order, "coeffs_out must have order entries");
+    assert_eq!(
+        coeffs_out.len(),
+        order,
+        "coeffs_out must have order entries"
+    );
     assert_eq!(scratch.len(), order, "scratch must have order entries");
     for c in coeffs_out.iter_mut() {
         *c = F::zero();
@@ -101,7 +126,10 @@ pub fn levinson_durbin<F: Float>(r: &[F], coeffs_out: &mut [F], scratch: &mut [F
 ///
 /// Panics if `history.len() < coeffs.len()`.
 pub fn predict<F: Float>(history: &[F], coeffs: &[F]) -> F {
-    assert!(history.len() >= coeffs.len(), "not enough history for prediction order");
+    assert!(
+        history.len() >= coeffs.len(),
+        "not enough history for prediction order"
+    );
     let h = history.len();
     let mut acc = F::zero();
     for (k, c) in coeffs.iter().enumerate() {
@@ -117,7 +145,11 @@ pub fn predict<F: Float>(history: &[F], coeffs: &[F]) -> F {
 ///
 /// Panics if `out.len() != x.len()`.
 pub fn residual<F: Float>(x: &[F], coeffs: &[F], out: &mut [F]) {
-    assert_eq!(out.len(), x.len(), "residual output must match input length");
+    assert_eq!(
+        out.len(),
+        x.len(),
+        "residual output must match input length"
+    );
     let order = coeffs.len();
     for i in 0..x.len() {
         let take = order.min(i);
@@ -136,7 +168,11 @@ pub fn residual<F: Float>(x: &[F], coeffs: &[F], out: &mut [F]) {
 ///
 /// Panics if `out.len() != residual.len()`.
 pub fn synthesize<F: Float>(residual: &[F], coeffs: &[F], out: &mut [F]) {
-    assert_eq!(out.len(), residual.len(), "synthesis output must match residual length");
+    assert_eq!(
+        out.len(),
+        residual.len(),
+        "synthesis output must match residual length"
+    );
     let order = coeffs.len();
     for i in 0..residual.len() {
         let take = order.min(i);
@@ -249,8 +285,14 @@ mod tests {
         let mut coeffs = [0.0f64];
         let mut scratch = [0.0f64];
         let err = levinson_durbin(&r, &mut coeffs, &mut scratch);
-        assert_eq!(err, 1.0, "must return the (unchanged) error from before the aborted iteration");
-        assert_eq!(coeffs[0], 0.0, "the unstable coefficient must stay zero, not be set to k");
+        assert_eq!(
+            err, 1.0,
+            "must return the (unchanged) error from before the aborted iteration"
+        );
+        assert_eq!(
+            coeffs[0], 0.0,
+            "the unstable coefficient must stay zero, not be set to k"
+        );
     }
 
     #[test]
@@ -272,7 +314,10 @@ mod tests {
         let mut scratch = [0.0f64; 2];
         let err = levinson_durbin(&r, &mut coeffs, &mut scratch);
         assert_eq!(err, 0.75);
-        assert_eq!(coeffs[0], 0.5, "stable prefix from the completed i=0 iteration must be kept");
+        assert_eq!(
+            coeffs[0], 0.5,
+            "stable prefix from the completed i=0 iteration must be kept"
+        );
         assert_eq!(coeffs[1], 0.0, "the aborted i=1 coefficient must stay zero");
     }
 

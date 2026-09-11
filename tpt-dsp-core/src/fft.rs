@@ -14,6 +14,32 @@
 //! 2. `log2(n)` butterfly stages; each stage combines pairs of the previous
 //!    half-size transforms. Twiddle factors are computed once into a scratch
 //!    buffer and reused across all blocks of a stage.
+//!
+//! # Numerical contract
+//!
+//! - **Input domain**: any finite `Complex<F>` values; every function here
+//!   panics (see each function's own `# Panics`) rather than producing a
+//!   silently wrong answer if a length isn't a power of two or a buffer is
+//!   too small.
+//! - **Output domain**: unbounded — a DFT is a linear transform with no
+//!   fixed output range, so the only domain guarantee is that finite input
+//!   produces finite output (this module never introduces a NaN/Inf that
+//!   wasn't already reachable from the input).
+//! - **Normalization**: forward ([`fft`]/[`fft_inplace`]/[`fft_inplace_f32`])
+//!   is unnormalized, `X[k] = Σ x[n]·e^(-2πi·nk/N)`; inverse
+//!   ([`ifft`]/[`ifft_inplace`]) applies the standard `1/N` scaling, so
+//!   `ifft(fft(x)) == x` (up to floating-point error) — not
+//!   `fft(fft(x))/N` or any other convention.
+//! - **Precision / acceptable error**: verified against a naive O(N²) DFT
+//!   reference at sizes up to N=1024. `f32` matches the reference to an
+//!   absolute tolerance of `1e-3` (`fft_matches_naive`), and a full
+//!   forward+inverse round trip recovers the original signal to `1e-4`
+//!   (`roundtrip_various_lengths`, `f32_specialised_matches_generic`);
+//!   `f64` matches the reference to `1e-10` (`f64_matches_naive`). These
+//!   are the tightest tolerances the test suite currently passes at the
+//!   sizes exercised, not a derived error bound — but they're a reasonable
+//!   expectation for callers: budget ~1e-3–1e-4 relative error in `f32`,
+//!   ~1e-9–1e-10 in `f64`.
 
 use num_complex::Complex;
 use num_traits::Float;
@@ -41,6 +67,10 @@ pub fn next_power_of_two(n: usize) -> usize {
 ///
 /// This is exposed so a caller can precompute twiddles once and reuse them
 /// across many transforms; [`fft_inplace`] also fills it for you.
+///
+/// # Panics
+///
+/// Panics if `len` isn't a power of two, or `scratch.len() < len`.
 pub fn twiddles<F: Float>(len: usize, scratch: &mut [Complex<F>]) {
     assert!(
         len <= scratch.len(),
@@ -61,6 +91,10 @@ pub fn twiddles<F: Float>(len: usize, scratch: &mut [Complex<F>]) {
 ///
 /// `buf.len()` must be a power of two and `scratch.len() >= buf.len()`.
 /// On return `buf` holds `X[k] = Σ x[n]·e^(-2πi·nk/N)`.
+///
+/// # Panics
+///
+/// Panics if `buf.len()` isn't a power of two, or `scratch.len() < buf.len()`.
 pub fn fft_inplace<F: Float>(buf: &mut [Complex<F>], scratch: &mut [Complex<F>]) {
     let n = buf.len();
     assert!(is_power_of_two(n), "FFT length must be a power of two");
@@ -91,6 +125,10 @@ pub fn fft_inplace<F: Float>(buf: &mut [Complex<F>], scratch: &mut [Complex<F>])
 /// butterfly inner loop is delegated to [`crate::simd::fft_butterfly`], which
 /// is vectorised with `core::simd` when the nightly-only `simd` feature is
 /// enabled and plain scalar code otherwise.
+///
+/// # Panics
+///
+/// Panics if `buf.len()` isn't a power of two, or `scratch.len() < buf.len()`.
 pub fn fft_inplace_f32(buf: &mut [Complex<f32>], scratch: &mut [Complex<f32>]) {
     let n = buf.len();
     assert!(is_power_of_two(n), "FFT length must be a power of two");
@@ -112,6 +150,11 @@ pub fn fft_inplace_f32(buf: &mut [Complex<f32>], scratch: &mut [Complex<f32>]) {
 }
 
 /// Inverse in-place DFT of `buf` (`x[n] = (1/N)·Σ X[k]·e^(+2πi·nk/N)`).
+///
+/// # Panics
+///
+/// Panics if `buf.len()` isn't a power of two, or `scratch.len() < buf.len()`
+/// (both via [`fft_inplace`]).
 pub fn ifft_inplace<F: Float>(buf: &mut [Complex<F>], scratch: &mut [Complex<F>]) {
     let n = buf.len();
     conjugate(buf);
@@ -125,6 +168,11 @@ pub fn ifft_inplace<F: Float>(buf: &mut [Complex<F>], scratch: &mut [Complex<F>]
 
 /// Out-of-place forward transform: writes the DFT of `input` into `out`.
 /// `out.len() == input.len()`, power of two; `scratch.len() >= len`.
+///
+/// # Panics
+///
+/// Panics if `input.len() != out.len()`, that length isn't a power of two,
+/// or `scratch.len() < input.len()`.
 pub fn fft<F: Float>(input: &[Complex<F>], out: &mut [Complex<F>], scratch: &mut [Complex<F>]) {
     assert_eq!(input.len(), out.len(), "input/output length mismatch");
     out.copy_from_slice(input);
@@ -132,6 +180,11 @@ pub fn fft<F: Float>(input: &[Complex<F>], out: &mut [Complex<F>], scratch: &mut
 }
 
 /// Out-of-place inverse transform.
+///
+/// # Panics
+///
+/// Panics if `input.len() != out.len()`, that length isn't a power of two,
+/// or `scratch.len() < input.len()`.
 pub fn ifft<F: Float>(input: &[Complex<F>], out: &mut [Complex<F>], scratch: &mut [Complex<F>]) {
     assert_eq!(input.len(), out.len(), "input/output length mismatch");
     out.copy_from_slice(input);

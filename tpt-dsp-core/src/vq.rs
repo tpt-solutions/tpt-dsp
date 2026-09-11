@@ -13,6 +13,23 @@
 //! occupying `codebook[i*dim .. (i+1)*dim]`). All free functions here are
 //! allocation-free and operate on caller-owned buffers; [`VqCodebook`] (an
 //! owning convenience wrapper) requires the `alloc` feature.
+//!
+//! # Numerical contract (§12)
+//!
+//! - **Input domain**: any finite query/codebook values, any `entries ≥ 1`
+//!   / `dim ≥ 1` (functions panic on a malformed flat codebook length).
+//! - **Output domain**: `nearest_vector`/`nearest_vector_accelerated` return
+//!   an index in `0..entries`, always defined for a non-empty codebook,
+//!   with deterministic lowest-index tie-breaking; `vq_encode`/`vq_decode`
+//!   are exact lookups/writes of caller data, not approximations.
+//! - **Precision / acceptable error**: unlike the transforms above, VQ
+//!   search is *exact* arithmetic (a finite sum of squared/absolute
+//!   differences, compared with ordinary `<`) — there is no approximation
+//!   tolerance to state. The one property that needs proving, not just
+//!   asserting, is that the accelerated early-exit search never picks a
+//!   different codeword than the linear scan: verified bit-identical
+//!   across 2 metrics × 20 random queries against a 40-entry codebook
+//!   (`accelerated_matches_linear_search`).
 
 use num_traits::Float;
 
@@ -66,7 +83,11 @@ impl DistanceMetric {
 /// Panics if `dim == 0` or `codebook_len` is not a multiple of `dim`.
 fn entry_count(codebook_len: usize, dim: usize) -> usize {
     assert!(dim > 0, "vector dimension must be positive");
-    assert_eq!(codebook_len % dim, 0, "codebook length must be a multiple of `dim`");
+    assert_eq!(
+        codebook_len % dim,
+        0,
+        "codebook length must be a multiple of `dim`"
+    );
     codebook_len / dim
 }
 
@@ -82,7 +103,12 @@ fn entry_count(codebook_len: usize, dim: usize) -> usize {
 ///
 /// Panics if `dim == 0`, `codebook.len()` is not a multiple of `dim`,
 /// `codebook` has zero entries, or `query.len() != dim`.
-pub fn nearest_vector<F: Float>(codebook: &[F], dim: usize, query: &[F], metric: DistanceMetric) -> (usize, F) {
+pub fn nearest_vector<F: Float>(
+    codebook: &[F],
+    dim: usize,
+    query: &[F],
+    metric: DistanceMetric,
+) -> (usize, F) {
     let entries = entry_count(codebook.len(), dim);
     assert!(entries > 0, "codebook must have at least one entry");
     assert_eq!(query.len(), dim, "query length must equal `dim`");
@@ -153,9 +179,19 @@ pub fn nearest_vector_accelerated<F: Float>(
 ///
 /// Panics if `dim == 0`, `input.len()` is not a multiple of `dim`,
 /// `out.len() != input.len()/dim`, or `codebook` is empty/malformed.
-pub fn vq_encode<F: Float>(codebook: &[F], dim: usize, input: &[F], metric: DistanceMetric, out: &mut [u32]) {
+pub fn vq_encode<F: Float>(
+    codebook: &[F],
+    dim: usize,
+    input: &[F],
+    metric: DistanceMetric,
+    out: &mut [u32],
+) {
     assert!(dim > 0, "vector dimension must be positive");
-    assert_eq!(input.len() % dim, 0, "input length must be a multiple of `dim`");
+    assert_eq!(
+        input.len() % dim,
+        0,
+        "input length must be a multiple of `dim`"
+    );
     let n = input.len() / dim;
     assert_eq!(out.len(), n, "out length must equal input.len()/dim");
     for (i, slot) in out.iter_mut().enumerate() {
@@ -175,7 +211,11 @@ pub fn vq_encode<F: Float>(codebook: &[F], dim: usize, input: &[F], metric: Dist
 /// range for `codebook`.
 pub fn vq_decode<F: Float>(codebook: &[F], dim: usize, indices: &[u32], out: &mut [F]) {
     let entries = entry_count(codebook.len(), dim);
-    assert_eq!(out.len(), indices.len() * dim, "out length must equal indices.len()*dim");
+    assert_eq!(
+        out.len(),
+        indices.len() * dim,
+        "out length must equal indices.len()*dim"
+    );
     for (i, &idx) in indices.iter().enumerate() {
         let idx = idx as usize;
         assert!(idx < entries, "codebook index out of range");
@@ -251,7 +291,12 @@ mod tests {
 
     #[test]
     fn nearest_vector_finds_closest_corner() {
-        let (idx, _) = nearest_vector(&SQUARE_CODEBOOK, 2, &[9.0, 1.0], DistanceMetric::SquaredEuclidean);
+        let (idx, _) = nearest_vector(
+            &SQUARE_CODEBOOK,
+            2,
+            &[9.0, 1.0],
+            DistanceMetric::SquaredEuclidean,
+        );
         assert_eq!(idx, 1); // (10,0) is closest to (9,1)
     }
 
@@ -259,10 +304,24 @@ mod tests {
     fn ties_break_toward_lowest_index_and_are_deterministic() {
         // (5,5) is exactly equidistant from all four corners under either metric.
         let query = [5.0, 5.0];
-        let (idx1, d1) = nearest_vector(&SQUARE_CODEBOOK, 2, &query, DistanceMetric::SquaredEuclidean);
-        let (idx2, d2) = nearest_vector(&SQUARE_CODEBOOK, 2, &query, DistanceMetric::SquaredEuclidean);
+        let (idx1, d1) = nearest_vector(
+            &SQUARE_CODEBOOK,
+            2,
+            &query,
+            DistanceMetric::SquaredEuclidean,
+        );
+        let (idx2, d2) = nearest_vector(
+            &SQUARE_CODEBOOK,
+            2,
+            &query,
+            DistanceMetric::SquaredEuclidean,
+        );
         assert_eq!(idx1, 0, "must break the tie toward the lowest index");
-        assert_eq!((idx1, d1), (idx2, d2), "repeated calls on the same input must agree");
+        assert_eq!(
+            (idx1, d1),
+            (idx2, d2),
+            "repeated calls on the same input must agree"
+        );
     }
 
     #[test]
@@ -314,7 +373,13 @@ mod tests {
         // Two input vectors, each closest to a distinct corner.
         let input = [9.0f64, 1.0, 1.0, 9.0];
         let mut indices = [0u32; 2];
-        vq_encode(&SQUARE_CODEBOOK, dim, &input, DistanceMetric::SquaredEuclidean, &mut indices);
+        vq_encode(
+            &SQUARE_CODEBOOK,
+            dim,
+            &input,
+            DistanceMetric::SquaredEuclidean,
+            &mut indices,
+        );
         assert_eq!(indices, [1, 2]);
 
         let mut reconstructed = [0.0f64; 4];
@@ -331,13 +396,25 @@ mod tests {
         let input = [9.0f64, 1.0, 1.0, 9.0, 4.0, 4.0];
         let n = input.len() / dim;
         let mut indices = vec![0u32; n];
-        vq_encode(&SQUARE_CODEBOOK, dim, &input, DistanceMetric::SquaredEuclidean, &mut indices);
+        vq_encode(
+            &SQUARE_CODEBOOK,
+            dim,
+            &input,
+            DistanceMetric::SquaredEuclidean,
+            &mut indices,
+        );
 
         let mut decoded = vec![0.0f64; input.len()];
         vq_decode(&SQUARE_CODEBOOK, dim, &indices, &mut decoded);
 
         let mut re_encoded = vec![0u32; n];
-        vq_encode(&SQUARE_CODEBOOK, dim, &decoded, DistanceMetric::SquaredEuclidean, &mut re_encoded);
+        vq_encode(
+            &SQUARE_CODEBOOK,
+            dim,
+            &decoded,
+            DistanceMetric::SquaredEuclidean,
+            &mut re_encoded,
+        );
         assert_eq!(indices, re_encoded);
     }
 
@@ -349,7 +426,12 @@ mod tests {
         assert_eq!(cb.len(), 4);
         assert!(!cb.is_empty());
 
-        let free = nearest_vector(&SQUARE_CODEBOOK, 2, &[9.0, 1.0], DistanceMetric::SquaredEuclidean);
+        let free = nearest_vector(
+            &SQUARE_CODEBOOK,
+            2,
+            &[9.0, 1.0],
+            DistanceMetric::SquaredEuclidean,
+        );
         let wrapped = cb.nearest(&[9.0, 1.0], DistanceMetric::SquaredEuclidean);
         assert_eq!(free, wrapped);
     }

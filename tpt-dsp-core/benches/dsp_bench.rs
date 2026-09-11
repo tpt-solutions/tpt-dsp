@@ -11,8 +11,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use std::hint::black_box;
 use tpt_dsp_core::{
     amdf_pitch, autocorrelation, autocorrelation_pitch, classify_tonal_bins, complex_add_simd,
-    complex_mul_simd, dct_ii, dct_iii, dct_iv, exp_i, fft, fft_inplace, fft_inplace_f32,
-    fft_bin_bark_bands, hilbert, hz_range_to_period_samples, hz_to_bark, ifft_inplace, imdct,
+    complex_mul_simd, dct_ii, dct_iii, dct_iv, exp_i, fft, fft_bin_bark_bands, fft_inplace,
+    fft_inplace_f32, hilbert, hz_range_to_period_samples, hz_to_bark, ifft_inplace, imdct,
     levinson_durbin, magnitude, magnitude_simd, magnitude_squared, mdct, nearest_vector,
     nearest_vector_accelerated, noise_shape_step, phase, predict, residual, rotate,
     simultaneous_masking, synthesize, twiddles, windowed, DistanceMetric, FastDctIvPlan,
@@ -227,16 +227,30 @@ fn bench_lpc(c: &mut Criterion) {
         let mut coeffs = vec![0.0f64; order];
         let mut scratch = vec![0.0f64; order];
         group.throughput(Throughput::Elements(LPC_BLOCK_SIZE as u64));
-        group.bench_with_input(BenchmarkId::new("autocorrelation", order), &order, |b, &order| {
-            b.iter(|| autocorrelation(black_box(&input), black_box(order), black_box(&mut r)))
-        });
+        group.bench_with_input(
+            BenchmarkId::new("autocorrelation", order),
+            &order,
+            |b, &order| {
+                b.iter(|| autocorrelation(black_box(&input), black_box(order), black_box(&mut r)))
+            },
+        );
         // Autocorrelation of a real signal decays toward zero at higher
         // lags, so `r` from the loop above is a realistic (not synthetic)
         // input for Levinson-Durbin.
         autocorrelation(&input, order, &mut r);
-        group.bench_with_input(BenchmarkId::new("levinson_durbin", order), &order, |b, _| {
-            b.iter(|| levinson_durbin(black_box(&r), black_box(&mut coeffs), black_box(&mut scratch)))
-        });
+        group.bench_with_input(
+            BenchmarkId::new("levinson_durbin", order),
+            &order,
+            |b, _| {
+                b.iter(|| {
+                    levinson_durbin(
+                        black_box(&r),
+                        black_box(&mut coeffs),
+                        black_box(&mut scratch),
+                    )
+                })
+            },
+        );
     }
     group.finish();
 
@@ -270,16 +284,32 @@ fn bench_pitch(c: &mut Criterion) {
     let mut group = c.benchmark_group("pitch_f64");
     group.throughput(Throughput::Elements(frame.len() as u64));
     group.bench_function("autocorrelation_pitch", |b| {
-        b.iter(|| autocorrelation_pitch(black_box(&frame), black_box(min_p), black_box(max_p), black_box(0.3)))
+        b.iter(|| {
+            autocorrelation_pitch(
+                black_box(&frame),
+                black_box(min_p),
+                black_box(max_p),
+                black_box(0.3),
+            )
+        })
     });
     group.bench_function("amdf_pitch", |b| {
-        b.iter(|| amdf_pitch(black_box(&frame), black_box(min_p), black_box(max_p), black_box(0.3)))
+        b.iter(|| {
+            amdf_pitch(
+                black_box(&frame),
+                black_box(min_p),
+                black_box(max_p),
+                black_box(0.3),
+            )
+        })
     });
     group.finish();
 }
 
 fn query_f32(dim: usize) -> Vec<f32> {
-    (0..dim).map(|i| (i as f32 * 0.037).cos() + 0.2 * (i as f32 * 0.21).sin()).collect()
+    (0..dim)
+        .map(|i| (i as f32 * 0.037).cos() + 0.2 * (i as f32 * 0.21).sin())
+        .collect()
 }
 
 /// Linear vs. early-exit-accelerated `nearest_vector` (todo.md §8
@@ -292,26 +322,34 @@ fn bench_vq(c: &mut Criterion) {
         let query = query_f32(dim);
         let label = format!("{entries}x{dim}");
         group.throughput(Throughput::Elements(entries as u64));
-        group.bench_with_input(BenchmarkId::new("nearest_linear", &label), &(entries, dim), |b, _| {
-            b.iter(|| {
-                nearest_vector(
-                    black_box(&codebook),
-                    black_box(dim),
-                    black_box(&query),
-                    black_box(DistanceMetric::SquaredEuclidean),
-                )
-            })
-        });
-        group.bench_with_input(BenchmarkId::new("nearest_accelerated", &label), &(entries, dim), |b, _| {
-            b.iter(|| {
-                nearest_vector_accelerated(
-                    black_box(&codebook),
-                    black_box(dim),
-                    black_box(&query),
-                    black_box(DistanceMetric::SquaredEuclidean),
-                )
-            })
-        });
+        group.bench_with_input(
+            BenchmarkId::new("nearest_linear", &label),
+            &(entries, dim),
+            |b, _| {
+                b.iter(|| {
+                    nearest_vector(
+                        black_box(&codebook),
+                        black_box(dim),
+                        black_box(&query),
+                        black_box(DistanceMetric::SquaredEuclidean),
+                    )
+                })
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("nearest_accelerated", &label),
+            &(entries, dim),
+            |b, _| {
+                b.iter(|| {
+                    nearest_vector_accelerated(
+                        black_box(&codebook),
+                        black_box(dim),
+                        black_box(&query),
+                        black_box(DistanceMetric::SquaredEuclidean),
+                    )
+                })
+            },
+        );
     }
     group.finish();
 }
@@ -345,18 +383,35 @@ fn bench_psychoacoustic(c: &mut Criterion) {
         })
     });
 
-    let power_spectrum = signal_f32(1024).iter().map(|&x| x * x + 1.0).collect::<Vec<f32>>();
+    let power_spectrum = signal_f32(1024)
+        .iter()
+        .map(|&x| x * x + 1.0)
+        .collect::<Vec<f32>>();
     let mut tonal = vec![false; 1024];
     group.throughput(Throughput::Elements(1024));
     group.bench_function("classify_tonal_bins_1024", |b| {
-        b.iter(|| classify_tonal_bins(black_box(&power_spectrum), black_box(7.0), black_box(&mut tonal)))
+        b.iter(|| {
+            classify_tonal_bins(
+                black_box(&power_spectrum),
+                black_box(7.0),
+                black_box(&mut tonal),
+            )
+        })
     });
 
     let mut bands = vec![0usize; 1024 / 2 + 1];
     group.bench_function("fft_bin_bark_bands_1024", |b| {
-        b.iter(|| fft_bin_bark_bands(black_box(sample_rate), black_box(1024), black_box(&mut bands)))
+        b.iter(|| {
+            fft_bin_bark_bands(
+                black_box(sample_rate),
+                black_box(1024),
+                black_box(&mut bands),
+            )
+        })
     });
-    group.bench_function("hz_to_bark", |b| b.iter(|| hz_to_bark(black_box(1234.5f32))));
+    group.bench_function("hz_to_bark", |b| {
+        b.iter(|| hz_to_bark(black_box(1234.5f32)))
+    });
     group.finish();
 }
 
@@ -369,9 +424,20 @@ fn bench_noise_shaping(c: &mut Criterion) {
     for &order in &[1usize, 16] {
         let feedback = vec![0.5f32; order];
         let mut history = vec![0.0f32; order];
-        group.bench_with_input(BenchmarkId::new("noise_shape_step", order), &order, |b, _| {
-            b.iter(|| noise_shape_step(black_box(0.3f32), black_box(&feedback), black_box(&mut history), quantize))
-        });
+        group.bench_with_input(
+            BenchmarkId::new("noise_shape_step", order),
+            &order,
+            |b, _| {
+                b.iter(|| {
+                    noise_shape_step(
+                        black_box(0.3f32),
+                        black_box(&feedback),
+                        black_box(&mut history),
+                        quantize,
+                    )
+                })
+            },
+        );
     }
     group.finish();
 }

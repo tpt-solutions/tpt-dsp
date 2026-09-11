@@ -3,6 +3,33 @@
 //! Direct implementations (O(N²)) that work for any length and are
 //! allocation-free. These are reference-quality baselines; profile-driven
 //! callers may swap in a faster DCT for their specific length.
+//!
+//! # Numerical contract
+//!
+//! - **Input domain**: any finite values, any length `N ≥ 1`; each function
+//!   panics if `out` is too small (see each function's own assertion — none
+//!   otherwise constrain the input).
+//! - **Output domain**: unbounded, same reasoning as [`crate::fft`] — these
+//!   are linear transforms, so output is finite whenever input is finite,
+//!   with no fixed range.
+//! - **Normalization**: all three are *unnormalized* — DCT-II then DCT-III
+//!   recovers `(N/2)·x`, not `x` (`dct_ii_then_iii_roundtrips`), and two
+//!   passes of DCT-IV recover `(N/2)·x` (`dct_iv_orthogonality_roundtrip`).
+//!   Callers wanting an exact round trip must divide by that constant
+//!   themselves; this module never applies an implicit `1/N` the way
+//!   [`crate::fft::ifft`] does for the DFT.
+//! - **Precision / acceptable error**: DCT-II of a constant input matches
+//!   its closed-form value (`N`, then zero elsewhere) to `1e-4` in `f32`
+//!   (`dct_ii_of_constant_is_scaled`); the DCT-II/III round trip holds to
+//!   `1e-3` in `f32` (`dct_ii_then_iii_roundtrips`); the DCT-IV self-inverse
+//!   property holds to `1e-9` in `f64` (`dct_iv_orthogonality_roundtrip`).
+//!   `FastDctIvPlan` (`f32`-only) matches the direct `dct_iv` reference to a
+//!   relative tolerance of `1e-4` at sizes up to 1024
+//!   (`fast_dct_iv_matches_reference`) and its own self-inverse property to
+//!   `1e-2` absolute at N=64 (`fast_dct_iv_is_self_inverse_up_to_scale`,
+//!   looser because it compounds two independent FFT-based passes). As with
+//!   FFT, these are the tightest tolerances the suite currently passes, not
+//!   derived bounds — expect similar orders of magnitude for new callers.
 
 use num_traits::Float;
 
@@ -109,7 +136,13 @@ impl FastDctIvPlan {
             .map(|k| exp_i(step * k as f32 + core::f32::consts::PI / (4.0 * n as f32)))
             .collect();
         let scratch = std::vec![crate::complex::C32::new(0.0, 0.0); two_n];
-        FastDctIvPlan { n, fft, phi, psi, scratch }
+        FastDctIvPlan {
+            n,
+            fft,
+            phi,
+            psi,
+            scratch,
+        }
     }
 
     /// Transform size `N`.
@@ -198,7 +231,10 @@ mod tests {
 
             for (k, (r, f)) in reference.iter().zip(fast.iter()).enumerate() {
                 let tol = 1e-4 * r.abs().max(1.0);
-                assert!((r - f).abs() < tol, "n={n} bin {k}: reference {r} vs fast {f}");
+                assert!(
+                    (r - f).abs() < tol,
+                    "n={n} bin {k}: reference {r} vs fast {f}"
+                );
             }
         }
     }

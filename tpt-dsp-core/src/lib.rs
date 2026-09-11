@@ -68,8 +68,8 @@ mod pitch;
 mod psychoacoustic;
 #[cfg(feature = "alloc")]
 pub mod resample;
-mod vq;
 mod ring;
+mod vq;
 mod windows;
 
 // The vectorised module is only reachable on a toolchain that supports
@@ -124,22 +124,22 @@ pub use windows::{windowed, WindowType};
 #[cfg(feature = "alloc")]
 pub use convolution::{ConvolvePlan, FftConvolver};
 #[cfg(feature = "alloc")]
-pub use vq::VqCodebook;
-#[cfg(feature = "alloc")]
 pub use filters::{Fir, FirDesign, IirCoeffs, IirFilter, IirStage};
 #[cfg(feature = "alloc")]
 pub use hilbert::HilbertTransformer;
 #[cfg(feature = "alloc")]
 pub use lpc::LpcAnalyzer;
 #[cfg(feature = "alloc")]
-pub use noise_shaping::NoiseShaper;
-#[cfg(feature = "alloc")]
 pub use lsp::{
     lpc_to_lsp, lsf_hz_to_lsp_rad, lsp_interpolate, lsp_is_stable, lsp_quantize_uniform,
     lsp_rad_to_lsf_hz, lsp_to_lpc, DEFAULT_GRID_POINTS,
 };
 #[cfg(feature = "alloc")]
+pub use noise_shaping::NoiseShaper;
+#[cfg(feature = "alloc")]
 pub use resample::FIRDecimator;
+#[cfg(feature = "alloc")]
+pub use vq::VqCodebook;
 
 #[cfg(feature = "std")]
 pub use dct::FastDctIvPlan;

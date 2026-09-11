@@ -6,6 +6,27 @@
 //! are generic frequency-scale utilities, not Aura-specific — any codec
 //! or analysis tool that needs a perceptual frequency axis can use them.
 //! Allocation-free; generic over `f32`/`f64` via [`num_traits::Float`].
+//!
+//! # Numerical contract (§12)
+//!
+//! - **Input domain**: frequencies/Bark/ERB-rate values must be
+//!   non-negative (see each function's `# Panics`); `fft_bin_bark_bands`
+//!   requires a positive `fft_size` and an `out` slice of exactly
+//!   `fft_size/2 + 1` entries.
+//! - **Output domain**: `hz_to_bark` is monotonically increasing over its
+//!   whole domain (`hz_to_bark_is_monotonically_increasing`); all outputs
+//!   are finite for finite, non-negative input.
+//! - **Precision / acceptable error**: `hz_to_bark` matches known reference
+//!   points (1kHz≈8.5 Bark, 5kHz≈19 Bark) closely
+//!   (`hz_to_bark_matches_known_reference_points`). The two round trips
+//!   have genuinely different precision, and this is a real property of
+//!   the math, not an inconsistency: `hz_to_erb_rate`/`erb_rate_to_hz` are
+//!   an exact closed-form inverse pair (`log10`/its algebraic inverse), so
+//!   their round trip holds to `1e-6` in `f64`
+//!   (`erb_rate_hz_round_trip_is_exact_closed_form`); `bark_to_hz` has no
+//!   closed-form inverse for Traunmüller's corrected formula and instead
+//!   bisects, so `hz_to_bark`/`bark_to_hz`'s round trip is intentionally
+//!   looser, `< 1.0` Hz (`bark_hz_round_trip`).
 
 use num_traits::Float;
 
@@ -111,7 +132,11 @@ pub fn fft_bin_bark_bands<F: Float>(sample_rate: F, fft_size: usize, out: &mut [
     for (k, slot) in out.iter_mut().enumerate() {
         let freq = F::from(k).unwrap() * sample_rate / F::from(fft_size).unwrap();
         let z = hz_to_bark(freq);
-        *slot = if z <= F::zero() { 0 } else { z.to_usize().unwrap_or(usize::MAX) };
+        *slot = if z <= F::zero() {
+            0
+        } else {
+            z.to_usize().unwrap_or(usize::MAX)
+        };
     }
 }
 
@@ -126,7 +151,11 @@ pub fn fft_bin_bark_bands<F: Float>(sample_rate: F, fft_size: usize, out: &mut [
 /// Panics if `band_of_bin.len() != spectrum.len()`, or any
 /// `band_of_bin[k] >= out.len()`.
 pub fn aggregate_bands<F: Float>(spectrum: &[F], band_of_bin: &[usize], out: &mut [F]) {
-    assert_eq!(band_of_bin.len(), spectrum.len(), "band_of_bin must have one entry per spectrum bin");
+    assert_eq!(
+        band_of_bin.len(),
+        spectrum.len(),
+        "band_of_bin must have one entry per spectrum bin"
+    );
     for (&value, &band) in spectrum.iter().zip(band_of_bin.iter()) {
         assert!(band < out.len(), "band index out of range");
         out[band] = out[band] + value;
@@ -141,8 +170,16 @@ mod tests {
     fn hz_to_bark_matches_known_reference_points() {
         // Widely-cited reference points for the Bark scale (e.g. Zwicker &
         // Fastl's critical-band table): 1kHz ~ 8.5 Bark, 5kHz ~ 19 Bark.
-        assert!((hz_to_bark(1000.0f64) - 8.5).abs() < 0.5, "{}", hz_to_bark(1000.0f64));
-        assert!((hz_to_bark(5000.0f64) - 19.0).abs() < 1.0, "{}", hz_to_bark(5000.0f64));
+        assert!(
+            (hz_to_bark(1000.0f64) - 8.5).abs() < 0.5,
+            "{}",
+            hz_to_bark(1000.0f64)
+        );
+        assert!(
+            (hz_to_bark(5000.0f64) - 19.0).abs() < 1.0,
+            "{}",
+            hz_to_bark(5000.0f64)
+        );
     }
 
     #[test]
@@ -187,7 +224,10 @@ mod tests {
         fft_bin_bark_bands(sample_rate, fft_size, &mut bands);
         assert_eq!(bands[0], 0);
         for w in bands.windows(2) {
-            assert!(w[1] >= w[0], "band index must be non-decreasing with frequency: {w:?}");
+            assert!(
+                w[1] >= w[0],
+                "band index must be non-decreasing with frequency: {w:?}"
+            );
         }
         // Nyquist (24kHz) should land near the top of the Bark scale (~24).
         assert!(*bands.last().unwrap() >= 20);

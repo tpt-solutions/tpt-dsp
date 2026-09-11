@@ -12,6 +12,23 @@
 //! Requires the `alloc` feature for the tap / delay-line storage; the
 //! processing path itself never allocates.
 //!
+//! # Numerical contract (§12)
+//!
+//! - **Input domain**: any finite input samples; `design`/`new` panic on an
+//!   invalid decimation factor or tap count (see their own `# Panics`) —
+//!   no restriction on the samples themselves.
+//! - **Output domain**: unbounded — a FIR is a finite linear combination of
+//!   past inputs, so output is finite whenever input is finite, bounded in
+//!   practice by the filter's own passband gain times the input's bound.
+//! - **Precision / acceptable error**: chunked processing (arbitrary block
+//!   sizes) matches one-shot processing of the same input to `1e-6`
+//!   absolute in `f32` (`decimator_state_carries_across_blocks`) — this
+//!   module doesn't claim a general stopband-attenuation number; that
+//!   depends on the caller-chosen tap count and window, which is a design
+//!   choice, not a property of the decimation/streaming machinery itself.
+//!   (A specific design's passband/stopband behavior is spot-checked
+//!   separately, not as a numerical-precision contract.)
+//!
 //! # License
 //!
 //! Dual licensed under MIT / Apache-2.0. Copyright TPT Solutions.

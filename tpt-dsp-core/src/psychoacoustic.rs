@@ -23,6 +23,34 @@
 //! a final per-band masking threshold, and finally compare that to the
 //! signal's own energy ([`perceptual_weight_db`], the signal-to-mask
 //! ratio) to decide bit allocation.
+//!
+//! # Numerical contract (§12)
+//!
+//! - **Input domain**: `power_to_db`/`threshold_in_quiet` require a strictly
+//!   positive argument (see each function's `# Panics`); the rest accept
+//!   any finite input, with `classify_tonal_bins`/`simultaneous_masking`
+//!   additionally requiring matching slice lengths.
+//! - **Output domain**: dB-valued functions can return any finite value
+//!   (including large negative numbers for very quiet/low frequencies);
+//!   `db_to_power` is always non-negative; `is_tonal_peak`/
+//!   `classify_tonal_bins` return booleans.
+//! - **Precision / acceptable error**: this is a modeling toolkit built
+//!   from closed-form approximations (Terhardt, Schroeder, MPEG-style
+//!   tonal/noise offsets), not a pure math transform, so "precision" means
+//!   something different here than for FFT/DCT/MDCT. The one genuine
+//!   round-trip identity, `db_to_power(power_to_db(p)) == p`, holds to a
+//!   relative tolerance of `1e-9` (`power_db_round_trip`). Everything else
+//!   is validated *relationally*, not against a numeric tolerance: the
+//!   threshold-in-quiet curve is lowest near 3kHz relative to 100Hz/15kHz
+//!   (`threshold_in_quiet_is_lowest_around_a_few_khz`), a masker measurably
+//!   raises the combined threshold near itself and less further away
+//!   (`model_validation_masker_raises_threshold_near_itself_and_decays_away`),
+//!   and `perceptual_weight_db`'s sign matches whether the signal is above
+//!   or below the masking threshold
+//!   (`perceptual_weight_sign_matches_signal_vs_threshold`). There is no
+//!   single "acceptable error" number for the model as a whole — fidelity
+//!   to any one published psychoacoustic standard was an explicit
+//!   non-goal (see the module doc above).
 
 use num_traits::Float;
 
@@ -164,14 +192,30 @@ pub fn simultaneous_masking<F: Float>(
     out_bark: &[F],
     out: &mut [F],
 ) {
-    assert_eq!(band_energy.len(), band_bark.len(), "band arrays must be the same length");
-    assert_eq!(band_energy.len(), band_tonal.len(), "band arrays must be the same length");
+    assert_eq!(
+        band_energy.len(),
+        band_bark.len(),
+        "band arrays must be the same length"
+    );
+    assert_eq!(
+        band_energy.len(),
+        band_tonal.len(),
+        "band arrays must be the same length"
+    );
     assert_eq!(out.len(), out_bark.len(), "out must match out_bark length");
 
     for (slot, &zj) in out.iter_mut().zip(out_bark.iter()) {
         let mut acc = F::zero();
-        for ((&energy, &zi), &tonal) in band_energy.iter().zip(band_bark.iter()).zip(band_tonal.iter()) {
-            let offset = if tonal { tonal_masking_offset_db(zi) } else { noise_masking_offset_db() };
+        for ((&energy, &zi), &tonal) in band_energy
+            .iter()
+            .zip(band_bark.iter())
+            .zip(band_tonal.iter())
+        {
+            let offset = if tonal {
+                tonal_masking_offset_db(zi)
+            } else {
+                noise_masking_offset_db()
+            };
             let spread_db = spreading_function_db(zj - zi) - offset;
             acc = acc + energy * db_to_power(spread_db);
         }
@@ -189,7 +233,10 @@ pub fn simultaneous_masking<F: Float>(
 ///
 /// Panics if `masking_excitation_linear <= 0`.
 pub fn combined_threshold_db<F: Float>(masking_excitation_linear: F, quiet_threshold_db: F) -> F {
-    assert!(masking_excitation_linear > F::zero(), "masking excitation must be positive");
+    assert!(
+        masking_excitation_linear > F::zero(),
+        "masking excitation must be positive"
+    );
     power_to_db(masking_excitation_linear).max(quiet_threshold_db)
 }
 
@@ -242,10 +289,22 @@ mod tests {
         // calculus): the derivative 7.5 - 17.5u/sqrt(1+u^2), u=dz+0.474,
         // is zero at u=0.474 i.e. dz=0.
         let peak = spreading_function_db(0.0f64);
-        assert!(spreading_function_db(1.0f64) < peak, "must decrease moving away from dz=0");
-        assert!(spreading_function_db(-1.0f64) < peak, "must decrease moving away from dz=0");
-        assert!(spreading_function_db(-10.0f64) < peak - 20.0, "must decay well below the peak far away");
-        assert!(spreading_function_db(10.0f64) < peak - 20.0, "must decay well below the peak far away");
+        assert!(
+            spreading_function_db(1.0f64) < peak,
+            "must decrease moving away from dz=0"
+        );
+        assert!(
+            spreading_function_db(-1.0f64) < peak,
+            "must decrease moving away from dz=0"
+        );
+        assert!(
+            spreading_function_db(-10.0f64) < peak - 20.0,
+            "must decay well below the peak far away"
+        );
+        assert!(
+            spreading_function_db(10.0f64) < peak - 20.0,
+            "must decay well below the peak far away"
+        );
     }
 
     #[test]
@@ -273,7 +332,13 @@ mod tests {
         let far_hz = 4000.0f64; // several critical bands away
         let out_bark = [hz_to_bark(near_hz), hz_to_bark(far_hz)];
         let mut excitation = [0.0f64; 2];
-        simultaneous_masking(&band_energy, &band_bark, &band_tonal, &out_bark, &mut excitation);
+        simultaneous_masking(
+            &band_energy,
+            &band_bark,
+            &band_tonal,
+            &out_bark,
+            &mut excitation,
+        );
 
         let near_threshold = combined_threshold_db(excitation[0], threshold_in_quiet(near_hz));
         let far_threshold = combined_threshold_db(excitation[1], threshold_in_quiet(far_hz));
@@ -291,7 +356,13 @@ mod tests {
 
     #[test]
     fn perceptual_weight_sign_matches_signal_vs_threshold() {
-        assert!(perceptual_weight_db(50.0f64, 30.0) > 0.0, "signal above threshold -> positive SMR");
-        assert!(perceptual_weight_db(10.0f64, 30.0) < 0.0, "signal below threshold -> negative SMR");
+        assert!(
+            perceptual_weight_db(50.0f64, 30.0) > 0.0,
+            "signal above threshold -> positive SMR"
+        );
+        assert!(
+            perceptual_weight_db(10.0f64, 30.0) < 0.0,
+            "signal below threshold -> negative SMR"
+        );
     }
 }

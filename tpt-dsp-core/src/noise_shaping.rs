@@ -50,7 +50,11 @@ pub fn noise_shape_step<F: Float>(
     error_history: &mut [F],
     quantize: impl Fn(F) -> F,
 ) -> F {
-    assert_eq!(feedback.len(), error_history.len(), "feedback and error_history must be the same length");
+    assert_eq!(
+        feedback.len(),
+        error_history.len(),
+        "feedback and error_history must be the same length"
+    );
     let mut predicted_error = F::zero();
     for (h, e) in feedback.iter().zip(error_history.iter()) {
         predicted_error = predicted_error + *h * *e;
@@ -98,7 +102,11 @@ pub fn noise_shaper_is_stable<F: Float>(
     steps: usize,
     bound: F,
 ) -> bool {
-    assert_eq!(scratch.len(), feedback.len(), "scratch must match feedback length");
+    assert_eq!(
+        scratch.len(),
+        feedback.len(),
+        "scratch must match feedback length"
+    );
     for slot in scratch.iter_mut() {
         *slot = F::zero();
     }
@@ -126,7 +134,10 @@ impl<F: Float> NoiseShaper<F> {
     /// the filter order).
     pub fn new(feedback: alloc::vec::Vec<F>) -> Self {
         let order = feedback.len();
-        NoiseShaper { feedback, error_history: alloc::vec![F::zero(); order] }
+        NoiseShaper {
+            feedback,
+            error_history: alloc::vec![F::zero(); order],
+        }
     }
 
     /// Filter order (number of feedback taps).
@@ -179,14 +190,19 @@ mod tests {
 
         let mut history = [0.0f64; 1];
         let feedback = [1.0f64]; // classic first-order error-feedback shaper
-        let shaped_sum: f64 = (0..n).map(|_| noise_shape_step(x, &feedback, &mut history, &quantize)).sum();
+        let shaped_sum: f64 = (0..n)
+            .map(|_| noise_shape_step(x, &feedback, &mut history, &quantize))
+            .sum();
         let shaped_avg_error = (shaped_sum / n as f64 - x).abs();
 
         assert!(
             shaped_avg_error < plain_avg_error,
             "shaped avg error={shaped_avg_error} vs plain={plain_avg_error}"
         );
-        assert!(shaped_avg_error < 1e-9, "shaped average should recover {x} almost exactly, got avg error {shaped_avg_error}");
+        assert!(
+            shaped_avg_error < 1e-9,
+            "shaped average should recover {x} almost exactly, got avg error {shaped_avg_error}"
+        );
     }
 
     #[test]
@@ -203,13 +219,20 @@ mod tests {
         let n = 200;
 
         let plain_cumulative: f64 = (0..n).map(|_| quantize(x) - x).sum();
-        assert!(plain_cumulative.abs() > 50.0, "plain cumulative error should grow with N, got {plain_cumulative}");
+        assert!(
+            plain_cumulative.abs() > 50.0,
+            "plain cumulative error should grow with N, got {plain_cumulative}"
+        );
 
         let mut history = [0.0f64];
         let feedback = [1.0f64];
-        let shaped_cumulative: f64 =
-            (0..n).map(|_| noise_shape_step(x, &feedback, &mut history, &quantize) - x).sum();
-        assert!(shaped_cumulative.abs() < 1.0, "shaped cumulative error must stay bounded, got {shaped_cumulative}");
+        let shaped_cumulative: f64 = (0..n)
+            .map(|_| noise_shape_step(x, &feedback, &mut history, &quantize) - x)
+            .sum();
+        assert!(
+            shaped_cumulative.abs() < 1.0,
+            "shaped cumulative error must stay bounded, got {shaped_cumulative}"
+        );
     }
 
     #[test]
@@ -228,7 +251,10 @@ mod tests {
         let y2 = noise_shape_step(0.6, &feedback, &mut history, &quantize);
         assert_eq!(y2, 0.0);
         assert!((history[0] - (-0.4)).abs() < 1e-9, "history={history:?}");
-        assert!((history[1] - 0.4).abs() < 1e-9, "history={history:?} (previous e shifted into slot 1)");
+        assert!(
+            (history[1] - 0.4).abs() < 1e-9,
+            "history={history:?} (previous e shifted into slot 1)"
+        );
     }
 
     #[test]
@@ -240,7 +266,14 @@ mod tests {
         let mut scratch = [0.0f64];
         for &gain in &[1.0f64, 3.0, 1000.0] {
             assert!(
-                noise_shaper_is_stable(&[gain], &mut scratch, 0.5, round_to_step(1.0), 500, 0.500_001),
+                noise_shaper_is_stable(
+                    &[gain],
+                    &mut scratch,
+                    0.5,
+                    round_to_step(1.0),
+                    500,
+                    0.500_001
+                ),
                 "gain={gain} should stay within half a step regardless"
             );
         }
@@ -257,8 +290,22 @@ mod tests {
         // diverges (h=3 -> r=-1.5).
         let bad_quantize = |x: f64| x * 1.5;
         let mut scratch = [0.0f64];
-        assert!(noise_shaper_is_stable(&[0.2f64], &mut scratch, 0.5, bad_quantize, 40, 100.0));
-        assert!(!noise_shaper_is_stable(&[3.0f64], &mut scratch, 0.5, bad_quantize, 40, 100.0));
+        assert!(noise_shaper_is_stable(
+            &[0.2f64],
+            &mut scratch,
+            0.5,
+            bad_quantize,
+            40,
+            100.0
+        ));
+        assert!(!noise_shaper_is_stable(
+            &[3.0f64],
+            &mut scratch,
+            0.5,
+            bad_quantize,
+            40,
+            100.0
+        ));
     }
 
     #[cfg(feature = "alloc")]

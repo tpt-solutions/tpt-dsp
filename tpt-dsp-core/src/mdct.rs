@@ -35,6 +35,26 @@
 //! See the `overlap_add_round_trip_reconstructs_signal` test below for a
 //! worked example, and §5.1 of the project's `todo.md` for the numerical
 //! contract this module fixes.
+//!
+//! # Numerical contract (§12)
+//!
+//! - **Output domain**: unbounded, same reasoning as [`crate::fft`]/
+//!   [`crate::dct`] — finite input produces finite output, no fixed range.
+//! - **Precision / acceptable error**: the direct `mdct`/`imdct` TDAC round
+//!   trip (window → forward → inverse → window → overlap-add) reconstructs
+//!   the original signal to `1e-6` absolute in `f64`
+//!   (`overlap_add_round_trip_reconstructs_signal`). `FastMdctPlan`
+//!   (`f32`-only) matches the direct reference to a relative tolerance of
+//!   `1e-4` at sizes up to 1024, both forward and inverse
+//!   (`fast_matches_reference_forward`/`_inverse`), and its own TDAC round
+//!   trip holds to `1e-3` absolute in `f32`
+//!   (`fast_plan_round_trip_matches_direct_overlap_add`, looser than the
+//!   `f64` direct-path figure above because it's `f32` and compounds an
+//!   FFT-based forward and inverse rather than two direct sums). These are
+//!   the tightest tolerances the suite currently passes, not derived error
+//!   bounds — new callers should budget similar orders of magnitude:
+//!   ~1e-6 in `f64` for the direct path, ~1e-3–1e-4 in `f32` for
+//!   `FastMdctPlan`.
 
 use num_traits::Float;
 
@@ -68,7 +88,11 @@ pub fn sine_window<F: Float>(n: usize, out: &mut [F]) {
 /// Panics if `input.len() != 2 * out.len()`.
 pub fn mdct<F: Float>(input: &[F], out: &mut [F]) {
     let n = out.len();
-    assert_eq!(input.len(), 2 * n, "mdct input must be exactly 2x output length");
+    assert_eq!(
+        input.len(),
+        2 * n,
+        "mdct input must be exactly 2x output length"
+    );
     for (k, slot) in out.iter_mut().enumerate() {
         let two_y = (2 * k + 1) as i64;
         let mut acc = F::zero();
@@ -88,7 +112,11 @@ pub fn mdct<F: Float>(input: &[F], out: &mut [F]) {
 /// Panics if `out.len() != 2 * input.len()`.
 pub fn imdct<F: Float>(input: &[F], out: &mut [F]) {
     let n = input.len();
-    assert_eq!(out.len(), 2 * n, "imdct output must be exactly 2x input length");
+    assert_eq!(
+        out.len(),
+        2 * n,
+        "imdct output must be exactly 2x input length"
+    );
     let norm = F::from(2).unwrap() / F::from(n).unwrap();
     for (i, slot) in out.iter_mut().enumerate() {
         let two_x = (2 * i + 1 + n) as i64;
@@ -213,9 +241,10 @@ impl FastMdctPlan {
         let psi = (0..n)
             .map(|k| {
                 let kf = k as f32;
-                let psi_k = (core::f32::consts::PI / (2.0 * n as f32) + core::f32::consts::FRAC_PI_2) * kf
-                    + core::f32::consts::PI / (4.0 * n as f32)
-                    + core::f32::consts::FRAC_PI_4;
+                let psi_k =
+                    (core::f32::consts::PI / (2.0 * n as f32) + core::f32::consts::FRAC_PI_2) * kf
+                        + core::f32::consts::PI / (4.0 * n as f32)
+                        + core::f32::consts::FRAC_PI_4;
                 exp_i(psi_k)
             })
             .collect();
@@ -223,7 +252,13 @@ impl FastMdctPlan {
             .map(|i| exp_i(core::f32::consts::PI / (2.0 * n as f32) * i as f32))
             .collect();
         let scratch = std::vec![crate::complex::C32::new(0.0, 0.0); two_n];
-        FastMdctPlan { n, fft, psi, phi, scratch }
+        FastMdctPlan {
+            n,
+            fft,
+            psi,
+            phi,
+            scratch,
+        }
     }
 
     /// Half-size `N` (the spectral coefficient count).
@@ -355,7 +390,10 @@ mod tests {
         let input = vec![0.0f64; 2 * n];
         let mut spec = vec![0.0f64; n];
         mdct(&input, &mut spec);
-        assert!(spec.iter().all(|v| *v == 0.0), "silence must produce an all-zero spectrum");
+        assert!(
+            spec.iter().all(|v| *v == 0.0),
+            "silence must produce an all-zero spectrum"
+        );
         let mut back = vec![0.0f64; 2 * n];
         imdct(&spec, &mut back);
         assert!(back.iter().all(|v| *v == 0.0));
@@ -371,10 +409,16 @@ mod tests {
             .collect();
         let mut spec = vec![0.0f32; n];
         mdct(&input, &mut spec);
-        assert!(spec.iter().all(|v| v.is_finite()), "spectrum must stay finite: {spec:?}");
+        assert!(
+            spec.iter().all(|v| v.is_finite()),
+            "spectrum must stay finite: {spec:?}"
+        );
         let mut back = vec![0.0f32; 2 * n];
         imdct(&spec, &mut back);
-        assert!(back.iter().all(|v| v.is_finite()), "reconstructed samples must stay finite: {back:?}");
+        assert!(
+            back.iter().all(|v| v.is_finite()),
+            "reconstructed samples must stay finite: {back:?}"
+        );
     }
 
     #[test]
@@ -391,7 +435,10 @@ mod tests {
         input[0] = f64::NAN;
         let mut spec = vec![0.0f64; n];
         mdct(&input, &mut spec);
-        assert!(spec.iter().any(|v| v.is_nan()), "NaN input must not be silently absorbed");
+        assert!(
+            spec.iter().any(|v| v.is_nan()),
+            "NaN input must not be silently absorbed"
+        );
     }
 
     #[cfg(feature = "std")]

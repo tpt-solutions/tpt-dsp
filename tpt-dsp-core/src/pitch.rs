@@ -40,9 +40,19 @@ pub const DEFAULT_VOICED_THRESHOLD: f64 = 0.3;
 /// # Panics
 ///
 /// Panics if `min_f0_hz <= 0`, `max_f0_hz <= 0`, or `min_f0_hz > max_f0_hz`.
-pub fn hz_range_to_period_samples(sample_rate: f64, min_f0_hz: f64, max_f0_hz: f64) -> (usize, usize) {
-    assert!(min_f0_hz > 0.0 && max_f0_hz > 0.0, "F0 bounds must be positive");
-    assert!(min_f0_hz <= max_f0_hz, "min_f0_hz must not exceed max_f0_hz");
+pub fn hz_range_to_period_samples(
+    sample_rate: f64,
+    min_f0_hz: f64,
+    max_f0_hz: f64,
+) -> (usize, usize) {
+    assert!(
+        min_f0_hz > 0.0 && max_f0_hz > 0.0,
+        "F0 bounds must be positive"
+    );
+    assert!(
+        min_f0_hz <= max_f0_hz,
+        "min_f0_hz must not exceed max_f0_hz"
+    );
     let min_period = ((sample_rate / max_f0_hz).round() as usize).max(1);
     let max_period = ((sample_rate / min_f0_hz).round() as usize).max(min_period);
     (min_period, max_period)
@@ -68,7 +78,8 @@ impl<F: Float> PitchEstimate<F> {
     /// Convert `period_samples` to a fundamental frequency in Hz at the
     /// given sample rate. `None` if unvoiced.
     pub fn frequency_hz(&self, sample_rate: F) -> Option<F> {
-        self.period_samples.map(|p| sample_rate / F::from(p).unwrap())
+        self.period_samples
+            .map(|p| sample_rate / F::from(p).unwrap())
     }
 }
 
@@ -91,7 +102,10 @@ pub fn autocorrelation_pitch<F: Float>(
     voiced_threshold: F,
 ) -> PitchEstimate<F> {
     assert!(min_period >= 1, "min_period must be at least 1");
-    assert!(min_period <= max_period, "min_period must not exceed max_period");
+    assert!(
+        min_period <= max_period,
+        "min_period must not exceed max_period"
+    );
     assert!(
         signal.len() > max_period,
         "signal must be longer than max_period to correlate at the largest lag"
@@ -103,7 +117,11 @@ pub fn autocorrelation_pitch<F: Float>(
     }
     if r0 <= F::zero() {
         // Silence: no energy to be periodic in.
-        return PitchEstimate { period_samples: None, confidence: F::zero(), voiced: false };
+        return PitchEstimate {
+            period_samples: None,
+            confidence: F::zero(),
+            voiced: false,
+        };
     }
 
     // A signal that is genuinely periodic at `period` is, by construction,
@@ -132,7 +150,11 @@ pub fn autocorrelation_pitch<F: Float>(
     // Cauchy-Schwarz bound of 1; clamp to keep `confidence` a valid [0,1].
     let confidence = clamp01(best_norm);
     let voiced = confidence >= voiced_threshold;
-    PitchEstimate { period_samples: voiced.then_some(best_lag), confidence, voiced }
+    PitchEstimate {
+        period_samples: voiced.then_some(best_lag),
+        confidence,
+        voiced,
+    }
 }
 
 /// Estimate the pitch period via the Average Magnitude Difference Function
@@ -157,7 +179,10 @@ pub fn amdf_pitch<F: Float>(
     voiced_threshold: F,
 ) -> PitchEstimate<F> {
     assert!(min_period >= 1, "min_period must be at least 1");
-    assert!(min_period <= max_period, "min_period must not exceed max_period");
+    assert!(
+        min_period <= max_period,
+        "min_period must not exceed max_period"
+    );
     assert!(
         signal.len() > max_period,
         "signal must be longer than max_period to correlate at the largest lag"
@@ -199,7 +224,11 @@ pub fn amdf_pitch<F: Float>(
         clamp01(F::one() - min_amdf / max_amdf)
     };
     let voiced = confidence >= voiced_threshold;
-    PitchEstimate { period_samples: voiced.then_some(best_lag), confidence, voiced }
+    PitchEstimate {
+        period_samples: voiced.then_some(best_lag),
+        confidence,
+        voiced,
+    }
 }
 
 #[inline]
@@ -275,7 +304,11 @@ mod tests {
         let (min_p, max_p) = hz_range_to_period_samples(sample_rate, 50.0, 500.0);
         let est = autocorrelation_pitch(&signal, min_p, max_p, 0.3);
         assert!(est.voiced, "a clean sine must be classified voiced");
-        assert_eq!(est.period_samples, Some(80), "must recover the fundamental, not an octave");
+        assert_eq!(
+            est.period_samples,
+            Some(80),
+            "must recover the fundamental, not an octave"
+        );
         assert!(est.confidence > 0.85, "confidence={}", est.confidence);
         assert!((est.frequency_hz(sample_rate).unwrap() - freq).abs() < 1e-6);
     }
@@ -288,7 +321,11 @@ mod tests {
         let (min_p, max_p) = hz_range_to_period_samples(sample_rate, 50.0, 500.0);
         let est = amdf_pitch(&signal, min_p, max_p, 0.3);
         assert!(est.voiced, "a clean sine must be classified voiced");
-        assert_eq!(est.period_samples, Some(80), "must recover the fundamental, not an octave");
+        assert_eq!(
+            est.period_samples,
+            Some(80),
+            "must recover the fundamental, not an octave"
+        );
         assert!(est.confidence > 0.85, "confidence={}", est.confidence);
     }
 

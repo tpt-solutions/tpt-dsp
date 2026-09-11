@@ -82,7 +82,8 @@ fn find_roots<F: Float>(
     while found < count && i < grid_points {
         let omega = F::from(i).unwrap() * step;
         let val = f(omega);
-        if (prev_val <= F::zero() && val > F::zero()) || (prev_val >= F::zero() && val < F::zero()) {
+        if (prev_val <= F::zero() && val > F::zero()) || (prev_val >= F::zero() && val < F::zero())
+        {
             // Bisect within (prev_omega, omega) for a tighter estimate.
             let mut lo = prev_omega;
             let mut hi = omega;
@@ -90,7 +91,9 @@ fn find_roots<F: Float>(
             for _ in 0..40 {
                 let mid = (lo + hi) / F::from(2).unwrap();
                 let mid_val = f(mid);
-                if (lo_val <= F::zero() && mid_val > F::zero()) || (lo_val >= F::zero() && mid_val < F::zero()) {
+                if (lo_val <= F::zero() && mid_val > F::zero())
+                    || (lo_val >= F::zero() && mid_val < F::zero())
+                {
                     hi = mid;
                 } else {
                     lo = mid;
@@ -159,8 +162,20 @@ pub fn lpc_to_lsp<F: Float>(coeffs: &[F], out: &mut [F], grid_points: usize) -> 
     // P's trivial root sits at omega=pi (the far end), so its search can
     // start right at omega=0; Q's trivial root sits at omega=0, so its
     // search must skip past the start.
-    let p_found = find_roots(|w| chirp_sum(coeffs, w, true), grid_points, 0, half, &mut p_roots);
-    let q_found = find_roots(|w| chirp_sum(coeffs, w, false), grid_points, 1, half, &mut q_roots);
+    let p_found = find_roots(
+        |w| chirp_sum(coeffs, w, true),
+        grid_points,
+        0,
+        half,
+        &mut p_roots,
+    );
+    let q_found = find_roots(
+        |w| chirp_sum(coeffs, w, false),
+        grid_points,
+        1,
+        half,
+        &mut q_roots,
+    );
     if p_found != half || q_found != half {
         return false;
     }
@@ -264,7 +279,11 @@ fn build_from_roots<F: Float>(roots: &[F], carries_plus_one_root: bool, out: &mu
     // quadratic factor one at a time. `out` is used as the accumulator;
     // `out[0..=deg]` holds the current (growing) polynomial.
     out[0] = F::one();
-    out[1] = if carries_plus_one_root { F::one() } else { -F::one() };
+    out[1] = if carries_plus_one_root {
+        F::one()
+    } else {
+        -F::one()
+    };
     for slot in out.iter_mut().skip(2) {
         *slot = F::zero();
     }
@@ -272,11 +291,19 @@ fn build_from_roots<F: Float>(roots: &[F], carries_plus_one_root: bool, out: &mu
 
     for &omega in roots {
         let b1 = -F::from(2).unwrap() * omega.cos(); // (1 + b1 z^-1 + z^-2)
-                                                      // Convolve: new[k] = old[k] + b1*old[k-1] + old[k-2]
+                                                     // Convolve: new[k] = old[k] + b1*old[k-1] + old[k-2]
         for k in (0..=(deg + 2)).rev() {
             let old_k = if k <= deg { out[k] } else { F::zero() };
-            let old_k1 = if k >= 1 && k - 1 <= deg { out[k - 1] } else { F::zero() };
-            let old_k2 = if k >= 2 && k - 2 <= deg { out[k - 2] } else { F::zero() };
+            let old_k1 = if k >= 1 && k - 1 <= deg {
+                out[k - 1]
+            } else {
+                F::zero()
+            };
+            let old_k2 = if k >= 2 && k - 2 <= deg {
+                out[k - 2]
+            } else {
+                F::zero()
+            };
             out[k] = old_k + b1 * old_k1 + old_k2;
         }
         deg += 2;
@@ -369,14 +396,21 @@ mod tests {
     /// actually be stable.
     fn stable_lpc_coeffs(order: usize) -> Vec<f64> {
         let signal: Vec<f64> = (0..512)
-            .map(|i| (i as f64 * 0.31).sin() + 0.5 * (i as f64 * 0.077).cos() + 0.2 * (i as f64 * 0.013).sin())
+            .map(|i| {
+                (i as f64 * 0.31).sin()
+                    + 0.5 * (i as f64 * 0.077).cos()
+                    + 0.2 * (i as f64 * 0.013).sin()
+            })
             .collect();
         let mut r = vec![0.0f64; order + 1];
         autocorrelation(&signal, order, &mut r);
         let mut coeffs = vec![0.0f64; order];
         let mut scratch = vec![0.0f64; order];
         let err = levinson_durbin(&r, &mut coeffs, &mut scratch);
-        assert!(err > 0.0, "test fixture must be a genuinely stable predictor");
+        assert!(
+            err > 0.0,
+            "test fixture must be a genuinely stable predictor"
+        );
         coeffs
     }
 
@@ -387,7 +421,10 @@ mod tests {
             let mut lsp = vec![0.0f64; order];
             let ok = lpc_to_lsp(&coeffs, &mut lsp, DEFAULT_GRID_POINTS);
             assert!(ok, "order={order}: lpc_to_lsp must find all {order} roots");
-            assert!(lsp_is_stable(&lsp), "order={order}: recovered LSP must be valid: {lsp:?}");
+            assert!(
+                lsp_is_stable(&lsp),
+                "order={order}: recovered LSP must be valid: {lsp:?}"
+            );
 
             let mut back = vec![0.0f64; order];
             lsp_to_lpc(&lsp, &mut back);
@@ -405,7 +442,10 @@ mod tests {
         for &rad in &[0.3f64, 1.0, 2.5] {
             let hz = lsp_rad_to_lsf_hz(rad, sample_rate);
             let back = lsf_hz_to_lsp_rad(hz, sample_rate);
-            assert!((back - rad).abs() < 1e-9, "rad={rad}: round trip gave {back}");
+            assert!(
+                (back - rad).abs() < 1e-9,
+                "rad={rad}: round trip gave {back}"
+            );
         }
     }
 
