@@ -96,7 +96,7 @@ pub use complex::{
     exp_i, magnitude, magnitude_squared, phase, rotate, Complex32, Complex64, C32, C64,
 };
 pub use convolution::convolve;
-pub use dct::{dct_ii, dct_iii, dct_iv};
+pub use dct::{dct_2d, dct_ii, dct_iii, dct_iv, idct_2d};
 pub use demod::{phase_delta, phase_to_audio, FmDemodulator};
 pub use fft::{
     fft, fft_inplace, fft_inplace_f32, ifft, ifft_inplace, is_power_of_two, next_power_of_two,

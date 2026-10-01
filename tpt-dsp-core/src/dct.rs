@@ -92,6 +92,81 @@ pub fn dct_iv<F: Float>(input: &[F], out: &mut [F]) {
 /// FFT ([`crate::FftPlan`], RustFFT-backed and hardware-accelerated where
 /// available) instead of the direct O(N²) sum in [`dct_iv`].
 ///
+/// Separable 2D DCT-II over an `n_rows × n_cols` block stored in
+/// row-major order.
+///
+/// `X[u·n_cols + v] = Σ_m Σ_n x[m·n_cols + n]
+///    · cos(π/n_rows·(m + ½)·u) · cos(π/n_cols·(n + ½)·v)`
+///
+/// — exactly the row-by-row then column-by-column composition of the 1D
+/// [`dct_ii`] (JPEG-style 2D DCT). Transforms the block **in place**;
+/// `scratch` must be at least `2·max(n_rows, n_cols)` long and may contain
+/// anything on entry. Works for any `n_rows, n_cols ≥ 1` (the 1D kernels
+/// are length-generic); video codecs typically use 8×8 or 16×16.
+///
+/// # Panics
+///
+/// Panics if `block.len() < n_rows·n_cols` or `scratch` is shorter than
+/// `2·max(n_rows, n_cols)`.
+pub fn dct_2d<F: Float>(block: &mut [F], n_rows: usize, n_cols: usize, scratch: &mut [F]) {
+    let n = n_rows * n_cols;
+    let widest = n_rows.max(n_cols);
+    assert!(block.len() >= n, "block too small for 2D DCT");
+    assert!(scratch.len() >= 2 * widest, "scratch too small for 2D DCT");
+
+    let (row_scratch, col_scratch) = scratch.split_at_mut(widest);
+    // Rows: each row through the 1D DCT-II.
+    for r in 0..n_rows {
+        let row = &block[r * n_cols..(r + 1) * n_cols];
+        dct_ii(row, &mut row_scratch[..n_cols]);
+        block[r * n_cols..(r + 1) * n_cols].copy_from_slice(&row_scratch[..n_cols]);
+    }
+    // Columns: gather, transform, scatter.
+    for c in 0..n_cols {
+        for r in 0..n_rows {
+            col_scratch[r] = block[r * n_cols + c];
+        }
+        dct_ii(&col_scratch[..n_rows], &mut row_scratch[..n_rows]);
+        for r in 0..n_rows {
+            block[r * n_cols + c] = row_scratch[r];
+        }
+    }
+}
+
+/// Inverse of [`dct_2d`] — the row/column composition of 1D [`dct_iii`].
+///
+/// As with the 1D pair, the transform pair is *unnormalized*:
+/// [`dct_2d`] followed by [`idct_2d`] recovers
+/// `(n_rows·n_cols / 4)·x`, so an exact round trip divides by
+/// `n_rows·n_cols / 4` (see `dct_2d_round_trips_up_to_scale`).
+///
+/// # Panics
+///
+/// Same contract as [`dct_2d`].
+pub fn idct_2d<F: Float>(block: &mut [F], n_rows: usize, n_cols: usize, scratch: &mut [F]) {
+    let n = n_rows * n_cols;
+    let widest = n_rows.max(n_cols);
+    assert!(block.len() >= n, "block too small for 2D iDCT");
+    assert!(scratch.len() >= 2 * widest, "scratch too small for 2D iDCT");
+
+    let (row_scratch, col_scratch) = scratch.split_at_mut(widest);
+    // Inverse order: columns first (dct_iii), then rows.
+    for c in 0..n_cols {
+        for r in 0..n_rows {
+            col_scratch[r] = block[r * n_cols + c];
+        }
+        dct_iii(&col_scratch[..n_rows], &mut row_scratch[..n_rows]);
+        for r in 0..n_rows {
+            block[r * n_cols + c] = row_scratch[r];
+        }
+    }
+    for r in 0..n_rows {
+        let row = &block[r * n_cols..(r + 1) * n_cols];
+        dct_iii(row, &mut row_scratch[..n_cols]);
+        block[r * n_cols..(r + 1) * n_cols].copy_from_slice(&row_scratch[..n_cols]);
+    }
+}
+
 /// `std`-only (needs [`crate::FftPlan`]) and `f32`-only (matches
 /// `FftPlan`'s precision). DCT-IV is self-inverse up to the `N/2` scaling
 /// `dct_iv_orthogonality_roundtrip` documents, so `forward` also serves as
@@ -251,6 +326,71 @@ mod tests {
         plan.forward(&first, &mut second);
         for (a, b) in second.iter().zip(input.iter()) {
             assert!((a - b * (n as f32 / 2.0)).abs() < 1e-2, "a={a} b={b}");
+        }
+    }
+    /// §5.3: the direct O(N⁴) double-sum reference for the 2D DCT-II.
+    fn dct_2d_naive_reference(block: &[f64], n_rows: usize, n_cols: usize) -> Vec<f64> {
+        let pi = core::f64::consts::PI;
+        let mut out = vec![0.0; n_rows * n_cols];
+        for u in 0..n_rows {
+            for v in 0..n_cols {
+                let mut acc = 0.0;
+                for m in 0..n_rows {
+                    for n in 0..n_cols {
+                        acc += block[m * n_cols + n]
+                            * ((pi / n_rows as f64) * (m as f64 + 0.5) * u as f64).cos()
+                            * ((pi / n_cols as f64) * (n as f64 + 0.5) * v as f64).cos();
+                    }
+                }
+                out[u * n_cols + v] = acc;
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn dct_2d_matches_naive_double_sum() {
+        // §5.3 "verify against 1D decomposition": the separable
+        // implementation must agree with the direct double sum — a
+        // genuinely independent path — at the video block sizes (8×8,
+        // 16×16) and a non-square shape to prove row/column genericity.
+        for (n_rows, n_cols) in [(8usize, 8usize), (16usize, 16usize), (4usize, 16usize)] {
+            let input: Vec<f64> = (0..n_rows * n_cols)
+                .map(|i| (i as f64 * 0.37).sin() * 50.0 + (i % 7) as f64)
+                .collect();
+            let mut block = input.clone();
+            let mut scratch = vec![0.0f64; 2 * n_rows.max(n_cols)];
+            dct_2d(&mut block, n_rows, n_cols, &mut scratch);
+            let reference = dct_2d_naive_reference(&input, n_rows, n_cols);
+            for (i, (got, want)) in block.iter().zip(reference.iter()).enumerate() {
+                let tol = 1e-6 * want.abs().max(1.0);
+                assert!(
+                    (got - want).abs() < tol,
+                    "{n_rows}x{n_cols} coefficient {i}: separable {got} vs double-sum {want}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dct_2d_round_trips_up_to_scale() {
+        // dct_2d then idct_2d recovers (n_rows·n_cols / 4)·x — the
+        // separable composition of the 1D N/2 round-trip convention.
+        for (n_rows, n_cols) in [(8usize, 8usize), (16usize, 16usize)] {
+            let input: Vec<f64> = (0..n_rows * n_cols)
+                .map(|i| ((i as f64 * 0.11).cos() * 100.0).round())
+                .collect();
+            let mut block = input.clone();
+            let mut scratch = vec![0.0f64; 2 * n_rows.max(n_cols)];
+            dct_2d(&mut block, n_rows, n_cols, &mut scratch);
+            idct_2d(&mut block, n_rows, n_cols, &mut scratch);
+            let scale = (n_rows * n_cols) as f64 / 4.0;
+            for (got, want) in block.iter().zip(input.iter()) {
+                assert!(
+                    (got - want * scale).abs() < 1e-6 * want.abs().max(1.0) * scale,
+                    "{n_rows}x{n_cols}: round trip {got} vs {want}·{scale}"
+                );
+            }
         }
     }
 }

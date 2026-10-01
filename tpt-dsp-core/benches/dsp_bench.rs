@@ -11,8 +11,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use std::hint::black_box;
 use tpt_dsp_core::{
     amdf_pitch, autocorrelation, autocorrelation_pitch, classify_tonal_bins, complex_add_simd,
-    complex_mul_simd, dct_ii, dct_iii, dct_iv, exp_i, fft, fft_bin_bark_bands, fft_inplace,
-    fft_inplace_f32, hilbert, hz_range_to_period_samples, hz_to_bark, ifft_inplace, imdct,
+    complex_mul_simd, dct_2d, dct_ii, dct_iii, dct_iv, exp_i, fft, fft_bin_bark_bands, fft_inplace,
+    fft_inplace_f32, hilbert, hz_range_to_period_samples, hz_to_bark, idct_2d, ifft_inplace, imdct,
     levinson_durbin, magnitude, magnitude_simd, magnitude_squared, mdct, nearest_vector,
     nearest_vector_accelerated, noise_shape_step, phase, predict, residual, rotate,
     simultaneous_masking, synthesize, twiddles, windowed, DistanceMetric, FastDctIvPlan,
@@ -181,6 +181,47 @@ fn bench_dct(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("dct_iv_fast_f32", n), &n, |b, _| {
             b.iter(|| fast_plan.forward(black_box(&input), black_box(&mut out)))
         });
+    }
+    group.finish();
+}
+
+/// §5.3: separable 2D DCT at the video block sizes (8×8, 16×16).
+fn bench_dct_2d(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dct_2d");
+    for (n_rows, n_cols) in [(8usize, 8usize), (16usize, 16usize)] {
+        let n = n_rows * n_cols;
+        let block: Vec<f32> = (0..n).map(|i| (i as f32 * 0.31).sin() * 40.0).collect();
+        let mut work = block.clone();
+        let mut scratch = vec![0.0f32; 2 * n_rows.max(n_cols)];
+        group.throughput(Throughput::Elements(n as u64));
+        group.bench_function(
+            BenchmarkId::new("forward_f32", format!("{n_rows}x{n_cols}")),
+            |b| {
+                b.iter(|| {
+                    work.copy_from_slice(black_box(&block));
+                    dct_2d(
+                        black_box(&mut work),
+                        n_rows,
+                        n_cols,
+                        black_box(&mut scratch),
+                    )
+                })
+            },
+        );
+        group.bench_function(
+            BenchmarkId::new("inverse_f32", format!("{n_rows}x{n_cols}")),
+            |b| {
+                b.iter(|| {
+                    work.copy_from_slice(black_box(&block));
+                    idct_2d(
+                        black_box(&mut work),
+                        n_rows,
+                        n_cols,
+                        black_box(&mut scratch),
+                    )
+                })
+            },
+        );
     }
     group.finish();
 }
@@ -621,6 +662,7 @@ criterion_group!(
     bench_fft_plan_nonpow2,
     bench_twiddles,
     bench_dct,
+    bench_dct_2d,
     bench_mdct,
     bench_lpc,
     bench_pitch,
