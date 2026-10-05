@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Seeded-random scalar-vs-SIMD equivalence sweeps for the five SIMD
+  kernels (`complex_mul`/`complex_add`/`magnitude`/`fft_butterfly`/
+  `fft_inplace_f32`), closing the §40 gap where the equivalence tests
+  used fixed vectors only. SplitMix64-seeded, §40-tracked in
+  tpt-media's master checklist; run wherever the `simd` feature
+  compiles (nightly). The sweep immediately paid for itself by
+  catching its own harness bug — the butterfly consumes `lower`'s
+  *old* value for both outputs, which the first hand-written model
+  got wrong.
+### Added
 - `tpt-dsp-core::FastDct2Plan` and `tpt-dsp-core::FastDct2dPlan`: FFT-backed
   (`FftPlan`/RustFFT, `std`+`f32`-only) DCT-II and DCT-III of a fixed size,
   and the separable in-place 2D counterpart, carrying the direct pair's

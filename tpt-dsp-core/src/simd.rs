@@ -296,6 +296,146 @@ mod tests {
         }
     }
 
+    /// SplitMix64: a tiny deterministic PRNG for the randomized sweeps
+    /// (§40 — the fixed-vector equivalence tests cover the shape of the
+    /// dispatch, these cover the *values*).
+    struct SplitMix64(u64);
+
+    impl SplitMix64 {
+        fn next(&mut self) -> u64 {
+            self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+            let mut z = self.0;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^ (z >> 31)
+        }
+
+        /// A finite `f32` in [-4, 4): 10 random bits scaled, so products
+        /// stay far from both denormals and overflow.
+        fn value(&mut self) -> f32 {
+            ((self.next() >> 54) as f32 - 512.0) / 128.0
+        }
+
+        fn complex(&mut self) -> C32 {
+            C32::new(self.value(), self.value())
+        }
+    }
+
+    #[test]
+    fn simd_mul_randomized_matches_scalar() {
+        let mut rng = SplitMix64(0x5EED_A11A);
+        for _ in 0..64 {
+            let a: Vec<C32> = (0..N).map(|_| rng.complex()).collect();
+            let b: Vec<C32> = (0..N).map(|_| rng.complex()).collect();
+            let mut got = [C32::default(); N];
+            complex_mul_simd(&a, &b, &mut got);
+            for i in 0..N {
+                let want = a[i] * b[i];
+                // Same tolerance shape as the fixed-vector test, scaled
+                // by the operands' magnitude (random values are not the
+                // O(1) samples above).
+                let tol = f32::EPSILON * 16.0 * want.re.abs().max(want.im.abs()).max(1.0);
+                assert!(
+                    (got[i].re - want.re).abs() <= tol && (got[i].im - want.im).abs() <= tol,
+                    "seed {}: got {} want {}",
+                    0x5EED_A11A,
+                    got[i],
+                    want
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn simd_add_randomized_matches_scalar() {
+        let mut rng = SplitMix64(0x0DDB_A11);
+        for _ in 0..64 {
+            let a: Vec<C32> = (0..N).map(|_| rng.complex()).collect();
+            let b: Vec<C32> = (0..N).map(|_| rng.complex()).collect();
+            let mut got = [C32::default(); N];
+            complex_add_simd(&a, &b, &mut got);
+            for i in 0..N {
+                let want = a[i] + b[i];
+                assert!(
+                    got[i] == want,
+                    "add is exact IEEE: got {} want {}",
+                    got[i],
+                    want
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn simd_magnitude_randomized_matches_scalar() {
+        let mut rng = SplitMix64(0xC0FF_EE00);
+        for _ in 0..64 {
+            let input: Vec<C32> = (0..N).map(|_| rng.complex()).collect();
+            let mut got = [0.0f32; N];
+            magnitude_simd(&input, &mut got);
+            for i in 0..N {
+                let want = crate::magnitude(input[i]);
+                assert!(
+                    (got[i] - want).abs() <= f32::EPSILON * 8.0 * want.max(1.0),
+                    "got {} want {}",
+                    got[i],
+                    want
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn fft_butterfly_randomized_matches_scalar() {
+        // One stage over a half of 8 lanes: the butterfly is
+        // t = w·upper; lower += t; upper = upper_old - t — replicate it
+        // element-wise and require bit-identical f32 (the vector path
+        // computes the same expression in the same order).
+        let mut rng = SplitMix64(0xBEEF_CACE);
+        for _ in 0..64 {
+            let half = N;
+            let step = 1usize;
+            let mut lower: Vec<C32> = (0..half).map(|_| rng.complex()).collect();
+            let upper: Vec<C32> = (0..half).map(|_| rng.complex()).collect();
+            let twiddles: Vec<C32> = (0..half * step + 1).map(|_| rng.complex()).collect();
+            let mut lo = lower.clone();
+            let mut up = upper.clone();
+            fft_butterfly(&mut lo, &mut up, &twiddles, step);
+            for k in 0..half {
+                // The butterfly consumes lower's OLD value for both
+                // outputs: lower = lower + w·upper, upper = lower_old -
+                // w·upper (that is what keeps an FFT in place).
+                let t = twiddles[k * step] * upper[k];
+                let want_lower = lower[k] + t;
+                let want_upper = lower[k] - t;
+                assert_eq!(lo[k], want_lower, "lower[{k}]");
+                assert_eq!(up[k], want_upper, "upper[{k}]");
+            }
+        }
+    }
+
+    #[test]
+    fn fft_inplace_f32_randomized_matches_scalar() {
+        use crate::{fft_inplace, fft_inplace_f32};
+        let mut rng = SplitMix64(0xFFF_F00D);
+        for n in [4usize, 8, 16, 64, 256, 1024] {
+            let input: Vec<C32> = (0..n).map(|_| rng.complex()).collect();
+            let mut want = input.clone();
+            let mut scratch = vec![C32::default(); n];
+            fft_inplace(&mut want, &mut scratch);
+            let mut got = input.clone();
+            fft_inplace_f32(&mut got, &mut scratch);
+            let scale = n as f32;
+            for (g, w) in got.iter().zip(want.iter()) {
+                let tol = 1e-4 * scale;
+                assert!(
+                    (g.re - w.re).abs() < tol && (g.im - w.im).abs() < tol,
+                    "n={n}: {g} vs {w}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn mul_alias_dispatches() {
         let a = sample(0.0);

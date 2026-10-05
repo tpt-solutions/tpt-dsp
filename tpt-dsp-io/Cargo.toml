@@ -29,3 +29,7 @@ tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+
+[[example]]
+name = "audio_check"
+required-features = ["audio"]
