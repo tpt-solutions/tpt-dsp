@@ -142,7 +142,7 @@ pub use resample::FIRDecimator;
 pub use vq::VqCodebook;
 
 #[cfg(feature = "std")]
-pub use dct::FastDctIvPlan;
+pub use dct::{FastDct2Plan, FastDct2dPlan, FastDctIvPlan};
 #[cfg(feature = "std")]
 pub use mdct::FastMdctPlan;
 #[cfg(feature = "std")]

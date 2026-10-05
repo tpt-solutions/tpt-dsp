@@ -87,6 +87,16 @@ Other transforms (1024-sample `f32` block unless noted):
 | `complex/phase/1024` | 8.06 µs | 127 Melem/s |
 | `fm_demod/4096` | 42.2 µs | 97.0 Melem/s |
 
+2D DCT-II/III: direct separable `dct_2d`/`idct_2d` vs the FFT-backed
+`FastDct2dPlan`, at the video tile sizes (`f32`, 10 samples; the consumer
+is Vault's RDO, which transforms per candidate):
+
+| Shape | direct forward | fast forward | direct inverse | fast inverse | speedup |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 8x8 | 5.56 µs | 1.17 µs | 5.56 µs | 1.27 µs | ~4.4–4.8× |
+| 16x16 | 45.96 µs | 3.21 µs | 44.79 µs | 2.94 µs | ~14–15× |
+| 32x32 | — | 10.39 µs | — | 11.49 µs | (direct not benched) |
+
 MDCT/IMDCT: direct O(N²) (`mdct`/`imdct`) vs the FFT-backed `FastMdctPlan`
 (todo.md §5.1), at Pulse/Aura's actual block half-sizes (`f32`, `--quick`
 mode, so treat as order-of-magnitude like the rest of this page):

@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `tpt-dsp-core::FastDct2Plan` and `tpt-dsp-core::FastDct2dPlan`: FFT-backed
+  (`FftPlan`/RustFFT, `std`+`f32`-only) DCT-II and DCT-III of a fixed size,
+  and the separable in-place 2D counterpart, carrying the direct pair's
+  exact conventions (`forward` then `inverse` recovers `n/2·x` 1D and
+  `n_rows·n_cols/4·x` 2D; verified against the direct references at
+  4–128 points and 8×8–32×32). Both directions share one length-`2n`
+  inverse FFT: the input is zero-padded and the result extracted through a
+  half-twiddle, so the `+½` sample offsets need no reordering. Motivated
+  by tpt-media's Vault encoder profile (the transform was 88–97% of encode
+  time); measured 4.4–15× faster than the direct pair at the video tile
+  sizes (see `BENCHMARKS.md`).
 - `tpt-dsp-core::FastMdctPlan` and `tpt-dsp-core::FastDctIvPlan`: FFT-backed
   (`FftPlan`/RustFFT) fast MDCT/IMDCT and DCT-IV, `std`+`f32`-only,
   numerically verified against the existing direct O(N²) `mdct`/`imdct`/

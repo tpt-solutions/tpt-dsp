@@ -15,8 +15,9 @@ use tpt_dsp_core::{
     fft_inplace_f32, hilbert, hz_range_to_period_samples, hz_to_bark, idct_2d, ifft_inplace, imdct,
     levinson_durbin, magnitude, magnitude_simd, magnitude_squared, mdct, nearest_vector,
     nearest_vector_accelerated, noise_shape_step, phase, predict, residual, rotate,
-    simultaneous_masking, synthesize, twiddles, windowed, DistanceMetric, FastDctIvPlan,
-    FastMdctPlan, FftPlan, FmDemodulator, RingBuffer, SpscQueue, WindowType, C32, C64,
+    simultaneous_masking, synthesize, twiddles, windowed, DistanceMetric, FastDct2dPlan,
+    FastDctIvPlan, FastMdctPlan, FftPlan, FmDemodulator, RingBuffer, SpscQueue, WindowType, C32,
+    C64,
 };
 
 const FFT_SIZES: [usize; 5] = [128, 256, 1024, 4096, 16384];
@@ -219,6 +220,39 @@ fn bench_dct_2d(c: &mut Criterion) {
                         n_cols,
                         black_box(&mut scratch),
                     )
+                })
+            },
+        );
+    }
+    group.finish();
+}
+
+/// §5.2/5.3: the FFT-backed `FastDct2dPlan` against the direct
+/// separable pair, at the video tile sizes (its consumer is Vault's
+/// RDO, which transforms per candidate).
+fn bench_dct_2d_fast(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dct_2d_fast");
+    for (n_rows, n_cols) in [(8usize, 8usize), (16usize, 16usize), (32usize, 32usize)] {
+        let n = n_rows * n_cols;
+        let block: Vec<f32> = (0..n).map(|i| (i as f32 * 0.31).sin() * 40.0).collect();
+        let mut work = block.clone();
+        let mut plan = FastDct2dPlan::new(n_rows, n_cols);
+        group.throughput(Throughput::Elements(n as u64));
+        group.bench_function(
+            BenchmarkId::new("forward_f32", format!("{n_rows}x{n_cols}")),
+            |b| {
+                b.iter(|| {
+                    work.copy_from_slice(black_box(&block));
+                    plan.forward(black_box(&mut work))
+                })
+            },
+        );
+        group.bench_function(
+            BenchmarkId::new("inverse_f32", format!("{n_rows}x{n_cols}")),
+            |b| {
+                b.iter(|| {
+                    work.copy_from_slice(black_box(&block));
+                    plan.inverse(black_box(&mut work))
                 })
             },
         );
@@ -663,6 +697,7 @@ criterion_group!(
     bench_twiddles,
     bench_dct,
     bench_dct_2d,
+    bench_dct_2d_fast,
     bench_mdct,
     bench_lpc,
     bench_pitch,

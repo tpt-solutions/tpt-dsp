@@ -247,6 +247,207 @@ impl FastDctIvPlan {
     }
 }
 
+/// FFT-backed DCT-II / DCT-III for a fixed size `n` (`std` only; `f32`
+/// only, matching [`crate::plan::FftPlan`]).
+///
+/// [`forward`](Self::forward) is the DCT-II
+/// `X[k] = Σ_n x[n]·cos(π/n·(n + ½)·k)` — the JPEG/MP3 transform, and
+/// the 1D kernel of [`dct_2d`]. [`inverse`](Self::inverse) is the
+/// DCT-III `x[n] = ½X[0] + Σ_{k≥1} X[k]·cos(π/n·k·(n + ½))`, so the
+/// pair carries [`dct_ii`]/[`dct_iii`]'s exact convention: `forward`
+/// then `inverse` recovers `n/2·x`.
+///
+/// # Derivation
+///
+/// With the input zero-padded to `2n` and `Y = IDFT_{2n}(padded)` —
+/// RustFFT's inverse being the unnormalized `Σ x[m]·e^{+2πimj/(2n)}` —
+/// the padded sum at bin `k` is exactly `Σ_n x[n]·e^{iπnk/n}`, so
+///
+/// ```text
+/// X[k] = Re( e^{iπk/(2n)} · Y[k] )
+/// ```
+///
+/// (the cosine is the real part of the complex exponential, and the
+/// `+½` sample offset becomes the remaining half-twiddle). The DCT-III
+/// runs the same shape backwards: twiddle the spectrum
+/// `buf[k] = X[k]·e^{iπk/(2n)}` with `buf[0] = X[0]/2` carrying the
+/// half-weighted DC term, inverse-transform the zero-padded buffer, and
+/// take real parts. Both directions need only an *inverse* FFT of
+/// length `2n`, so one plan serves both.
+///
+/// # Panics
+///
+/// Constructors and transforms panic on `n == 0` / length mismatches,
+/// consistent with the direct functions.
+#[cfg(feature = "std")]
+pub struct FastDct2Plan {
+    n: usize,
+    fft: crate::plan::FftPlan,
+    /// `e^{iπk/(2n)}`, `k = 0..n`.
+    twiddle: std::vec::Vec<crate::complex::C32>,
+    scratch: std::vec::Vec<crate::complex::C32>,
+}
+
+#[cfg(feature = "std")]
+impl FastDct2Plan {
+    /// Build a fast plan for size `n`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n == 0`.
+    pub fn new(n: usize) -> Self {
+        assert!(n > 0, "dct size must be positive");
+        use crate::complex::exp_i;
+        let step = core::f32::consts::PI / (2.0 * n as f32);
+        let twiddle = (0..n).map(|k| exp_i(step * k as f32)).collect();
+        let fft = crate::plan::FftPlan::new_inverse(2 * n);
+        let scratch = std::vec![crate::complex::C32::new(0.0, 0.0); 2 * n];
+        FastDct2Plan {
+            n,
+            fft,
+            twiddle,
+            scratch,
+        }
+    }
+
+    /// Transform size `n`.
+    pub fn n(&self) -> usize {
+        self.n
+    }
+
+    /// The DCT-II of `input` into `out`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the lengths don't match the plan's size.
+    pub fn forward(&mut self, input: &[f32], out: &mut [f32]) {
+        assert_eq!(input.len(), self.n, "input length must be n");
+        assert_eq!(out.len(), self.n, "output length must be n");
+        for slot in self.scratch.iter_mut() {
+            *slot = crate::complex::C32::new(0.0, 0.0);
+        }
+        for (m, x) in input.iter().enumerate() {
+            self.scratch[m] = crate::complex::C32::new(*x, 0.0);
+        }
+        self.fft.process_inplace(&mut self.scratch);
+        for (k, slot) in out.iter_mut().enumerate() {
+            *slot = (self.twiddle[k] * self.scratch[k]).re;
+        }
+    }
+
+    /// The DCT-III of `input` into `out`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the lengths don't match the plan's size.
+    pub fn inverse(&mut self, input: &[f32], out: &mut [f32]) {
+        assert_eq!(input.len(), self.n, "input length must be n");
+        assert_eq!(out.len(), self.n, "output length must be n");
+        for slot in self.scratch.iter_mut() {
+            *slot = crate::complex::C32::new(0.0, 0.0);
+        }
+        // The ½-weighted DC term rides in buf[0] (its twiddle is 1).
+        self.scratch[0] = crate::complex::C32::new(input[0] * 0.5, 0.0);
+        for (k, x) in input.iter().enumerate().skip(1) {
+            self.scratch[k] = crate::complex::C32::new(*x, 0.0) * self.twiddle[k];
+        }
+        self.fft.process_inplace(&mut self.scratch);
+        for (n, slot) in out.iter_mut().enumerate() {
+            *slot = self.scratch[n].re;
+        }
+    }
+}
+
+/// FFT-backed separable 2D DCT-II / DCT-III over an `n_rows × n_cols`
+/// row-major block, in place — the fast counterpart of [`dct_2d`] and
+/// [`idct_2d`] with the identical conventions (row-then-column forward,
+/// column-then-row inverse, `dct_2d` followed by `idct_2d` recovering
+/// `n_rows·n_cols / 4 · x`). `std` and `f32` only, like the 1D plan.
+#[cfg(feature = "std")]
+pub struct FastDct2dPlan {
+    n_rows: usize,
+    n_cols: usize,
+    rows: FastDct2Plan,
+    cols: FastDct2Plan,
+    /// Column gather/scatter buffer (`max(rows, cols)`).
+    gather: std::vec::Vec<f32>,
+    /// Row transform output (`n_cols`).
+    row_out: std::vec::Vec<f32>,
+    /// Column transform output (`n_rows`).
+    col_out: std::vec::Vec<f32>,
+}
+
+#[cfg(feature = "std")]
+impl FastDct2dPlan {
+    /// Build a fast 2D plan.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either size is zero.
+    pub fn new(n_rows: usize, n_cols: usize) -> Self {
+        assert!(n_rows > 0 && n_cols > 0, "2d dct sizes must be positive");
+        FastDct2dPlan {
+            n_rows,
+            n_cols,
+            rows: FastDct2Plan::new(n_cols),
+            cols: FastDct2Plan::new(n_rows),
+            gather: std::vec![0.0; n_rows.max(n_cols)],
+            row_out: std::vec![0.0; n_cols],
+            col_out: std::vec![0.0; n_rows],
+        }
+    }
+
+    /// The in-place 2D DCT-II (rows of [`dct_ii`], then columns).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block.len() < n_rows·n_cols`.
+    pub fn forward(&mut self, block: &mut [f32]) {
+        let n = self.n_rows * self.n_cols;
+        assert!(block.len() >= n, "block too small for fast 2D DCT");
+        for r in 0..self.n_rows {
+            let row = &mut block[r * self.n_cols..(r + 1) * self.n_cols];
+            self.rows.forward(row, &mut self.row_out);
+            row.copy_from_slice(&self.row_out);
+        }
+        for c in 0..self.n_cols {
+            for r in 0..self.n_rows {
+                self.gather[r] = block[r * self.n_cols + c];
+            }
+            self.cols
+                .forward(&self.gather[..self.n_rows], &mut self.col_out);
+            for r in 0..self.n_rows {
+                block[r * self.n_cols + c] = self.col_out[r];
+            }
+        }
+    }
+
+    /// The in-place 2D DCT-III (columns of [`dct_iii`], then rows).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `block.len() < n_rows·n_cols`.
+    pub fn inverse(&mut self, block: &mut [f32]) {
+        let n = self.n_rows * self.n_cols;
+        assert!(block.len() >= n, "block too small for fast 2D iDCT");
+        for c in 0..self.n_cols {
+            for r in 0..self.n_rows {
+                self.gather[r] = block[r * self.n_cols + c];
+            }
+            self.cols
+                .inverse(&self.gather[..self.n_rows], &mut self.col_out);
+            for r in 0..self.n_rows {
+                block[r * self.n_cols + c] = self.col_out[r];
+            }
+        }
+        for r in 0..self.n_rows {
+            let row = &mut block[r * self.n_cols..(r + 1) * self.n_cols];
+            self.rows.inverse(row, &mut self.row_out);
+            row.copy_from_slice(&self.row_out);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,6 +487,114 @@ mod tests {
         for (a, b) in second.iter().zip(input.iter()) {
             // DCT-IV is orthogonal with constant N/2: two passes give N/2·x.
             assert!((a - b * 4.0).abs() < 1e-9);
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn fast_dct2_matches_reference() {
+        // The FFT-backed plan must agree with the direct double sum at
+        // the sizes the video codecs use (plus one bigger, where the
+        // asymptotic win is largest).
+        for n in [4usize, 8, 16, 32, 64, 128] {
+            let input: Vec<f32> = (0..n)
+                .map(|i| (i as f32 * 0.37).sin() * 50.0 + (i % 7) as f32)
+                .collect();
+            let mut direct = vec![0.0f32; n];
+            dct_ii(&input, &mut direct);
+            let mut plan = FastDct2Plan::new(n);
+            let mut fast = vec![0.0f32; n];
+            plan.forward(&input, &mut fast);
+            for (f, d) in fast.iter().zip(&direct) {
+                assert!(
+                    (f - d).abs() < 1e-3 * d.abs().max(1.0),
+                    "n={n}: fast {f} vs direct {d}"
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn fast_dct3_matches_reference() {
+        for n in [4usize, 8, 16, 32, 64, 128] {
+            let input: Vec<f32> = (0..n).map(|i| (i as f32 * 0.21).cos() * 80.0).collect();
+            let mut direct = vec![0.0f32; n];
+            dct_iii(&input, &mut direct);
+            let mut plan = FastDct2Plan::new(n);
+            let mut fast = vec![0.0f32; n];
+            plan.inverse(&input, &mut fast);
+            for (f, d) in fast.iter().zip(&direct) {
+                assert!(
+                    (f - d).abs() < 1e-3 * d.abs().max(1.0),
+                    "n={n}: fast {f} vs direct {d}"
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn fast_dct2_round_trips_up_to_scale() {
+        // dct_ii then dct_iii recovers N/2·x (the direct pair's
+        // convention, which the plan preserves).
+        for n in [4usize, 8, 16, 32] {
+            let input: Vec<f32> = (0..n).map(|i| ((i * 5) % 13) as f32 - 6.0).collect();
+            let mut plan = FastDct2Plan::new(n);
+            let mut coeffs = vec![0.0f32; n];
+            plan.forward(&input, &mut coeffs);
+            let mut back = vec![0.0f32; n];
+            plan.inverse(&coeffs, &mut back);
+            for (a, b) in back.iter().zip(&input) {
+                assert!((a - b * (n as f32) / 2.0).abs() < 1e-2);
+            }
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn fast_dct2d_matches_direct_dct_2d() {
+        // The separable fast 2D plan against the direct free function,
+        // at square and non-square shapes, with the relative tolerance
+        // the 1D fast-vs-direct tests compound twice.
+        for (rows, cols) in [
+            (8usize, 8usize),
+            (16usize, 16usize),
+            (4usize, 16usize),
+            (32usize, 32usize),
+        ] {
+            let n = rows * cols;
+            let mut block: Vec<f32> = (0..n)
+                .map(|i| (i as f32 * 0.31).sin() * 40.0 + (i % 5) as f32)
+                .collect();
+            let mut direct = block.clone();
+            let mut scratch = vec![0.0f32; 2 * rows.max(cols)];
+            dct_2d(&mut direct, rows, cols, &mut scratch);
+            let mut plan = FastDct2dPlan::new(rows, cols);
+            plan.forward(&mut block);
+            for (f, d) in block.iter().zip(&direct) {
+                assert!(
+                    (f - d).abs() < 2e-3 * d.abs().max(1.0),
+                    "{rows}x{cols}: fast {f} vs direct {d}"
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn fast_dct2d_round_trips_up_to_scale() {
+        for (rows, cols) in [(8usize, 8usize), (16usize, 16usize)] {
+            let n = rows * cols;
+            let input: Vec<f32> = (0..n).map(|i| ((i * 3) % 17) as f32 - 8.0).collect();
+            let mut block = input.clone();
+            let mut plan = FastDct2dPlan::new(rows, cols);
+            plan.forward(&mut block);
+            plan.inverse(&mut block);
+            let scale = (rows * cols) as f32 / 4.0;
+            for (a, b) in block.iter().zip(&input) {
+                assert!((a - b * scale).abs() < 5e-2);
+            }
         }
     }
 
