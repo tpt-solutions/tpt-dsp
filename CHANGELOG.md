@@ -7,116 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Seeded-random scalar-vs-SIMD equivalence sweeps for the five SIMD
-  kernels (`complex_mul`/`complex_add`/`magnitude`/`fft_butterfly`/
-  `fft_inplace_f32`), closing the §40 gap where the equivalence tests
-  used fixed vectors only. SplitMix64-seeded, §40-tracked in
-  tpt-media's master checklist; run wherever the `simd` feature
-  compiles (nightly). The sweep immediately paid for itself by
-  catching its own harness bug — the butterfly consumes `lower`'s
-  *old* value for both outputs, which the first hand-written model
-  got wrong.
+## [0.2.0] - 2026-11-01
+
 ### Added
 - `tpt-dsp-core::FastDct2Plan` and `tpt-dsp-core::FastDct2dPlan`: FFT-backed
-  (`FftPlan`/RustFFT, `std`+`f32`-only) DCT-II and DCT-III of a fixed size,
-  and the separable in-place 2D counterpart, carrying the direct pair's
-  exact conventions (`forward` then `inverse` recovers `n/2·x` 1D and
-  `n_rows·n_cols/4·x` 2D; verified against the direct references at
-  4–128 points and 8×8–32×32). Both directions share one length-`2n`
-  inverse FFT: the input is zero-padded and the result extracted through a
-  half-twiddle, so the `+½` sample offsets need no reordering. Motivated
-  by tpt-media's Vault encoder profile (the transform was 88–97% of encode
-  time); measured 4.4–15× faster than the direct pair at the video tile
-  sizes (see `BENCHMARKS.md`).
-- `tpt-dsp-core::FastMdctPlan` and `tpt-dsp-core::FastDctIvPlan`: FFT-backed
-  (`FftPlan`/RustFFT) fast MDCT/IMDCT and DCT-IV, `std`+`f32`-only,
-  numerically verified against the existing direct O(N²) `mdct`/`imdct`/
-  `dct_iv` references (`fast_matches_reference_*` tests). At Pulse/Aura's
-  block half-sizes (512-4096), the fast path is ~2000-15000× faster than
-  the direct sum (see `BENCHMARKS.md`).
-- `tpt-dsp-core::{autocorrelation_pitch, amdf_pitch}`: pitch (F0)
-  estimation with voiced/unvoiced classification and a confidence metric,
-  plus `hz_range_to_period_samples` for converting an F0 search range to a
-  sample-lag range. Both estimators bias tie-breaking toward the shortest
-  candidate lag to avoid the classic autocorrelation/AMDF "octave error"
-  (reporting a harmonic multiple of the true period instead of the
-  fundamental) — see `pitch.rs`'s doc comments for the reasoning. For
-  `tpt-media`'s Vox codec.
-- `tpt-dsp-core::{nearest_vector, nearest_vector_accelerated, vq_encode,
-  vq_decode, DistanceMetric, VqCodebook}`: generic vector quantisation —
-  linear nearest-codeword search (squared-Euclidean or Manhattan
-  distance), an early-exit-accelerated variant that's numerically
-  identical to the plain linear scan (see `accelerated_matches_linear_search`)
-  but ~3-3.6× faster at Vox's/Whisper's target codebook sizes, and
-  encode/decode against a caller-supplied flat codebook. For `tpt-media`'s
-  Vox and Whisper codecs (the codec-specific codebook contents stay in
-  each codec).
+  DCT-II and DCT-III of a fixed size, and the separable in-place 2D counterpart,
+  carrying the direct pair's exact conventions (`forward` then `inverse` recovers
+  `n/2·x` in 1D and `n_rows·n_cols/4·x` in 2D; verified against the direct
+  references at 4–128 points and 8×8–32×32). Both directions share one length-`2n`
+  inverse FFT, so the `+½` sample offsets need no reordering. Measured 4.4–15×
+  faster than the direct pair at video tile sizes (see `BENCHMARKS.md`).
+- `tpt-dsp-core::FastMdctPlan` and `tpt-dsp-core::FastDctIvPlan`: FFT-backed fast
+  MDCT/IMDCT and DCT-IV, numerically verified against the direct O(N²) `mdct`,
+  `imdct` and `dct_iv` references. At block half-sizes of 512–4096 the fast path is
+  roughly 2000–15000× faster than the direct sum (see `BENCHMARKS.md`).
+- `tpt-dsp-core::{autocorrelation_pitch, amdf_pitch}`: pitch (F0) estimation with
+  voiced/unvoiced classification and a confidence metric, plus
+  `hz_range_to_period_samples`. Both estimators prefer the shortest candidate lag,
+  which avoids the classic octave error of reporting a harmonic multiple of the
+  true period.
+- `tpt-dsp-core::{nearest_vector, nearest_vector_accelerated, vq_encode, vq_decode,
+  DistanceMetric, VqCodebook}`: generic vector quantisation. The accelerated search
+  is numerically identical to the linear scan, with early exit, and about 3–3.6×
+  faster at typical codebook sizes.
 - `tpt-dsp-core::{lpc_to_lsp, lsp_to_lpc, lsp_is_stable, lsp_interpolate,
-  lsp_quantize_uniform, lsp_rad_to_lsf_hz, lsf_hz_to_lsp_rad}`
-  (`alloc`-gated): Line Spectral Pairs/Frequencies —
-  an LPC representation robust to interpolation and quantization.
-  `lpc_to_lsp` finds the interlacing roots of the classic `P(z)`/`Q(z)`
-  polynomials via a direct evaluate-and-bisect grid search rather than the
-  classical Chebyshev-recursion formulation (needs no extra scratch/
-  coefficient transform, and is directly round-trip-testable against
-  `lsp_to_lpc`) — verified at LPC orders 2 through 32 (Aura's max).
-  `lsp_quantize_uniform` guards against a real failure mode of naive
-  per-coefficient quantization: two close LSPs can quantize to the same
-  level, silently producing an *unstable* reconstructed filter. For
-  `tpt-media`'s Vox codec.
+  lsp_quantize_uniform, lsp_rad_to_lsf_hz, lsf_hz_to_lsp_rad}` (`alloc`-gated): line
+  spectral pairs and frequencies. `lpc_to_lsp` finds the interlacing roots of the
+  `P(z)`/`Q(z)` polynomials by evaluate-and-bisect grid search and is round-trip
+  tested against `lsp_to_lpc` at LPC orders 2 through 32. `lsp_quantize_uniform`
+  guards against two close LSPs quantising to the same level, which would produce an
+  unstable reconstructed filter.
 - `tpt-dsp-core::{hz_to_bark, bark_to_hz, erb_bandwidth, hz_to_erb_rate,
-  erb_rate_to_hz, fft_bin_bark_bands, aggregate_bands}`: Bark and ERB
-  perceptual frequency scales (Traunmüller/Glasberg-Moore), plus
-  FFT-bin-to-critical-band mapping and per-band energy aggregation.
-- `tpt-dsp-core::{threshold_in_quiet, is_tonal_peak,
-  classify_tonal_bins, spreading_function_db, tonal_masking_offset_db,
-  noise_masking_offset_db, simultaneous_masking, combined_threshold_db,
-  perceptual_weight_db}`: a generic psychoacoustic model — Terhardt's
-  (1979) threshold-in-quiet approximation, a local-peak tonality test,
-  Schroeder's (1979) masking-spread function, and the standard tonal/
-  noise masking offsets (matching MPEG psychoacoustic model 1's
-  constants) combined into a per-band masking threshold and
-  signal-to-mask-ratio. For `tpt-media`'s Aura lossy mode (§10 in its
-  `todo.md`) — not a byte-for-byte reproduction of any one standard's
-  exact model.
-- `tpt-dsp-core::{noise_shape_step, noise_shaper_is_stable, NoiseShaper}`:
-  a generic error-feedback noise-shaping filter (configurable order via
-  the feedback-coefficient slice length). Subtracts the fed-back past
-  error (`shaped[n] = x[n] - Σh[k]e[n-1-k]`) rather than adding it — the
-  sign that gives the classic `NTF=1-z⁻¹` telescoping property
-  (`Σ(y[n]-x[n])` stays bounded regardless of run length, unlike plain
-  quantization of an unquantizable constant, whose cumulative error grows
-  linearly). `noise_shaper_is_stable` validates an arbitrary
-  caller-supplied `quantize` closure's error-boundedness under feedback —
-  round-to-nearest is self-limiting for *any* finite feedback gain (its
-  error is always a bounded rounding residual by construction), so the
-  check has real teeth only for a quantizer that isn't. For `tpt-media`'s
-  Aura lossy mode.
+  erb_rate_to_hz, fft_bin_bark_bands, aggregate_bands}`: Bark and ERB perceptual
+  frequency scales, plus FFT-bin-to-critical-band mapping and per-band energy
+  aggregation.
+- `tpt-dsp-core::{threshold_in_quiet, is_tonal_peak, classify_tonal_bins,
+  spreading_function_db, tonal_masking_offset_db, noise_masking_offset_db,
+  simultaneous_masking, combined_threshold_db, perceptual_weight_db}`: a generic
+  psychoacoustic model built from Terhardt's threshold-in-quiet approximation, a
+  local-peak tonality test, Schroeder's masking-spread function, and the tonal and
+  noise masking offsets of MPEG psychoacoustic model 1. It is not a bit-exact
+  reproduction of any one standard.
+- `tpt-dsp-core::{noise_shape_step, noise_shaper_is_stable, NoiseShaper}`: a generic
+  error-feedback noise-shaping filter with configurable order. It subtracts the
+  fed-back past error, which gives the `NTF = 1 - z⁻¹` telescoping property, so the
+  accumulated error stays bounded. `noise_shaper_is_stable` checks a caller-supplied
+  quantiser's error bound under feedback.
 
 ### Changed
-- Documented `tpt-dsp-core`'s SIMD architecture support and why no runtime
-  CPU-feature dispatch (`is_x86_feature_detected!`/`is_aarch64_feature_
-  detected!`) is implemented — see `ARCHITECTURE.md` §10. Also corrected a
-  stale `ARCHITECTURE.md` line that still described the `simd.rs` vectorised
-  path as "not started".
-- Defined explicit Real-time / Offline execution profiles and classified
-  every public API across all five crates against them — see
-  `ARCHITECTURE.md` §11.
+- Documented `tpt-dsp-core`'s SIMD architecture support and why there is no runtime
+  CPU-feature dispatch. See `ARCHITECTURE.md` §10.
+- Defined explicit real-time and offline execution profiles and classified every
+  public API against them. See `ARCHITECTURE.md` §11.
+- Fixed broken intra-doc links in `tpt-dsp-analysis` and `tpt-dsp-viz`, and removed
+  the duplicate `egui` dependency from `tpt-dsp-viz`. Per-crate changelogs have the
+  details.
+- `tpt-dsp-io`: the `audio_check` example requires the `audio` feature.
 
 ### Fixed
-- `dct_ii`/`dct_iii`/`dct_iv`/`mdct`/`imdct`: the direct sums evaluated
-  `cos()` at the *raw*, unreduced `(π/N)·x·y` angle, which for realistic
-  block sizes (N in the thousands, as used by `tpt-media`'s Pulse/Aura)
-  reaches thousands of radians — poorly conditioned for `f32`/`f64` `cos()`,
-  since representing a large angle consumes most of the mantissa before the
-  periodic part that determines the result. Added `complex::cos_pi_over_n`,
-  which reduces the angle in the *integer* domain (exact, since transform
-  indices are each an integer or half-integer) before ever forming a float,
-  and switched all five direct transforms to it. Caught by comparing the
-  new `FastMdctPlan`/`FastDctIvPlan` against the existing direct
-  implementations at N=1024+ and seeing real (not rounding-noise)
-  disagreement.
+- `dct_ii`, `dct_iii`, `dct_iv`, `mdct` and `imdct` evaluated `cos()` at the raw,
+  unreduced `(π/N)·x·y` angle. For large N that angle reaches thousands of radians,
+  which `f32`/`f64` `cos()` handles poorly. A new `complex::cos_pi_over_n` reduces the
+  angle in the integer domain before any float is formed, and all five direct
+  transforms use it. Caught by comparing the new fast plans against the direct
+  implementations at N = 1024 and up.
+- `FftConvolver` truncated impulse responses to a single block. It now uses
+  partitioned convolution and is exact for an impulse response of any length, which
+  also fixes `tpt-dsp-audio`'s `ConvolutionReverb`.
+- `tpt-dsp-core`: spurious unused-import warnings in `no_std` builds.
 
 ## [0.1.0] - 2026-08-26
 
@@ -190,5 +148,6 @@ unpublished (see [PUBLISHING.md](PUBLISHING.md)).
 ### Fixed
 - Regression test covering `peak_bin` behaviour with NaN-containing input.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0
