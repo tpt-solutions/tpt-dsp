@@ -9,6 +9,9 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
+### Fixed
+- Broken intra-doc links in the crate documentation. No API change.
+
 ## [0.1.0] - 2026-08-26
 
 ### Added
