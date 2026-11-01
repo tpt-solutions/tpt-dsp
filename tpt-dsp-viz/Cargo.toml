@@ -19,7 +19,7 @@ audio = ["dep:tpt-dsp-io", "tpt-dsp-io/audio"]
 [dependencies]
 tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.2.0", default-features = false }
 crossbeam-channel = { workspace = true }
-eframe = { version = "0.36", default-features = false, features = [
+eframe = { version = "0.37", default-features = false, features = [
     "default_fonts",
     "glow",
     "wayland",
