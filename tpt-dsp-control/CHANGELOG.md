@@ -17,7 +17,7 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 - `pid_speed_hold` example: a PID controller holding a simulated DC motor at a
   100 rpm setpoint with output limiting and back-calculation anti-windup.
 - `Pid`: discrete PID controller with selectable anti-windup strategy
-  (`AntiWindup::Clamping` / `AntiWindup::BackCalculation`) and output limiting.
+  (`AntiWindup::Clamp` / `AntiWindup::BackCalculation`) and output limiting.
 - `InputShaper`: Zero Vibration Derivative (ZVD) input shaping that convolves a
   command profile with impulses cancelling residual oscillation of a 2nd-order
   system at a known natural frequency and damping ratio.
