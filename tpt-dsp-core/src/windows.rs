@@ -7,6 +7,9 @@
 // `num_traits::Float` trait. Under `std` the inherent methods are used and the
 // import would be flagged as unused, hence the cfg gate.
 #[cfg(not(feature = "std"))]
+// Needed on targets whose `core` lacks float intrinsics (thumbv6m); unused
+// (but harmless) on hosted `no_std` builds where core provides them.
+#[allow(unused_imports)]
 use num_traits::Float;
 
 /// The kind of spectral window to generate.

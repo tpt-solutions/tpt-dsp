@@ -20,12 +20,29 @@ function setStatus(text, on = false) {
   statusEl.lastChild.textContent = text;
 }
 
+// Peak output level from the worklet, in linear units (1.0 = full scale).
+function showLevel(peak) {
+  const meter = document.getElementById('meter');
+  const val = document.getElementById('meter-val');
+  meter.value = Math.min(peak, 1);
+  val.textContent = peak < 1e-4 ? 'silent' : peak.toFixed(3) + ' peak';
+}
+
 function send(type, value) {
   if (node) node.port.postMessage({ type, value });
 }
 
 function sendEq(band, value) {
   if (node) node.port.postMessage({ type: 'eq', band, value });
+}
+
+// Each control registers a function that pushes its current value to the
+// worklet. They are replayed once the processor is ready, because anything
+// sent before then (or while no node exists) would otherwise be dropped.
+const controlSyncs = [];
+
+function syncControls() {
+  controlSyncs.forEach((sync) => sync());
 }
 
 function bindRange(id, fmt, onChange) {
@@ -38,6 +55,7 @@ function bindRange(id, fmt, onChange) {
   };
   el.addEventListener('input', update);
   update();
+  controlSyncs.push(() => onChange(parseFloat(el.value)));
 }
 
 function wireControls() {
@@ -53,74 +71,113 @@ function wireControls() {
   bindRange('output_gain', (v) => v.toFixed(2), (v) => send('output_gain', v));
 
   const curve = document.getElementById('distortion_curve');
-  curve.addEventListener('change', () => send('distortion_curve', parseInt(curve.value, 10)));
+  const sendCurve = () => send('distortion_curve', parseInt(curve.value, 10));
+  curve.addEventListener('change', sendCurve);
+  controlSyncs.push(sendCurve);
 
   document.getElementById('reset').addEventListener('click', () => {
     if (node) node.port.postMessage({ type: 'reset' });
   });
 
-  document.getElementById('bypass').addEventListener('change', (e) => {
-    // A dry signal is approximated by zeroing the wet effects; the chain still
-    // runs but the UI communicates intent via a near-transparent setting.
-    if (e.target.checked) {
-      send('distortion_mix', 0);
-      send('delay_mix', 0);
-      send('reverb_mix', 0);
-    }
-  });
+  // The worklet passes the dry input straight through while bypass is on.
+  const bypass = document.getElementById('bypass');
+  const sendBypass = () => send('bypass', bypass.checked);
+  bypass.addEventListener('change', sendBypass);
+  controlSyncs.push(sendBypass);
 }
 
-async function ensureAudio() {
-  if (context) return;
-  context = new (window.AudioContext || window.webkitAudioContext)();
+// Shared by every start button, so a second click while the first is still
+// loading waits for the same setup instead of building another context.
+let audioReady = null;
 
-  const res = await fetch(WASM_URL);
-  const bytes = await res.arrayBuffer();
-  const module = await WebAssembly.compile(bytes);
-
-  await context.audioWorklet.addModule(WORKLET_URL);
-  node = new AudioWorkletNode(context, 'tpt-pedalboard', {
-    numberOfInputs: 1,
-    numberOfOutputs: 1,
-    processorOptions: { wasmModule: module },
-  });
-  node.port.onmessage = (e) => {
-    if (e.data && e.data.error) setStatus('error: ' + e.data.error);
-    if (e.data && e.data.ready) setStatus('running', true);
-  };
-  node.connect(context.destination);
+function ensureAudio() {
+  if (!audioReady) {
+    audioReady = buildAudio().catch((e) => {
+      audioReady = null; // allow the next click to retry
+      throw e;
+    });
+  }
+  return audioReady;
 }
 
-async function startMic() {
-  await ensureAudio();
-  await context.resume();
-  const constraints = {
-    audio: {
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
-    },
-    video: false,
-  };
-  micStream = await navigator.mediaDevices.getUserMedia(constraints);
-  const mic = context.createMediaStreamSource(micStream);
-  mic.connect(node);
-  source = mic;
-  setStatus('running (microphone)', true);
-  toggleButtons(true);
+async function buildAudio() {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try {
+    const res = await fetch(WASM_URL);
+    const bytes = await res.arrayBuffer();
+    const module = await WebAssembly.compile(bytes);
+
+    await ctx.audioWorklet.addModule(WORKLET_URL);
+    const workletNode = new AudioWorkletNode(ctx, 'tpt-pedalboard', {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      processorOptions: { wasmModule: module },
+    });
+    // Resolve only once the processor has instantiated the wasm, so callers
+    // never report "running" for a processor that failed to start.
+    const ready = new Promise((resolve, reject) => {
+      workletNode.port.onmessage = (e) => {
+        const data = e.data || {};
+        if (typeof data.level === 'number') showLevel(data.level);
+        else if (data.error) reject(new Error(data.error));
+        else if (data.ready) resolve();
+      };
+    });
+    workletNode.connect(ctx.destination);
+    node = workletNode;
+    context = ctx;
+    await ready;
+    syncControls();
+  } catch (e) {
+    // Leave no half-built state behind, so the next click retries cleanly.
+    if (context === ctx) context = null;
+    node = null;
+    ctx.close();
+    throw e;
+  }
 }
 
-async function startDemo() {
-  await ensureAudio();
-  await context.resume();
-  const osc = context.createOscillator();
-  osc.type = 'sawtooth';
-  osc.frequency.value = 110;
-  osc.connect(node);
-  osc.start();
-  source = osc;
-  setStatus('running (demo tone)', true);
-  toggleButtons(true);
+async function run(startSource, label) {
+  try {
+    await startSource();
+    toggleButtons(true);
+    setStatus(label, true);
+  } catch (e) {
+    setStatus('error: ' + (e && e.message ? e.message : e));
+    toggleButtons(false);
+  }
+}
+
+function startMic() {
+  return run(async () => {
+    await ensureAudio();
+    await context.resume();
+    const constraints = {
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+      video: false,
+    };
+    micStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const mic = context.createMediaStreamSource(micStream);
+    mic.connect(node);
+    source = mic;
+  }, 'running (microphone)');
+}
+
+function startDemo() {
+  return run(async () => {
+    await ensureAudio();
+    await context.resume();
+    const osc = context.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.value = 110;
+    osc.connect(node);
+    osc.start();
+    source = osc;
+  }, 'running (demo tone)');
 }
 
 function stop() {
@@ -133,6 +190,7 @@ function stop() {
     micStream.getTracks().forEach((t) => t.stop());
     micStream = null;
   }
+  showLevel(0);
   setStatus('stopped');
   toggleButtons(false);
 }

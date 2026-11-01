@@ -12,6 +12,7 @@ use num_complex::Complex;
 #[inline]
 fn scalar_magnitude(z: Complex<f32>) -> f32 {
     #[cfg(not(feature = "std"))]
+    #[allow(unused_imports)]
     use num_traits::Float;
     (z.re * z.re + z.im * z.im).sqrt()
 }
