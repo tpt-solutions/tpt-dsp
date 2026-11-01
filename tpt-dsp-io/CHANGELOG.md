@@ -9,6 +9,10 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
+### Changed
+- The `audio_check` example now requires the `audio` feature, so default-feature
+  builds and `cargo test` no longer try to compile it.
+
 ## [0.1.0] - 2026-08-26
 
 ### Added
