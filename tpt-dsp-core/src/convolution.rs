@@ -89,7 +89,14 @@ impl<F: Float + Default> ConvolvePlan<F> {
     }
 }
 
-/// Streaming overlap-add FFT convolver for real-time block processing.
+/// Streaming uniformly-partitioned FFT convolver for real-time block
+/// processing.
+///
+/// The impulse response is split into `block_len`-sized partitions, each
+/// transformed once at construction. Every block is convolved against all
+/// partitions through a ring of recent input spectra, so the output is exact
+/// for an impulse response of any length; the cost per block grows with the
+/// number of partitions.
 ///
 /// Requires the `alloc` feature. Construct once with the impulse response;
 /// each [`process`](Self::process) call is allocation-free.
@@ -97,16 +104,24 @@ impl<F: Float + Default> ConvolvePlan<F> {
 pub struct FftConvolver<F: Float> {
     fft_len: usize,
     block_len: usize,
+    partitions: usize,
     scratch: alloc::vec::Vec<Complex<F>>,
     work: alloc::vec::Vec<Complex<F>>,
+    /// Spectra of the kernel partitions, `partitions * fft_len` values.
     kernel_spec: alloc::vec::Vec<Complex<F>>,
+    /// Spectra of the most recent input blocks, one slot per partition.
+    input_spec: alloc::vec::Vec<Complex<F>>,
+    /// Slot that the next input spectrum is written to.
+    head: usize,
+    /// Circular-convolution tail carried into the next block.
     tail: alloc::vec::Vec<F>,
 }
 
 #[cfg(feature = "alloc")]
 impl<F: Float + Default> FftConvolver<F> {
-    /// Create a convolver for `block_len`-sized blocks using an FFT size
-    /// of `2 * next_power_of_two(block_len)`.
+    /// Create a convolver for `block_len`-sized blocks. The FFT size is
+    /// `2 * next_power_of_two(block_len)`, and the kernel is split into
+    /// `ceil(kernel.len() / block_len)` partitions (at least one).
     ///
     /// # Panics
     ///
@@ -114,20 +129,28 @@ impl<F: Float + Default> FftConvolver<F> {
     pub fn new(kernel: &[F], block_len: usize) -> Self {
         assert!(block_len > 0, "block_len must be nonzero");
         let fft_len = next_power_of_two(block_len * 2).max(1);
+        let partitions = kernel.len().div_ceil(block_len).max(1);
         let mut scratch = alloc::vec![Complex::default(); fft_len];
-        let work = alloc::vec![Complex::default(); fft_len];
-        let mut kernel_spec = alloc::vec![Complex::default(); fft_len];
-        for (k, &x) in kernel.iter().take(fft_len).enumerate() {
-            kernel_spec[k] = Complex::new(x, F::zero());
+        let mut kernel_spec = alloc::vec![Complex::default(); partitions * fft_len];
+        for (spec, chunk) in kernel_spec
+            .chunks_mut(fft_len)
+            .zip(kernel.chunks(block_len))
+        {
+            for (z, &x) in spec.iter_mut().zip(chunk.iter()) {
+                *z = Complex::new(x, F::zero());
+            }
+            fft_inplace(spec, &mut scratch);
         }
-        fft_inplace(&mut kernel_spec, &mut scratch);
         Self {
             fft_len,
             block_len,
+            partitions,
             scratch,
-            work,
+            work: alloc::vec![Complex::default(); fft_len],
             kernel_spec,
-            tail: alloc::vec![F::zero(); block_len],
+            input_spec: alloc::vec![Complex::default(); partitions * fft_len],
+            head: 0,
+            tail: alloc::vec![F::zero(); fft_len - block_len],
         }
     }
 
@@ -137,37 +160,54 @@ impl<F: Float + Default> FftConvolver<F> {
         self.block_len
     }
 
-    /// FFT size used internally for the overlap-add convolution.
+    /// FFT size used for each partition of the convolution.
     #[inline]
     pub fn fft_len(&self) -> usize {
         self.fft_len
     }
 
     /// Process one block of `block_len()` samples, producing `block_len()`
-    /// output samples (the overlap-add tail is carried internally).
+    /// output samples (the convolution tail is carried internally).
     /// `output` must have at least `block_len()` elements. Allocation-free.
     pub fn process(&mut self, input: &[F], output: &mut [F]) {
         assert!(input.len() == self.block_len, "wrong input block size");
         assert!(output.len() >= self.block_len, "output too small");
-        let block_len = self.block_len;
+        let (n, b) = (self.fft_len, self.block_len);
 
-        for (z, &x) in self.work.iter_mut().zip(input.iter()) {
+        // Transform the new block into the slot the ring is about to reuse.
+        let newest = self.head;
+        let spec = &mut self.input_spec[newest * n..(newest + 1) * n];
+        for (z, &x) in spec.iter_mut().zip(input.iter()) {
             *z = Complex::new(x, F::zero());
         }
-        for z in self.work[block_len..].iter_mut() {
+        for z in spec[b..].iter_mut() {
             *z = Complex::default();
         }
-        fft_inplace(&mut self.work, &mut self.scratch);
-        for (z, &h) in self.work.iter_mut().zip(self.kernel_spec.iter()) {
-            *z = *z * h;
+        fft_inplace(spec, &mut self.scratch);
+        self.head = (newest + 1) % self.partitions;
+
+        // Partition `p` multiplies the input from `p` blocks ago.
+        for z in self.work.iter_mut() {
+            *z = Complex::default();
+        }
+        for p in 0..self.partitions {
+            let slot = (newest + self.partitions - p) % self.partitions;
+            let x = &self.input_spec[slot * n..(slot + 1) * n];
+            let h = &self.kernel_spec[p * n..(p + 1) * n];
+            for ((acc, &xi), &hi) in self.work.iter_mut().zip(x.iter()).zip(h.iter()) {
+                *acc = *acc + xi * hi;
+            }
         }
         ifft_inplace(&mut self.work, &mut self.scratch);
 
-        let (head, tail_part) = self.work.split_at(block_len);
-        for ((o, t), w) in output.iter_mut().zip(self.tail.iter_mut()).zip(head.iter()) {
-            *o = w.re + *t;
+        for ((o, &t), w) in output[..b]
+            .iter_mut()
+            .zip(self.tail.iter())
+            .zip(self.work.iter())
+        {
+            *o = w.re + t;
         }
-        for (t, w) in self.tail.iter_mut().zip(tail_part.iter()) {
+        for (t, w) in self.tail.iter_mut().zip(self.work[b..].iter()) {
             *t = w.re;
         }
     }
@@ -252,5 +292,60 @@ mod tests {
                 acc
             );
         }
+    }
+
+    /// Streams `input` through `FftConvolver` in `block_len` blocks and
+    /// compares every sample with direct convolution.
+    fn max_stream_error(kernel: &[f32], block_len: usize, input: &[f32]) -> f32 {
+        let mut conv = FftConvolver::<f32>::new(kernel, block_len);
+        let mut got = Vec::new();
+        let mut block_out = vec![0.0f32; block_len];
+        for block in input.chunks(block_len) {
+            conv.process(block, &mut block_out);
+            got.extend_from_slice(&block_out);
+        }
+        let mut want = vec![0.0f32; input.len() + kernel.len() - 1];
+        convolve(input, kernel, &mut want);
+        got.iter()
+            .zip(want.iter())
+            .map(|(g, w)| (g - w).abs())
+            .fold(0.0, f32::max)
+    }
+
+    #[test]
+    fn fft_convolver_is_exact_for_long_kernels() {
+        // Kernels longer than one block need several partitions; the old
+        // single-block convolver silently truncated them.
+        let input: Vec<f32> = (0..2048)
+            .map(|i| ((i * 7 + 3) % 17) as f32 / 17.0 - 0.5)
+            .collect();
+        for &(kernel_len, block_len) in &[
+            (129usize, 128usize),
+            (200, 128),
+            (1024, 128),
+            (4096, 256),
+            (256, 64),
+        ] {
+            let kernel: Vec<f32> = (0..kernel_len)
+                .map(|i| ((i * 5 + 1) % 13) as f32 / 13.0 - 0.5)
+                .collect();
+            let err = max_stream_error(&kernel, block_len, &input);
+            assert!(
+                err < 1e-3,
+                "kernel={kernel_len} block={block_len} max_err={err}"
+            );
+        }
+    }
+
+    #[test]
+    fn fft_convolver_handles_short_and_empty_kernels() {
+        let input: Vec<f32> = (0..256).map(|i| (i as f32 * 0.3).cos()).collect();
+        assert!(max_stream_error(&[0.75], 32, &input) < 1e-5);
+        assert!(max_stream_error(&[0.5, -0.25, 0.125], 64, &input) < 1e-5);
+        // An empty kernel is silence, not a panic.
+        let mut conv = FftConvolver::<f32>::new(&[], 16);
+        let mut out = [1.0f32; 16];
+        conv.process(&input[..16], &mut out);
+        assert!(out.iter().all(|&x| x == 0.0));
     }
 }
