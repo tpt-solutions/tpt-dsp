@@ -54,8 +54,10 @@ and no boundary marshalling.
 
 ## Build
 
+Run this from the repository root, so the output lands in the top-level `www/pkg`:
+
 ```sh
-# from this directory — writes into www/pkg, which is what www/ imports
+cargo install wasm-pack                                  # once
 wasm-pack build tpt-dsp-wasm --target web --out-dir ../www/pkg
 ```
 
@@ -74,13 +76,14 @@ Optional feature `async` pulls in `wasm-bindgen-futures` and adds
 noise suppression and AGC disabled — all three destroy a guitar signal):
 
 ```sh
-wasm-pack build --target web -- --features async
+wasm-pack build tpt-dsp-wasm --target web --out-dir ../www/pkg -- --features async
 ```
 
 ## Run
 
 `www/main.js` and `www/pedal-processor.js` resolve `./pkg/tpt_dsp_wasm.*`
-relative to `www/`, so serve the **`www/` directory** (not the crate root):
+relative to `www/` in the repository, so serve the **`www/` directory** (not the
+crate root):
 
 ```sh
 python -m http.server 8080 --directory www   # or: npx serve www
@@ -116,6 +119,7 @@ Files in `www/`:
 | `index.html`          | Controls for every pedal parameter.                            |
 | `main.js`             | Main-thread setup: wasm init, worklet load, mic → node → out.  |
 | `pedal-processor.js`  | The `AudioWorkletProcessor` that runs the DSP.                 |
+| `text-codec-shim.js`  | Minimal UTF-8 `TextDecoder`/`TextEncoder` for the worklet scope, which lacks them; imported before the wasm glue. |
 
 Browser support notes:
 
@@ -132,11 +136,11 @@ Browser support notes:
 
 - **Mono.** The chain processes channel 0 and copies it to every output
   channel.
-- **Short reverb.** `ConvolutionReverb` is built with a 128-sample block, and
-  `tpt-dsp-core`'s `FftConvolver` truncates its kernel to the FFT length and
-  carries only one block of overlap-add tail. The impulse response is therefore
-  capped at the block size (~2.7 ms at 48 kHz), which is an ambience/early
-  reflection, not a hall. A partitioned convolution in `tpt-dsp-core` would lift
-  this without raising latency.
+- **Short reverb.** The pedalboard's reverb uses a 128-sample ambience impulse
+  response (~2.7 ms at 48 kHz), which gives an early-reflection character rather
+  than a hall. This is a choice made in `ambience_ir`, not a convolver limit:
+  `tpt-dsp-core`'s `FftConvolver` is exact for impulse responses of any length, so a
+  longer response can be used by changing that one function, at the cost of more
+  CPU per block.
 - **Parameter changes are stepped**, not smoothed; large jumps in drive or EQ
   gain can click.

@@ -21,13 +21,21 @@ tpt-dsp-cli info     --input iq.u8 --format i16le
   - `reverb:<seconds>[:wet]`
   - `eq:<f0>,<g0>,<q0>;[<f1>,<g1>,<q1>;…]`
 - **`demod`** — FM-demodulate a raw IQ file (8/16-bit integer, 32-bit float,
-  little/big-endian) into a mono WAV file.
+  little/big-endian) into a mono WAV file. `--decimate <n>` reduces the output
+  rate by an integer factor.
 - **`spectrum`** — averaged magnitude spectrum plus time-domain features
   (dominant frequency, peak dB, RMS, zero-crossing rate, spectral centroid, top
-  peaks); optionally dumps the spectrum to CSV.
+  peaks). `--fft-size` and `--window` (default Hann) set the analysis; `--csv`
+  dumps the averaged spectrum.
 - **`info`** — print WAV header metadata or IQ file size / format.
 
 WAV I/O uses `tpt-dsp-io`'s built-in RIFF/WAVE module; IQ parsing uses `tpt-dsp-io`.
+
+## Library
+
+The subcommands are thin wrappers over public functions, so the same steps can be
+used from Rust: `read_wav` / `write_wav`, `Effect::parse` and `EffectChain`,
+`read_iq` / `demod_iq`, `analyze_real` / `analyze_complex`, and `write_spectrum_csv`.
 
 ## Build
 
