@@ -5,7 +5,7 @@
 //! they can be unit-tested in isolation:
 //!
 //! - WAV read/write helpers ([`read_wav`], [`write_wav`]).
-//! - An effect chain ([`Effect`], [`parse_effect`], [`EffectChain`]) wrapping the
+//! - An effect chain ([`Effect`], [`Effect::parse`], [`EffectChain`]) wrapping the
 //!   `tpt-dsp-audio` effects (biquad, EQ, waveshaper, delay, convolution reverb).
 //! - Raw IQ loading and FM demodulation ([`read_iq`], [`demod_iq`]).
 //! - Spectrum / feature analysis for real and complex signals
@@ -288,7 +288,7 @@ impl Processor for ReverbProc {
     }
 }
 
-/// A sequence of [`Processor`]s applied to a signal in order.
+/// A sequence of `Processor`s applied to a signal in order.
 pub struct EffectChain {
     procs: Vec<Box<dyn Processor>>,
 }

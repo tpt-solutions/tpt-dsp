@@ -6,9 +6,8 @@ use std::sync::Arc;
 use crate::colormap::colormap;
 use crate::pipeline::SpectrumFrame;
 use crossbeam_channel::Receiver;
-use egui::Panel;
-use egui::{
-    Align2, CentralPanel, Color32, FontId, Image, Painter, Pos2, Rect, Sense, Stroke,
+use eframe::egui::{
+    self, Align2, CentralPanel, Color32, FontId, Image, Painter, Panel, Pos2, Rect, Sense, Stroke,
     TextureHandle, TextureOptions, Vec2,
 };
 use tpt_dsp_analysis::{peak_bin, Spectrogram, SpectrumConfig};
@@ -23,9 +22,9 @@ const DISPLAY_CEIL_DB: f32 = 0.0;
 
 /// egui application rendering the waterfall and live spectrum line.
 ///
-/// A producer thread feeds [`SpectrumFrame`]s into [`Self::receiver`]; each
-/// frame is appended to [`Self::spectrogram`] (for the waterfall) and kept as
-/// [`Self::latest`] (for the spectrum line). The window can be paused, which
+/// A producer thread feeds [`SpectrumFrame`]s into the receiver; each
+/// frame is appended to the spectrogram (for the waterfall) and kept as
+/// the latest frame (for the spectrum line). The window can be paused, which
 /// freezes both displays without stopping the producer.
 pub struct VizApp {
     /// Receives analysed frames from the producer thread.

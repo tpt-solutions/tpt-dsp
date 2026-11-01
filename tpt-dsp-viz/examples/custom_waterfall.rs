@@ -31,7 +31,7 @@ fn main() -> eframe::Result<()> {
     std::thread::spawn(move || run_synthetic(config, tx, producer_stop));
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
+        viewport: eframe::egui::ViewportBuilder::default()
             .with_title("custom waterfall example")
             .with_inner_size([800.0, 560.0]),
         ..Default::default()

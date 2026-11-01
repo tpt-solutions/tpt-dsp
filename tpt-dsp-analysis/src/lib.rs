@@ -2,13 +2,13 @@
 //! feature extraction for telemetry, RF and biomedical streams.
 //!
 //! - Time series: [`MovingAverage`], [`RunningMean`], [`Ema`],
-//!   [`OutlierDetector`] ([`timeseries`]).
+//!   [`OutlierDetector`] (`timeseries` module).
 //! - Features: [`rms`], [`zero_crossing_rate`], [`spectral_centroid`]
-//!   ([`features`]).
+//!   (`features` module).
 //! - Spectrum: [`SpectrumAnalyzer`], [`find_peaks`], [`dominant_frequency`]
-//!   ([`spectrum`]); full windowed-FFT analysis with time averaging and
+//!   (`spectrum` module); full windowed-FFT analysis with time averaging and
 //!   interpolated peaks via [`RealtimeSpectrumAnalyzer`]; waterfall
-//!   generation via [`Spectrogram`] ([`spectrogram`]).
+//!   generation via [`Spectrogram`] (`spectrogram` module).
 //! - Async: tokio / async-std / futures streaming adapters
 //!   (`async_adapters`).
 //!

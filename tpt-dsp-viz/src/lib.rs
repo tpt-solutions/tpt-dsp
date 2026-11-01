@@ -1,6 +1,7 @@
 //! Real-time waterfall spectrum and live spectrum-line desktop UI.
 //!
-//! `tpt-dsp-viz` renders live signal displays with [`egui`]/[`eframe`] on top
+//! `tpt-dsp-viz` renders live signal displays with `eframe` (and its re-exported
+//! `egui`) on top
 //! of [`tpt_dsp_analysis`]. A capture/generator thread streams analysed
 //! [`SpectrumFrame`]s to the UI over a `crossbeam-channel`; [`run`] wires that
 //! thread to a [`VizApp`] and shows the waterfall plus the live spectrum line.
@@ -60,7 +61,7 @@ pub fn run(source: Source) -> eframe::Result<()> {
     });
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
+        viewport: eframe::egui::ViewportBuilder::default()
             .with_title("tpt-dsp-viz")
             .with_inner_size([1024.0, 720.0]),
         ..Default::default()

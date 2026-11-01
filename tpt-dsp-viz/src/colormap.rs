@@ -1,11 +1,11 @@
 //! dB → heat-map colour mapping for the waterfall display.
 //!
 //! [`colormap`] maps a clamped, normalised intensity in `[0, 1]` to an
-//! [`egui::Color32`] using a five-stop gradient: black → blue → cyan → yellow
+//! [`Color32`] using a five-stop gradient: black → blue → cyan → yellow
 //! → red. The stops are evenly spaced in intensity, so a flat linear dB range
 //! maps to the full rainbow.
 
-use egui::Color32;
+use eframe::egui::Color32;
 
 /// Map a normalised level `t` in `[0, 1]` to a heat-map colour.
 ///

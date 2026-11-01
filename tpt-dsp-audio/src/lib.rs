@@ -5,7 +5,7 @@
 //!
 //! - Oscillators ([`Oscillator`], [`Wavetable`]) and synthesis engines
 //!   ([`FmSynth`], [`SubtractiveVoice`]).
-//! - Effects: [`Waveshaper`], [`Delay`], [`ConvolutionReverb`], [`Eq`].
+//! - Effects: [`Waveshaper`], [`Delay`], [`ConvolutionReverb`], [`struct@Eq`].
 //! - An [`AudioGraph`] abstraction (sources → effects → sinks) and a
 //!   [`RealtimeEngine`] that drives a per-block DSP callback with fixed,
 //!   allocation-free block processing (128/256-sample blocks).

@@ -61,8 +61,8 @@ impl<T> SpscQueue<T> {
 
     /// Split into independent producer and consumer halves.
     ///
-    /// Consumes the queue: afterwards only the returned [`Producer`] and
-    /// [`Consumer`] reference the channel, so dropping one end disconnects
+    /// Consumes the queue: afterwards only the returned `Producer` and
+    /// `Consumer` reference the channel, so dropping one end disconnects
     /// the other (`recv`/`try_recv` then return an error rather than blocking
     /// forever).
     pub fn split(self) -> (Producer<T>, Consumer<T>) {

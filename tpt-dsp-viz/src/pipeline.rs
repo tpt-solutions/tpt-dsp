@@ -142,7 +142,7 @@ impl SyntheticGenerator {
 /// Run the synthetic generator on a paced background thread, analysing each
 /// block and sending the resulting frame until `stop` is set.
 ///
-/// Frames are paced to [`SYNTHETIC_FPS`] so the waterfall scrolls at a steady,
+/// Frames are paced to `SYNTHETIC_FPS` so the waterfall scrolls at a steady,
 /// watchable rate regardless of the block duration.
 pub fn run_synthetic(config: SpectrumConfig, sender: Sender<SpectrumFrame>, stop: Arc<AtomicBool>) {
     let mut analyzer = RealtimeSpectrumAnalyzer::new(config);
