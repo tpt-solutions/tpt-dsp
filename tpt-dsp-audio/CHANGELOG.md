@@ -9,6 +9,10 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
+### Fixed
+- `ConvolutionReverb` no longer cuts impulse responses longer than the block size
+  short. It now runs on the exact partitioned `FftConvolver` from `tpt-dsp-core`.
+
 ## [0.1.0] - 2026-08-26
 
 ### Added

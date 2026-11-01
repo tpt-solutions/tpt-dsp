@@ -16,18 +16,20 @@ never allocates, so it is safe to call from an audio callback.
 ### Oscillators & synthesis
 
 - [`Oscillator`] — a free-running oscillator with selectable [`Waveform`]
-  (sine, saw, square, triangle, …).
+  (`Sine`, `Sawtooth`, `Square`, …).
 - [`Wavetable`] — band-limited wavetable oscillator.
 - [`FmSynth`] — 2-operator FM synthesis voice.
 - [`SubtractiveVoice`] — a subtractive-synthesis voice (oscillator → filter → amp).
+- [`Adsr`] and [`EnvelopeState`] — an attack/decay/sustain/release envelope generator.
 
 ### Effects
 
-- [`Waveshaper`] — waveshaping distortion with a configurable [`Curve`].
+- [`Waveshaper`] — waveshaping distortion with a configurable [`Curve`]
+  (`Tanh`, `HardClip`, `Cubic`, `Polynomial`).
 - [`Delay`] — a delay line with feedback and wet/dry mix.
-- [`ConvolutionReverb`] — FFT convolution reverb; build an impulse response with
-  the `generate_decay_ir` helper.
-- [`Eq`] — a multi-band peaking/tone equaliser.
+- [`ConvolutionReverb`] — FFT convolution reverb for an impulse response of any
+  length; build one with the `generate_decay_ir` helper.
+- [`Eq`] — a multi-band peaking equaliser.
 
 ### Graph & engine
 
@@ -44,8 +46,7 @@ never allocates, so it is safe to call from an audio callback.
 
 ```rust
 use tpt_dsp_audio::{
-    graph::{AudioGraph, ClosureNode, ClosureSink, ClosureSource},
-    oscillator::{Oscillator, Waveform},
+    AudioGraph, ClosureNode, ClosureSink, ClosureSource, Oscillator, Waveform,
 };
 
 // A 220 Hz sine source, a gain node, and a sink that forwards to a DAC.
@@ -53,9 +54,7 @@ let mut osc = Oscillator::with_waveform(48_000.0, 220.0, Waveform::Sine);
 let mut graph = AudioGraph::new(
     128,
     Box::new(ClosureSource(move |out: &mut [f32]| {
-        for s in out.iter_mut() {
-            *s = osc.tick();
-        }
+        osc.process(out);
     })),
     vec![Box::new(ClosureNode(|input: &[f32], out: &mut [f32]| {
         for (o, x) in out.iter_mut().zip(input.iter()) {
@@ -72,18 +71,21 @@ graph.run(100); // render 100 blocks
 ### Design a reverb impulse response
 
 ```rust
-use tpt_dsp_audio::{reverb::generate_decay_ir, ConvolutionReverb};
+use tpt_dsp_audio::{generate_decay_ir, ConvolutionReverb};
 
-let ir = generate_decay_ir(48_000.0, 1.5, 2.0); // sample_rate, length_s, decay
-let mut reverb = ConvolutionReverb::new(ir, 128);
+let sample_rate = 48_000.0;
+let length = (1.5 * sample_rate) as usize; // impulse response length in samples
+let ir = generate_decay_ir(length, sample_rate, 2.0); // length, sample_rate, decay seconds
+let mut reverb = ConvolutionReverb::new(&ir, 128);
 let mut wet = [0.0f32; 128];
 reverb.process(&input_block, &mut wet);
 ```
 
-## `no_std`
+## Platform
 
-`tpt-dsp-audio` reuses the allocation-free core primitives; the synthesis,
-effects and graph code is written to stay allocation-free on the hot path.
+`tpt-dsp-audio` is a `std` crate: it uses the default features of
+`tpt-dsp-core`. The hot-path processing functions do not allocate, so they are
+safe to call from an audio callback once the objects are constructed.
 
 ## License
 
