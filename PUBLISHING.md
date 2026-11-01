@@ -12,14 +12,14 @@ path-depends on is live at the version it requests).
 
 | Crate | Latest published version | Published | Notes |
 |---|---|---|---|
-| `tpt-dsp-core` | 0.1.0 | ☑ | No dependencies; published first. |
-| `tpt-dsp-audio` | 0.1.0 | ☑ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-analysis` | 0.1.0 | ☑ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-control` | 0.1.0 | ☑ | No path dependencies. |
-| `tpt-dsp-io` | 0.1.0 | ☑ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-viz` | 0.1.0 | ☑ | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
-| `tpt-dsp-wasm` | 0.1.0 | ☑ | Depends on `tpt-dsp-audio`. |
-| `tpt-dsp-cli` | 0.1.0 | ☑ | Depends on `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-core` | 0.2.0 | ☑ | No dependencies; published first. |
+| `tpt-dsp-audio` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-analysis` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-control` | 0.2.0 | ☑ | No path dependencies. |
+| `tpt-dsp-io` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-viz` | 0.2.0 | ☑ | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-wasm` | 0.2.0 | ☑ | Depends on `tpt-dsp-audio`. |
+| `tpt-dsp-cli` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-io`. |
 
 ### Intentionally not published
 
@@ -29,10 +29,10 @@ path-depends on is live at the version it requests).
 | `tpt-dsp-py` | Excluded from the workspace: builds a Python `extension-module` (links libpython at load time) and cannot be built/tested by the normal `cargo build/test --workspace` gate. Python bindings belong on PyPI (via `maturin`/`pyo3`), not crates.io — no action needed here. |
 | `templates/dsp-effect-crate` | A `cargo-generate` template, not a real crate (its `Cargo.toml` contains `{{crate_name}}` placeholders). Never published. |
 
-## Next release: 0.2.0 (planned, not yet published)
+## Release 0.2.0 (published 2026-11-01)
 
-Nothing below has been released. The "Latest published version" column above stays
-at 0.1.0 until each upload succeeds.
+All eight publishable crates were uploaded at 0.2.0 on 2026-11-01 from the tag
+`v0.2.0` (commit `d9aca4c`). The plan below is kept as a record of what was done.
 
 ### Why 0.2.0
 
@@ -83,43 +83,44 @@ Dependency order, with the same wait-for-index rule as step 4 below:
 
 Before tagging:
 
-- [ ] Commit the pending work: the rewritten root `CHANGELOG.md` `[Unreleased]`
+- [x] Commit the pending work: the rewritten root `CHANGELOG.md` `[Unreleased]`
       section and the removal of `tpt-dsp-wasm/www/`.
-- [ ] Confirm the version is 0.2.0.
-- [ ] Set `workspace.package.version = "0.2.0"` in the root `Cargo.toml`.
-- [ ] Change the 12 internal path-dependency requirements from `version = "0.1.0"` to
+- [x] Confirm the version is 0.2.0.
+- [x] Set `workspace.package.version = "0.2.0"` in the root `Cargo.toml`.
+- [x] Change the 12 internal path-dependency requirements from `version = "0.1.0"` to
       `version = "0.2.0"`. They are in `tpt-dsp-analysis`, `tpt-dsp-audio`,
       `tpt-dsp-cli` (5), `tpt-dsp-io` (2), `tpt-dsp-viz` (2) and `tpt-dsp-wasm`. Cargo
       will not resolve a `0.1.0` requirement against a `0.2.0` upload, so the dependent
       crates would fail to publish.
-- [ ] Make the README links work on crates.io. The READMEs link to sibling crates
+- [x] Make the README links work on crates.io. The READMEs link to sibling crates
       with relative paths (for example `../tpt-dsp-core`), which crates.io cannot
       resolve. Use absolute GitHub URLs for those links.
-- [ ] Move `[Unreleased]` to `## [0.2.0] - YYYY-MM-DD` in the root `CHANGELOG.md` and
+- [x] Move `[Unreleased]` to `## [0.2.0] - YYYY-MM-DD` in the root `CHANGELOG.md` and
       in all eight crate changelogs. Add a `[0.2.0]` compare link and point
       `[Unreleased]` at `v0.2.0...HEAD`.
-- [ ] Run the full gate from `AGENTS.md`: `cargo fmt --all -- --check`, build, test,
+- [x] Run the full gate from `AGENTS.md`: `cargo fmt --all -- --check`, build, test,
       `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
       `cargo deny check`, and `cargo doc --workspace --all-features --no-deps`.
-- [ ] Check each package's contents with `cargo package --list -p <crate>`. Confirm the
+- [x] Check each package's contents with `cargo package --list -p <crate>`. Confirm the
       README and CHANGELOG are included and nothing stray is shipped. `tpt-dsp-wasm`
       should no longer contain `www/`.
-- [ ] Dry run: `cargo publish --dry-run -p tpt-dsp-core`. For the dependent crates,
+- [x] Dry run: `cargo publish --dry-run -p tpt-dsp-core`. For the dependent crates,
       a dry run can't resolve their `0.2.0` dependencies until those are live on
       crates.io, so expect that error until the dependencies are published.
-- [ ] Working tree is clean and on `master`.
+- [x] Working tree is clean and on `master`.
 
 Publishing:
 
-- [ ] Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
-- [ ] Publish in the order above, waiting for each dependency to appear on crates.io
+- [x] Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+- [x] Publish in the order above, waiting for each dependency to appear on crates.io
       before publishing its dependents.
-- [ ] After each upload, check that the crates.io page renders the README and that the
+- [x] After each upload, check that the crates.io page renders the README and that the
       links work.
-- [ ] Update the "Latest published version" and "Published" columns in the table above,
+- [x] Update the "Latest published version" and "Published" columns in the table above,
       and add a row to History.
 - [ ] Create the GitHub Release from `v0.2.0`, pasting in the matching `CHANGELOG.md`
-      section.
+      section. **Still open:** the `gh` CLI is not installed on this machine, so this
+      step has not been done.
 
 ## Release procedure
 
@@ -129,7 +130,11 @@ Publishing:
    inherited.
 2. Move `[Unreleased]` in the root [`CHANGELOG.md`](CHANGELOG.md) and in each
    changed crate's own `CHANGELOG.md` to a new dated version section.
-3. Tag the release: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+3. Tag the release: `git tag vX.Y.Z`, then push the branch and the tag separately,
+   checking that each push succeeds before going on. Don't chain the push into the
+   publish step with `| tail`, which hides a failed push. For 0.2.0 the `master` push
+   was rejected after the tag went up, and core had already been published; the
+   fix was to merge `origin/master` and push again.
 4. Publish in dependency order, waiting for each crate to be visible on
    crates.io before publishing the next one that depends on it (the index
    needs a few seconds to update):
@@ -152,4 +157,5 @@ Publishing:
 
 | Date | Version | Crates | Notes |
 |---|---|---|---|
+| 2026-11-01 | 0.2.0 | all eight workspace crates listed above | Tag `v0.2.0` at `d9aca4c`; all eight published from that tag (the `tpt-dsp-viz` upload uses eframe 0.36, while `master` has since moved to eframe 0.37 by dependabot). New DSP modules in core, `FftConvolver` and DCT/MDCT fixes, and README and changelog corrections. The GitHub Release is still to be created. |
 | 2026-08-26 | 0.1.0 | all eight workspace crates listed above | First public release. Published in dependency order (core → control/audio/analysis/io → viz/wasm/cli); crates.io's new-crate rate limit forced a few minutes' wait between the `viz`, `wasm` and `cli` uploads. |
