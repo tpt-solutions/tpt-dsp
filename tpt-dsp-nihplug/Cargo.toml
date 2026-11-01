@@ -13,7 +13,7 @@ categories = ["multimedia::audio"]
 [dependencies]
 tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
 tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.1.0" }
-nice-plug = "0.3.0"
+nice-plug = "0.4.2"
 
 [lib]
 crate-type = ["cdylib"]
