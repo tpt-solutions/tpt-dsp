@@ -22,7 +22,7 @@ async-tokio = ["dep:tokio", "dep:futures"]
 async-std = ["dep:async-std", "dep:futures"]
 
 [dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
 tokio = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 async-std = { workspace = true, optional = true }

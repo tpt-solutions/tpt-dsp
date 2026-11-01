@@ -4,8 +4,8 @@
 > [tpt-dsp](https://github.com/tpt-solutions/tpt-dsp) framework.
 
 `tpt-dsp-viz` is the desktop visualization front end of the framework. It builds
-on [`tpt-dsp-core`](../tpt-dsp-core) (math + FFT) and
-[`tpt-dsp-analysis`](../tpt-dsp-analysis) (spectrum estimation, peak finding,
+on [`tpt-dsp-core`](https://github.com/TPT-Solutions/tpt-dsp/tree/master/tpt-dsp-core) (math + FFT) and
+[`tpt-dsp-analysis`](https://github.com/TPT-Solutions/tpt-dsp/tree/master/tpt-dsp-analysis) (spectrum estimation, peak finding,
 spectrogram) to render live signal displays with `eframe` (and its re-exported `egui`):
 
 - **Waterfall spectrogram** — a scrolling heat-map (time on one axis, frequency

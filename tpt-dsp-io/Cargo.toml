@@ -23,12 +23,12 @@ tcp = ["dep:tokio"]
 rtl-sdr = []
 
 [dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
 serialport = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
 
 [[example]]
 name = "audio_check"

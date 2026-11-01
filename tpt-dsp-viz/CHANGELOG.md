@@ -5,9 +5,11 @@ All notable changes to `tpt-dsp-viz` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
+For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com/TPT-Solutions/tpt-dsp/blob/master/CHANGELOG.md).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-11-01
 
 ### Changed
 - `egui` is now reached through `eframe::egui` rather than as a separate direct
@@ -38,5 +40,6 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
   (`lock().unwrap_or_else(|e| e.into_inner())`) instead of unwrapping, so a panic
   on another thread no longer crashes every subsequent callback.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

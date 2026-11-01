@@ -5,9 +5,14 @@ All notable changes to `tpt-dsp-control` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
+For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com/TPT-Solutions/tpt-dsp/blob/master/CHANGELOG.md).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-11-01
+
+### Changed
+- Documentation: README examples rewritten to match the current API, and the `AntiWindup::Clamp` name corrected in the 0.1.0 entry.
 
 ## [0.1.0] - 2026-08-26
 
@@ -26,5 +31,6 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 - `JerkLimiter`: further bounds jerk (derivative of acceleration) for smooth
   starts/stops that minimise mechanical stress.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

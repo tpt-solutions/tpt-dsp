@@ -3,7 +3,7 @@
 > Synthesis, effects and real-time audio graphs for the
 > [tpt-dsp](https://github.com/tpt-solutions/tpt-dsp) framework.
 
-`tpt-dsp-audio` builds on [`tpt-dsp-core`](../tpt-dsp-core) to provide the pieces
+`tpt-dsp-audio` builds on [`tpt-dsp-core`](https://github.com/TPT-Solutions/tpt-dsp/tree/master/tpt-dsp-core) to provide the pieces
 you need for a browser or desktop audio engine: oscillators and synthesis
 voices, a set of classic effects, and an `AudioGraph` abstraction driven by an
 allocation-free real-time engine.

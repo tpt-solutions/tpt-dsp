@@ -5,9 +5,11 @@ All notable changes to `tpt-dsp-audio` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
+For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com/TPT-Solutions/tpt-dsp/blob/master/CHANGELOG.md).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-11-01
 
 ### Fixed
 - `ConvolutionReverb` no longer cuts impulse responses longer than the block size
@@ -29,5 +31,6 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
   `Source` / `Sink` / `AudioNode` traits, and the fixed-block, allocation-free
   `RealtimeEngine` (exposing the `BLOCK_128` / `BLOCK_256` block-size constants).
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

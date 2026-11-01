@@ -3,7 +3,7 @@
 > Spectrum analysis, time-series statistics and feature extraction for the
 > [tpt-dsp](https://github.com/tpt-solutions/tpt-dsp) framework.
 
-`tpt-dsp-analysis` builds on [`tpt-dsp-core`](../tpt-dsp-core) to turn raw
+`tpt-dsp-analysis` builds on [`tpt-dsp-core`](https://github.com/TPT-Solutions/tpt-dsp/tree/master/tpt-dsp-core) to turn raw
 samples into insight: spectrum estimation, peak finding, time-series smoothing,
 and a set of audio/RF feature descriptors. It is aimed at telemetry, RF/SDR and
 biomedical streams, but the algorithms are general-purpose.

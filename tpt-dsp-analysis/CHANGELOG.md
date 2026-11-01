@@ -5,9 +5,11 @@ All notable changes to `tpt-dsp-analysis` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
+For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com/TPT-Solutions/tpt-dsp/blob/master/CHANGELOG.md).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-11-01
 
 ### Fixed
 - Broken intra-doc links in the crate documentation. No API change.
@@ -38,5 +40,6 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 - `peak_bin` now uses a total order over `f32`, so a NaN/Inf value in the magnitude
   spectrum can no longer panic the real-time analysis path.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

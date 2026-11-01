@@ -1,7 +1,7 @@
 # tpt-dsp-wasm
 
 MVP 1: a web-native guitar effects pedal. This crate is the WebAssembly front
-end for [`tpt-dsp`](../README.md); the whole pedalboard —
+end for [`tpt-dsp`](https://github.com/TPT-Solutions/tpt-dsp#readme); the whole pedalboard —
 **distortion → delay → reverb → EQ** — is `tpt-dsp-audio` DSP compiled to wasm
 and driven from an `AudioWorklet` at one 128-sample render quantum per call.
 

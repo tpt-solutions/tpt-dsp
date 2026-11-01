@@ -3,7 +3,7 @@
 > Pure Rust hardware I/O for the
 > [tpt-dsp](https://github.com/tpt-solutions/tpt-dsp) framework.
 
-`tpt-dsp-io` builds on [`tpt-dsp-core`](../tpt-dsp-core) to get raw samples off
+`tpt-dsp-io` builds on [`tpt-dsp-core`](https://github.com/TPT-Solutions/tpt-dsp/tree/master/tpt-dsp-core) to get raw samples off
 real hardware and into your DSP pipeline. It provides allocation-free I/Q byte
 parsing for SDR/RF streams, a driver-agnostic source abstraction, a blocking TCP
 IQ source and an async TCP IQ server, a WAV reader and writer, and (behind

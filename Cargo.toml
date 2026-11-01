@@ -28,7 +28,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 # Whole-workspace minimum: `tpt-dsp-viz` depends on `egui`/`eframe` 0.36,
 # which require Rust 1.85+. The leaf crates (core/audio/analysis/control/io)

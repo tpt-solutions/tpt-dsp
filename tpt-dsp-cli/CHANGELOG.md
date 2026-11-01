@@ -5,9 +5,14 @@ All notable changes to `tpt-dsp-cli` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
+For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com/TPT-Solutions/tpt-dsp/blob/master/CHANGELOG.md).
 
 ## [Unreleased]
+
+## [0.2.0] - 2026-11-01
+
+### Changed
+- Documentation: README covers `--decimate` and `--window` and documents the library API; doc comments corrected.
 
 ## [0.1.0] - 2026-08-26
 
@@ -26,5 +31,6 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
   `demod_iq`, `analyze_real`/`analyze_complex`, `write_spectrum_csv`) usable
   independently of the CLI binary.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0
