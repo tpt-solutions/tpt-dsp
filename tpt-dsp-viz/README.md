@@ -6,7 +6,7 @@
 `tpt-dsp-viz` is the desktop visualization front end of the framework. It builds
 on [`tpt-dsp-core`](../tpt-dsp-core) (math + FFT) and
 [`tpt-dsp-analysis`](../tpt-dsp-analysis) (spectrum estimation, peak finding,
-spectrogram) to render live signal displays with [`egui`]/[`eframe`]:
+spectrogram) to render live signal displays with `eframe` (and its re-exported `egui`):
 
 - **Waterfall spectrogram** — a scrolling heat-map (time on one axis, frequency
   on the other, intensity as colour) produced by `tpt-dsp-analysis`'s
@@ -26,6 +26,22 @@ blocks to the UI thread without blocking the render loop.
 
 With the default features the crate exposes the visualization primitives; enable
 `audio` to pull samples directly from a microphone/loopback device.
+
+## Using it as a library
+
+[`run`] takes a [`Source`] and blocks until the window closes:
+
+```rust
+use tpt_dsp_viz::{run, Source};
+
+fn main() -> eframe::Result<()> {
+    run(Source::Synthetic)
+}
+```
+
+For a custom window, [`VizApp`] is the `eframe::App`. Feed it [`SpectrumFrame`]s
+from your own producer thread, or use [`run_synthetic`] / [`run_audio_input`]
+(feature `audio`) to generate them. See `examples/custom_waterfall.rs`.
 
 ## Architecture
 

@@ -9,6 +9,14 @@ For the whole-workspace history see the [root `CHANGELOG.md`](../CHANGELOG.md).
 
 ## [Unreleased]
 
+### Changed
+- `egui` is now reached through `eframe::egui` rather than as a separate direct
+  dependency, so the crate can't pull in a second `egui` that drifts from `eframe`'s.
+
+### Fixed
+- The build no longer fails against duplicate `egui` versions, and the crate
+  documentation builds without warnings.
+
 ## [0.1.0] - 2026-08-26
 
 ### Added
