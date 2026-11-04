@@ -132,7 +132,7 @@ pub use lpc::LpcAnalyzer;
 #[cfg(feature = "alloc")]
 pub use lsp::{
     lpc_to_lsp, lsf_hz_to_lsp_rad, lsp_interpolate, lsp_is_stable, lsp_quantize_uniform,
-    lsp_rad_to_lsf_hz, lsp_to_lpc, DEFAULT_GRID_POINTS,
+    lsp_rad_to_lsf_hz, lsp_to_lpc, lsp_to_lpc_with_scratch, DEFAULT_GRID_POINTS,
 };
 #[cfg(feature = "alloc")]
 pub use noise_shaping::NoiseShaper;

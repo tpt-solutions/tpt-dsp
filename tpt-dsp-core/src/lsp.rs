@@ -220,10 +220,29 @@ pub fn lpc_to_lsp<F: Float>(coeffs: &[F], out: &mut [F], grid_points: usize) -> 
 ///
 /// Panics if `lsp.len() == 0`, is odd, or `out.len() != lsp.len()`.
 pub fn lsp_to_lpc<F: Float>(lsp: &[F], out: &mut [F]) {
+    let mut scratch = alloc_stack_buf::<F>(2 * (lsp.len() + 2));
+    lsp_to_lpc_with_scratch(lsp, out, &mut scratch);
+}
+
+/// [`lsp_to_lpc`] with caller-owned scratch: the conversion itself performs
+/// no heap allocation, so it can run on a per-frame path.
+///
+/// `scratch` must hold at least `2·(p+2)` values, where `p = lsp.len()`. Its
+/// contents on entry are ignored, and its contents on exit are unspecified.
+///
+/// # Panics
+///
+/// Panics under the same conditions as [`lsp_to_lpc`], and also if
+/// `scratch.len() < 2·(p+2)`.
+pub fn lsp_to_lpc_with_scratch<F: Float>(lsp: &[F], out: &mut [F], scratch: &mut [F]) {
     let p = lsp.len();
     assert!(p > 0, "LSP set must be non-empty");
     assert_eq!(p % 2, 0, "LSP conversion requires an even LPC order");
     assert_eq!(out.len(), p, "out length must equal LSP length");
+    assert!(
+        scratch.len() >= 2 * (p + 2),
+        "scratch must hold 2*(p+2) values"
+    );
 
     // By construction (see `lpc_to_lsp`), P- and Q-family roots strictly
     // alternate in sorted order; which family occupies even vs. odd
@@ -246,10 +265,10 @@ pub fn lsp_to_lpc<F: Float>(lsp: &[F], out: &mut [F]) {
     // assignment-independent by symmetry of the construction), either
     // assignment reconstructs the same `A(z)`. We use even indices for P.
     let half = p / 2;
-    let mut p_poly = alloc_stack_buf::<F>(p + 2);
-    let mut q_poly = alloc_stack_buf::<F>(p + 2);
-    build_from_roots(&even_indexed(lsp, half), true, &mut p_poly);
-    build_from_roots(&odd_indexed(lsp, half), false, &mut q_poly);
+    let (p_poly, rest) = scratch.split_at_mut(p + 2);
+    let q_poly = &mut rest[..p + 2];
+    build_from_roots(even_indexed(lsp, half), true, p_poly);
+    build_from_roots(odd_indexed(lsp, half), false, q_poly);
 
     for (k, slot) in out.iter_mut().enumerate() {
         let a_ext = (p_poly[k + 1] + q_poly[k + 1]) / F::from(2).unwrap();
@@ -257,15 +276,15 @@ pub fn lsp_to_lpc<F: Float>(lsp: &[F], out: &mut [F]) {
     }
 }
 
-/// Extract the even-indexed (0, 2, 4, ...) entries of `lsp` (there must be
-/// exactly `half` of them).
-fn even_indexed<F: Float>(lsp: &[F], half: usize) -> alloc::vec::Vec<F> {
-    (0..half).map(|i| lsp[2 * i]).collect()
+/// The even-indexed (0, 2, 4, ...) entries of `lsp`: exactly `half` of them.
+/// Yielded lazily, so the conversion needs no collected copy.
+fn even_indexed<F: Float>(lsp: &[F], half: usize) -> impl Iterator<Item = F> + '_ {
+    (0..half).map(move |i| lsp[2 * i])
 }
 
-/// Extract the odd-indexed (1, 3, 5, ...) entries of `lsp`.
-fn odd_indexed<F: Float>(lsp: &[F], half: usize) -> alloc::vec::Vec<F> {
-    (0..half).map(|i| lsp[2 * i + 1]).collect()
+/// The odd-indexed (1, 3, 5, ...) entries of `lsp`, yielded lazily.
+fn odd_indexed<F: Float>(lsp: &[F], half: usize) -> impl Iterator<Item = F> + '_ {
+    (0..half).map(move |i| lsp[2 * i + 1])
 }
 
 /// Build the order-`2*roots.len()+1` polynomial (coefficients of
@@ -274,7 +293,11 @@ fn odd_indexed<F: Float>(lsp: &[F], half: usize) -> alloc::vec::Vec<F> {
 /// (`z=-1` if `carries_plus_one_root`, else `z=1`): the product of
 /// `(1 ∓ z^-1)` and, for each root frequency `ω_i`,
 /// `(1 - 2cos(ω_i)z^-1 + z^-2)`.
-fn build_from_roots<F: Float>(roots: &[F], carries_plus_one_root: bool, out: &mut [F]) {
+fn build_from_roots<F: Float>(
+    roots: impl Iterator<Item = F>,
+    carries_plus_one_root: bool,
+    out: &mut [F],
+) {
     // Start with the trivial linear factor, then convolve in each
     // quadratic factor one at a time. `out` is used as the accumulator;
     // `out[0..=deg]` holds the current (growing) polynomial.
@@ -289,7 +312,7 @@ fn build_from_roots<F: Float>(roots: &[F], carries_plus_one_root: bool, out: &mu
     }
     let mut deg = 1; // current polynomial degree
 
-    for &omega in roots {
+    for omega in roots {
         let b1 = -F::from(2).unwrap() * omega.cos(); // (1 + b1 z^-1 + z^-2)
                                                      // Convolve: new[k] = old[k] + b1*old[k-1] + old[k-2]
         for k in (0..=(deg + 2)).rev() {
@@ -373,13 +396,11 @@ pub fn lsp_quantize_uniform<F: Float>(lsp: &[F], levels: u32, out: &mut [F]) {
     }
 }
 
-// A tiny local helper: this whole module requires the `alloc` feature
-// (see its `mod` declaration in `lib.rs`) because the interlacing/
-// root-rebuilding helpers below need small owned scratch buffers whose
-// size depends on `p` at runtime. LSP conversion is an analysis-time,
-// once-per-frame operation (not a per-sample real-time hot path), so
-// allocating here is the right tradeoff rather than forcing every caller
-// to size and pass in scratch buffers for an operation this infrequent.
+// A tiny local helper: this module requires the `alloc` feature (see its
+// `mod` declaration in `lib.rs`) because the interlacing helper in
+// `lpc_to_lsp` and the convenience wrapper `lsp_to_lpc` size their scratch
+// at runtime. Real-time callers use `lsp_to_lpc_with_scratch`, which takes
+// caller-owned scratch and does not allocate.
 fn alloc_stack_buf<F: Float>(len: usize) -> alloc::vec::Vec<F> {
     alloc::vec![F::zero(); len]
 }
@@ -432,6 +453,39 @@ mod tests {
                 assert!((a - b).abs() < 1e-4, "order={order} coeff {i}: {a} vs {b}");
             }
         }
+    }
+
+    #[test]
+    fn lsp_to_lpc_with_scratch_matches_owned_conversion_exactly() {
+        for &order in &[2usize, 4, 10, 20, 32] {
+            let coeffs = stable_lpc_coeffs(order);
+            let mut lsp = vec![0.0f64; order];
+            assert!(lpc_to_lsp(&coeffs, &mut lsp, DEFAULT_GRID_POINTS));
+
+            let mut owned = vec![0.0f64; order];
+            lsp_to_lpc(&lsp, &mut owned);
+
+            // Scratch full of NaN on entry: its prior contents must not leak
+            // into the result, and a longer-than-needed buffer must be fine.
+            let mut scratch = vec![f64::NAN; 2 * (order + 2) + 3];
+            let mut with = vec![0.0f64; order];
+            lsp_to_lpc_with_scratch(&lsp, &mut with, &mut scratch);
+
+            assert_eq!(
+                owned, with,
+                "order={order}: scratch path must be bit-identical"
+            );
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "scratch must hold")]
+    fn lsp_to_lpc_with_scratch_rejects_short_scratch() {
+        let lsp = [0.3f64, 0.9];
+        let mut out = [0.0f64; 2];
+        // Needs 2*(2+2) = 8 values.
+        let mut scratch = [0.0f64; 7];
+        lsp_to_lpc_with_scratch(&lsp, &mut out, &mut scratch);
     }
 
     #[test]
