@@ -9,6 +9,15 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+### Added
+- `lsp_to_lpc_with_scratch`: the LSP-to-LPC conversion with caller-owned scratch
+  (`2·(p+2)` values). It performs no heap allocation, so it can run on a real-time
+  path. Its output is bit-identical to `lsp_to_lpc`, which is now a wrapper around it.
+
+### Changed
+- `lsp_to_lpc` no longer collects the even and odd LSP indices into vectors; they are
+  read lazily. Its result is unchanged. It still allocates one scratch buffer per call.
+
 ## [0.2.0] - 2026-11-01
 
 ### Added
