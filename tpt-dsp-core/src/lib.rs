@@ -109,7 +109,7 @@ pub use fft::{
 pub use filters::{process_biquad, Biquad, BiquadCoeffs, BiquadType, FilterDesignError};
 pub use hilbert::hilbert;
 #[cfg(feature = "alloc")]
-pub use iir_design::{butterworth, chebyshev1_lowpass, Response};
+pub use iir_design::{butterworth, chebyshev1_lowpass, chebyshev2_lowpass, Response};
 pub use iir_design::{
     cascade_magnitude_response, magnitude_response, DcBlocker, OnePole, Svf, SvfOutput,
 };
@@ -140,7 +140,7 @@ pub use windows::{windowed, windowed_f64, windowed_symmetric, windowed_symmetric
 #[cfg(feature = "alloc")]
 pub use convolution::{ConvolvePlan, FftConvolver};
 #[cfg(feature = "alloc")]
-pub use filters::{Fir, FirDesign, IirCoeffs, IirFilter, IirStage};
+pub use filters::{halfband_fir, Fir, FirDesign, IirCoeffs, IirFilter, IirStage};
 #[cfg(feature = "alloc")]
 pub use hilbert::HilbertTransformer;
 #[cfg(feature = "alloc")]

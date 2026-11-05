@@ -227,6 +227,8 @@ pub enum FilterDesignError {
     EvenTapCount,
     /// A filter order was zero.
     InvalidOrder,
+    /// A half-band filter needs a tap count of the form 4k + 3.
+    HalfbandTaps,
 }
 
 impl core::fmt::Display for FilterDesignError {
@@ -239,6 +241,7 @@ impl core::fmt::Display for FilterDesignError {
             FilterDesignError::EmptyTaps => "FIR filter needs at least one tap",
             FilterDesignError::EvenTapCount => "FIR tap count must be odd and nonzero",
             FilterDesignError::InvalidOrder => "filter order must be at least 1",
+            FilterDesignError::HalfbandTaps => "half-band filters need 4k+3 taps",
         })
     }
 }
@@ -831,5 +834,62 @@ mod firwin_tests {
             .try_design_windowed::<f32>(21, WindowType::Blackman)
             .unwrap();
         assert_eq!(a.taps, b.taps);
+    }
+}
+
+/// Half-band low-pass FIR (cutoff at a quarter of the sample rate).
+///
+/// Every second tap (at even offsets from the centre, other than the centre
+/// itself) is exactly zero, which halves the multiplies for decimation by two.
+/// `taps` must be of the form `4k + 3`.
+///
+/// # Errors
+/// Returns [`FilterDesignError::HalfbandTaps`] for any other tap count.
+#[cfg(feature = "alloc")]
+pub fn halfband_fir(taps: usize) -> Result<Fir<f32>, FilterDesignError> {
+    if taps % 4 != 3 {
+        return Err(FilterDesignError::HalfbandTaps);
+    }
+    FirDesign::LowPass(0.25).try_design::<f32>(taps)
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod halfband_tests {
+    use super::*;
+
+    #[test]
+    fn halfband_has_zero_even_taps() {
+        let f = halfband_fir(31).unwrap();
+        let centre = 15usize;
+        for (i, &h) in f.taps.iter().enumerate() {
+            let off = i as isize - centre as isize;
+            if off != 0 && off % 2 == 0 {
+                assert!(h.abs() < 1e-6, "tap {i} = {h}");
+            }
+        }
+        assert!(
+            (f.taps[centre] - 0.5).abs() < 0.05,
+            "centre {}",
+            f.taps[centre]
+        );
+    }
+
+    #[test]
+    fn halfband_rejects_other_tap_counts() {
+        // 4k + 3 values are 3, 7, 11, 15, 19, …; everything else is rejected.
+        assert!(matches!(
+            halfband_fir(16),
+            Err(FilterDesignError::HalfbandTaps)
+        ));
+        assert!(matches!(
+            halfband_fir(17),
+            Err(FilterDesignError::HalfbandTaps)
+        ));
+        assert!(matches!(
+            halfband_fir(32),
+            Err(FilterDesignError::HalfbandTaps)
+        ));
+        assert!(halfband_fir(15).is_ok());
+        assert!(halfband_fir(19).is_ok());
     }
 }

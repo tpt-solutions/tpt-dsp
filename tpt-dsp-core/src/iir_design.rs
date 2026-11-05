@@ -511,3 +511,149 @@ mod chebyshev_tests {
         ));
     }
 }
+
+/// Bilinear transform of an analog second-order section.
+///
+/// `num` and `den` hold polynomial coefficients in `s` as `[s⁰, s¹, s²]`. The
+/// analog frequencies must already be pre-warped, so `s = 2·fs·(z−1)/(z+1)` is
+/// the only substitution left.
+#[cfg(feature = "alloc")]
+fn bilinear_biquad(num: [f64; 3], den: [f64; 3], fs: f64) -> BiquadCoeffs<f32> {
+    let c = 2.0 * fs;
+    let c2 = c * c;
+    let [n0, n1, n2] = num;
+    let [d0, d1, d2] = den;
+    // Coefficients of z², z¹, z⁰ after multiplying through by (z+1)².
+    let bh = n0 + n1 * c + n2 * c2;
+    let b1 = 2.0 * n0 - 2.0 * n2 * c2;
+    let bl = n0 - n1 * c + n2 * c2;
+    let ah = d0 + d1 * c + d2 * c2;
+    let a1 = 2.0 * d0 - 2.0 * d2 * c2;
+    let al = d0 - d1 * c + d2 * c2;
+    BiquadCoeffs {
+        b0: (bh / ah) as f32,
+        b1: (b1 / ah) as f32,
+        b2: (bl / ah) as f32,
+        a1: (a1 / ah) as f32,
+        a2: (al / ah) as f32,
+    }
+}
+
+/// Chebyshev type II (inverse Chebyshev) low-pass, as a biquad cascade.
+///
+/// `fstop` is the stopband edge and `atten_db` the minimum stopband
+/// attenuation. The passband is maximally flat (no ripple), and the response
+/// is `−atten_db` dB at `fstop`. The stopband has equiripple zeros. The
+/// design is normalised to unity DC gain. The analog prototype is
+/// pre-warped at `fstop`, so the stopband edge lands exactly where asked.
+///
+/// # Errors
+/// Returns an error for a zero order, a non-positive attenuation, or an
+/// invalid `fs`/`fstop`.
+#[cfg(feature = "alloc")]
+pub fn chebyshev2_lowpass(
+    order: usize,
+    fs: f32,
+    fstop: f32,
+    atten_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    if order == 0 {
+        return Err(FilterDesignError::InvalidOrder);
+    }
+    check_cutoff(fs, fstop)?;
+    if !(atten_db.is_finite() && atten_db > 0.0) {
+        return Err(FilterDesignError::Gain);
+    }
+    let fs64 = f64::from(fs);
+    let n = order as f64;
+    // Parameter: 1/ε = sqrt(10^{A/10} − 1).
+    let inv_eps = (10.0f64.powf(f64::from(atten_db) / 10.0) - 1.0).sqrt();
+    let a = inv_eps.asinh() / n;
+    let (sh, ch) = (a.sinh(), a.cosh());
+    // Pre-warped stopband frequency, in analog rad/s.
+    let wa = 2.0 * fs64 * (core::f64::consts::PI * f64::from(fstop) / fs64).tan();
+
+    let mut sections = alloc::vec::Vec::with_capacity(order.div_ceil(2));
+    for k in 0..order / 2 {
+        let theta = core::f64::consts::PI * (2.0 * k as f64 + 1.0) / (2.0 * n);
+        // Chebyshev I pole, then inverted (the type II poles are 1/p).
+        let (pr, pi) = (-sh * theta.sin(), ch * theta.cos());
+        let mag2 = pr * pr + pi * pi;
+        let (ir, ii) = (pr / mag2, -pi / mag2);
+        let p_mag2 = (ir * ir + ii * ii) * wa * wa;
+        let p_re = ir * wa;
+        // Zero pair at ±j·wa/cos θ.
+        let z = wa / theta.cos().abs().max(1e-12);
+        // Denominator: s² − 2·Re(p)·s + |p|²; numerator: s² + z².
+        sections.push(bilinear_biquad(
+            [z * z, 0.0, 1.0],
+            [p_mag2, -2.0 * p_re, 1.0],
+            fs64,
+        ));
+    }
+    if order % 2 == 1 {
+        // Real pole at 1/(−sh), scaled; no finite zero for this section.
+        let p_real = -wa / sh;
+        sections.push(bilinear_biquad(
+            [-p_real, 0.0, 0.0],
+            [-p_real, 1.0, 0.0],
+            fs64,
+        ));
+    }
+
+    let dc: f32 = sections
+        .iter()
+        .map(|c| (c.b0 + c.b1 + c.b2) / (1.0 + c.a1 + c.a2))
+        .product();
+    if dc.is_finite() && dc.abs() > 1e-12 {
+        let g = 1.0 / dc;
+        let first = &mut sections[0];
+        first.b0 *= g;
+        first.b1 *= g;
+        first.b2 *= g;
+    }
+    Ok(sections)
+}
+
+#[cfg(test)]
+mod chebyshev2_tests {
+    use super::*;
+
+    const FS: f32 = 48_000.0;
+
+    #[test]
+    fn chebyshev2_hits_the_stopband_attenuation_at_the_edge() {
+        for &order in &[2usize, 3, 4, 5] {
+            let s = chebyshev2_lowpass(order, FS, 3000.0, 40.0).unwrap();
+            let dc = cascade_magnitude_response(&s, FS, 1.0);
+            assert!((dc - 1.0).abs() < 0.01, "order {order}: dc {dc}");
+            let at_stop = cascade_magnitude_response(&s, FS, 3000.0);
+            let want = 10.0f32.powf(-40.0 / 20.0);
+            assert!(
+                (at_stop - want).abs() < 0.2 * want + 1e-4,
+                "order {order}: |H(fstop)| {at_stop} vs {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn chebyshev2_passband_is_flat() {
+        let s = chebyshev2_lowpass(4, FS, 3000.0, 40.0).unwrap();
+        for f in [50.0f32, 200.0, 800.0] {
+            let g = cascade_magnitude_response(&s, FS, f);
+            assert!((g - 1.0).abs() < 0.01, "passband {f} Hz: {g}");
+        }
+    }
+
+    #[test]
+    fn chebyshev2_rejects_bad_arguments() {
+        assert!(matches!(
+            chebyshev2_lowpass(0, FS, 3000.0, 40.0),
+            Err(FilterDesignError::InvalidOrder)
+        ));
+        assert!(matches!(
+            chebyshev2_lowpass(4, FS, 3000.0, 0.0),
+            Err(FilterDesignError::Gain)
+        ));
+    }
+}
