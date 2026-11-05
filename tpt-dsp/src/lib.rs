@@ -103,3 +103,8 @@ mod tests {
         assert!((pid.update(0.0) - 1.0).abs() < 1e-6);
     }
 }
+
+/// A compiled end-to-end example (WAV in, filter, analyse, WAV out). Only
+/// documentation; it needs the `audio`, `analysis` and `io` features.
+#[cfg(all(feature = "audio", feature = "analysis", feature = "io"))]
+pub mod walkthrough;
