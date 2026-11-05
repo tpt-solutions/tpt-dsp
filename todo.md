@@ -284,7 +284,7 @@ _Status (2026-11-06, this pass): sections A and B and the housekeeping item are 
 - [~] Walkthrough "WAV in -> filter -> analyse -> write" as a compiled doctest (`tpt-dsp/src/walkthrough.rs`, runs under `--all-features`). _Not done: a README examples table, and examples for wasm and embedded `thumbv7em`._
 - [ ] nihplug "swap in your own effect" plugin template; extend `templates/dsp-effect-crate` — _not started._
 - [x] CLI: `gen` (sine, saw, square, noise, chirp), `resample` (polyphase), `design` (Butterworth / Chebyshev I / II response CSV), `response` (effect-chain response from its impulse response, CSV), and `completions` (bash, zsh, fish, powershell, elvish). Library side in `tpt-dsp-cli/src/tools.rs`. Smoke-tested end to end.
-- [ ] Python: `pyproject.toml` (maturin), `.pyi` + `py.typed`, numpy interop, stateful classes (Biquad/Pid/Oscillator), wheels workflow — _not started._
+- [~] Python (`tpt-dsp-py`): `pyproject.toml` (maturin), a `tpt_dsp` package over the compiled `tpt_dsp._native`, `_native.pyi` and `py.typed`, stateful `Biquad` and `Pid` classes, and 15 unittest tests. Built and tested locally on Windows (Python 3.13, abi3 wheel); the CI job that builds and tests it has not run yet. Fixed a pre-existing bug: pyo3 0.30 has no `abi3-py38` feature, so the crate now uses `abi3-py39`. _Not done: numpy interop, a stateful oscillator class, and PyPI publishing._
 - [ ] API ergonomics: builders/named params instead of 5 positional `f32`s, shared error type; `control` declares unused `core` dep — _not started. Shared error type is partly in place: `FilterDesignError` is used by the filters and the EQ._
 - [x] Docs: `docs/CHOOSING_A_CRATE.md`, `docs/COOKBOOK.md` (ten recipes; code not compiled), `docs/RT_SAFETY.md`.
 
