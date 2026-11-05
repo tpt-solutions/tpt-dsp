@@ -34,6 +34,7 @@ mod features;
 mod spectrogram;
 mod spectrum;
 mod timeseries;
+mod yin;
 
 #[cfg(any(feature = "async-tokio", feature = "async-std"))]
 pub mod async_adapters;
@@ -49,6 +50,7 @@ pub use spectrum::{
     DEFAULT_DB_FLOOR,
 };
 pub use timeseries::{Ema, MovingAverage, OutlierDetector, RunningMean};
+pub use yin::yin_pitch;
 
 #[cfg(any(feature = "async-tokio", feature = "async-std"))]
 pub use async_adapters::{process_stream_in_place, process_stream_into_sink};
