@@ -379,3 +379,135 @@ mod tests {
         ));
     }
 }
+
+/// First-order bilinear low-pass section with cutoff `f1` Hz.
+#[cfg(feature = "alloc")]
+fn first_order_lowpass(fs: f32, f1: f32) -> Result<BiquadCoeffs<f32>, FilterDesignError> {
+    check_cutoff(fs, f1)?;
+    let kk = (core::f32::consts::PI * f1 / fs).tan();
+    let c = 1.0 / (kk + 1.0);
+    Ok(BiquadCoeffs {
+        b0: kk * c,
+        b1: kk * c,
+        b2: 0.0,
+        a1: (kk - 1.0) / (kk + 1.0),
+        a2: 0.0,
+    })
+}
+
+/// Chebyshev type I low-pass of order `order`, as a biquad cascade.
+///
+/// `ripple_db` is the passband ripple (for example `0.5` or `1.0`). The
+/// design is normalised to unity DC gain, so the passband ripples between 1 and
+/// `10^(−ripple_db/20)`. For odd orders the response is `−ripple_db` dB at
+/// `fc`. For even orders DC is the ripple minimum, so after normalising DC to
+/// 1 the response at `fc` is 0 dB. Each
+/// pole pair is an RBJ low-pass at the prototype frequency scaled by `fc`, so
+/// the cutoff is at the bilinear (unwarped) frequency, as for
+/// [`butterworth`](crate::butterworth).
+///
+/// # Errors
+/// Returns an error for a zero order, a non-positive ripple, or an invalid
+/// `fs`/`fc`.
+#[cfg(feature = "alloc")]
+pub fn chebyshev1_lowpass(
+    order: usize,
+    fs: f32,
+    fc: f32,
+    ripple_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    if order == 0 {
+        return Err(FilterDesignError::InvalidOrder);
+    }
+    check_cutoff(fs, fc)?;
+    if !(ripple_db.is_finite() && ripple_db > 0.0) {
+        return Err(FilterDesignError::Gain);
+    }
+    let eps = (10.0f32.powf(ripple_db / 10.0) - 1.0).sqrt();
+    let n = order as f32;
+    let a = (1.0 / eps).asinh() / n;
+    let (sh, ch) = (a.sinh(), a.cosh());
+    let mut sections = alloc::vec::Vec::with_capacity(order.div_ceil(2));
+    for k in 0..order / 2 {
+        // Prototype pole pair on the left half-plane ellipse.
+        let theta = core::f32::consts::PI * (2.0 * k as f32 + 1.0) / (2.0 * n);
+        let sigma = -sh * theta.sin();
+        let omega = ch * theta.cos();
+        let w0 = (sigma * sigma + omega * omega).sqrt();
+        let q = w0 / (-2.0 * sigma);
+        sections.push(BiquadCoeffs::<f32>::try_design(
+            BiquadType::LowPass,
+            fs,
+            fc * w0,
+            q,
+            0.0,
+        )?);
+    }
+    if order % 2 == 1 {
+        // The real prototype pole sits at −sinh(a).
+        sections.push(first_order_lowpass(fs, fc * sh)?);
+    }
+    // Normalise to unity DC gain: product of each section's DC gain.
+    let dc: f32 = sections
+        .iter()
+        .map(|c| (c.b0 + c.b1 + c.b2) / (1.0 + c.a1 + c.a2))
+        .product();
+    if dc.is_finite() && dc.abs() > 1e-12 {
+        let g = 1.0 / dc;
+        let first = &mut sections[0];
+        first.b0 *= g;
+        first.b1 *= g;
+        first.b2 *= g;
+    }
+    Ok(sections)
+}
+
+#[cfg(test)]
+mod chebyshev_tests {
+    use super::*;
+
+    const FS: f32 = 48_000.0;
+
+    #[test]
+    fn chebyshev_has_unity_dc_and_ripple_level_at_cutoff() {
+        for &order in &[2usize, 3, 4, 5] {
+            let ripple = 1.0;
+            let s = chebyshev1_lowpass(order, FS, 1000.0, ripple).unwrap();
+            let dc = cascade_magnitude_response(&s, FS, 0.5);
+            assert!((dc - 1.0).abs() < 0.01, "order {order}: dc {dc}");
+            let at_fc = cascade_magnitude_response(&s, FS, 1000.0);
+            // Odd orders sit at −ripple dB at cutoff; even orders at 0 dB
+            // (DC is the ripple minimum and is normalised to unity).
+            let want = if order % 2 == 1 {
+                10.0f32.powf(-ripple / 20.0)
+            } else {
+                1.0
+            };
+            assert!(
+                (at_fc - want).abs() < 0.03,
+                "order {order}: |H(fc)| {at_fc} vs {want}"
+            );
+        }
+    }
+
+    #[test]
+    fn chebyshev_is_steeper_than_butterworth_in_the_stopband() {
+        let cheb = chebyshev1_lowpass(4, FS, 1000.0, 1.0).unwrap();
+        let butter = butterworth(Response::LowPass, 4, FS, 1000.0).unwrap();
+        let c = cascade_magnitude_response(&cheb, FS, 1500.0);
+        let b = cascade_magnitude_response(&butter, FS, 1500.0);
+        assert!(c < b, "chebyshev {c} not below butterworth {b}");
+    }
+
+    #[test]
+    fn chebyshev_rejects_bad_arguments() {
+        assert!(matches!(
+            chebyshev1_lowpass(0, FS, 1000.0, 1.0),
+            Err(FilterDesignError::InvalidOrder)
+        ));
+        assert!(matches!(
+            chebyshev1_lowpass(4, FS, 1000.0, 0.0),
+            Err(FilterDesignError::Gain)
+        ));
+    }
+}

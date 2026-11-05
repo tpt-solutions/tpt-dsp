@@ -66,7 +66,9 @@ mod lsp;
 mod mdct;
 mod noise_shaping;
 mod pitch;
+mod polyphase;
 mod psychoacoustic;
+mod receiver;
 #[cfg(feature = "alloc")]
 pub mod resample;
 mod rf;
@@ -107,7 +109,7 @@ pub use fft::{
 pub use filters::{process_biquad, Biquad, BiquadCoeffs, BiquadType, FilterDesignError};
 pub use hilbert::hilbert;
 #[cfg(feature = "alloc")]
-pub use iir_design::{butterworth, Response};
+pub use iir_design::{butterworth, chebyshev1_lowpass, Response};
 pub use iir_design::{
     cascade_magnitude_response, magnitude_response, DcBlocker, OnePole, Svf, SvfOutput,
 };
@@ -118,11 +120,15 @@ pub use pitch::{
     amdf_pitch, autocorrelation_pitch, hz_range_to_period_samples, PitchEstimate,
     DEFAULT_VOICED_THRESHOLD, SPEECH_MAX_F0_HZ, SPEECH_MIN_F0_HZ,
 };
+pub use polyphase::FarrowDelay;
+#[cfg(feature = "alloc")]
+pub use polyphase::RationalResampler;
 pub use psychoacoustic::{
     classify_tonal_bins, combined_threshold_db, db_to_power, is_tonal_peak,
     noise_masking_offset_db, perceptual_weight_db, power_to_db, simultaneous_masking,
     spreading_function_db, threshold_in_quiet, tonal_masking_offset_db,
 };
+pub use receiver::{Agc, AmDemodulator, Detector, Pll, Squelch, SsbDemodulator};
 #[cfg(feature = "alloc")]
 pub use rf::CicDecimator;
 pub use rf::{Goertzel, Nco};

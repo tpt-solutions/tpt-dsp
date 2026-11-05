@@ -457,6 +457,21 @@ impl FirDesign {
     /// `0 <= lo < hi <= 0.5` (cycles/sample). A single tap is accepted and is
     /// an identity-like impulse.
     pub fn try_design<F: Float>(self, taps: usize) -> Result<Fir<F>, FilterDesignError> {
+        self.try_design_windowed(taps, crate::WindowType::Blackman)
+    }
+
+    /// Windowed-sinc design with any window from [`WindowType`](crate::WindowType),
+    /// using the symmetric window form (the usual firwin convention). The
+    /// Blackman default of [`try_design`](Self::try_design) is one choice; Kaiser
+    /// trades main-lobe width for stopband rejection through its β.
+    ///
+    /// # Errors
+    /// The same as [`try_design`](Self::try_design).
+    pub fn try_design_windowed<F: Float>(
+        self,
+        taps: usize,
+        window: crate::WindowType,
+    ) -> Result<Fir<F>, FilterDesignError> {
         if taps == 0 {
             return Err(FilterDesignError::EmptyTaps);
         }
@@ -477,14 +492,11 @@ impl FirDesign {
         }
 
         let mut coeffs = alloc::vec![F::zero(); taps];
-        // The Blackman window divides by `taps - 1`; a single tap has no
-        // window to shape, so it is taken as 1.
-        let span = (taps as f32 - 1.0).max(1.0);
+        let mut win = alloc::vec![0.0f64; taps];
+        crate::windows::windowed_symmetric_f64(window, taps, &mut win);
         for (i, c) in coeffs.iter_mut().enumerate() {
             let n = i as f32 - half;
-            // Blackman window.
-            let w = 0.42 - 0.5 * (core::f32::consts::TAU * i as f32 / span).cos()
-                + 0.08 * (core::f32::consts::TAU * 2.0 * i as f32 / span).cos();
+            let w = win[i] as f32;
             let mut h = if n == 0.0 {
                 2.0 * (hi - lo)
             } else {
@@ -754,5 +766,70 @@ mod fir_design_robustness_tests {
     fn single_tap_design_is_finite() {
         let f = FirDesign::LowPass(0.25).try_design::<f32>(1).unwrap();
         assert!(f.taps.iter().all(|t| t.is_finite()));
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod firwin_tests {
+    use super::*;
+    use crate::WindowType;
+
+    fn response(taps: &[f32], f: f32) -> f32 {
+        let (mut re, mut im) = (0.0f32, 0.0f32);
+        for (n, &h) in taps.iter().enumerate() {
+            let w = core::f32::consts::TAU * f * n as f32;
+            re += h * w.cos();
+            im -= h * w.sin();
+        }
+        (re * re + im * im).sqrt()
+    }
+
+    #[test]
+    fn firwin_lowpass_has_unity_dc_gain_for_any_window() {
+        for win in [
+            WindowType::Rectangular,
+            WindowType::Hann,
+            WindowType::Blackman,
+            WindowType::Kaiser(8.0),
+        ] {
+            let f = FirDesign::LowPass(0.1)
+                .try_design_windowed::<f32>(31, win)
+                .unwrap();
+            let dc: f32 = f.taps.iter().sum();
+            // A bare truncated sinc (rectangular window) carries Gibbs ripple
+            // at DC, so it gets a looser bound than the tapered windows.
+            let tol = if win == WindowType::Rectangular {
+                0.1
+            } else {
+                0.01
+            };
+            assert!((dc - 1.0).abs() < tol, "{win:?}: dc {dc}");
+        }
+    }
+
+    #[test]
+    fn kaiser_window_has_deeper_stopband_than_rectangular() {
+        let rect = FirDesign::LowPass(0.1)
+            .try_design_windowed::<f32>(31, WindowType::Rectangular)
+            .unwrap();
+        let kaiser = FirDesign::LowPass(0.1)
+            .try_design_windowed::<f32>(31, WindowType::Kaiser(8.0))
+            .unwrap();
+        let stop_rect = response(&rect.taps, 0.3);
+        let stop_kaiser = response(&kaiser.taps, 0.3);
+        assert!(stop_kaiser < 0.005, "kaiser stopband {stop_kaiser}");
+        assert!(
+            stop_rect > 3.0 * stop_kaiser,
+            "rect {stop_rect} kaiser {stop_kaiser}"
+        );
+    }
+
+    #[test]
+    fn default_design_is_blackman() {
+        let a = FirDesign::LowPass(0.2).try_design::<f32>(21).unwrap();
+        let b = FirDesign::LowPass(0.2)
+            .try_design_windowed::<f32>(21, WindowType::Blackman)
+            .unwrap();
+        assert_eq!(a.taps, b.taps);
     }
 }
