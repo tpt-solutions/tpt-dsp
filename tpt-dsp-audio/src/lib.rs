@@ -20,18 +20,23 @@
 #![warn(rust_2018_idioms)]
 
 mod delay;
+mod dynamics;
 mod engine;
 mod envelope;
 mod eq;
 mod fm;
 mod graph;
+mod modulation;
 mod oscillator;
 mod reverb;
 mod subtractive;
+mod synthesis;
+mod util;
 mod waveshaper;
 mod wavetable;
 
 pub use delay::Delay;
+pub use dynamics::{Compressor, Gate, Limiter};
 pub use engine::{RealtimeEngine, BLOCK_128, BLOCK_256};
 pub use envelope::{Adsr, EnvelopeState};
 pub use eq::Eq;
@@ -39,8 +44,10 @@ pub use fm::FmSynth;
 pub use graph::{
     AudioGraph, AudioNode, ClosureNode, ClosureSink, ClosureSource, Passthrough, Sink, Source,
 };
+pub use modulation::{Lfo, Tremolo};
 pub use oscillator::{Oscillator, Waveform};
 pub use reverb::{generate_decay_ir, ConvolutionReverb};
 pub use subtractive::SubtractiveVoice;
+pub use synthesis::{poly_blep, BlepShape, NoiseSource, PinkNoise, PolyBlepOscillator, TpdfDither};
 pub use waveshaper::{Curve, Waveshaper};
 pub use wavetable::Wavetable;

@@ -4,6 +4,8 @@
 //! `[0, 1]`. Time constants are in seconds; the envelope is evaluated per
 //! sample so it is allocation-free and real-time safe.
 
+use crate::util::{is_valid_sample_rate, sanitize_sample_rate, sanitize_time};
+
 /// The current segment an [`Adsr`] envelope is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EnvelopeState {
@@ -33,15 +35,30 @@ pub struct Adsr {
 
 impl Adsr {
     /// Create an envelope. Times are seconds; `sustain` is a level in `[0, 1]`.
+    ///
+    /// Non-finite times are treated as zero and a non-finite `sustain` as
+    /// zero, so the output stays finite for any input.
     pub fn new(sample_rate: f32, attack: f32, decay: f32, sustain: f32, release: f32) -> Self {
         Self {
-            attack: attack.max(0.0),
-            decay: decay.max(0.0),
-            sustain: sustain.clamp(0.0, 1.0),
-            release: release.max(0.0),
-            sample_rate,
+            attack: sanitize_time(attack),
+            decay: sanitize_time(decay),
+            sustain: if sustain.is_finite() {
+                sustain.clamp(0.0, 1.0)
+            } else {
+                0.0
+            },
+            release: sanitize_time(release),
+            sample_rate: sanitize_sample_rate(sample_rate),
             state: EnvelopeState::Idle,
             value: 0.0,
+        }
+    }
+
+    /// Set the sample rate in Hz. Non-finite or non-positive values are
+    /// ignored, keeping the previous rate.
+    pub fn set_sample_rate(&mut self, sample_rate: f32) {
+        if is_valid_sample_rate(sample_rate) {
+            self.sample_rate = sample_rate;
         }
     }
 
@@ -147,5 +164,34 @@ mod tests {
         }
         assert_eq!(env.value(), 0.0);
         assert_eq!(env.state(), EnvelopeState::Idle);
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    #[test]
+    fn non_finite_parameters_do_not_poison_output() {
+        let mut env = Adsr::new(1000.0, f32::NAN, f32::INFINITY, f32::NAN, -1.0);
+        env.note_on();
+        for _ in 0..500 {
+            assert!(env.tick().is_finite());
+        }
+    }
+
+    #[test]
+    fn set_sample_rate_changes_timing() {
+        // Same wall-clock attack (0.1 s) at two rates should reach the peak
+        // in the same number of seconds: 100 samples at 1 kHz.
+        let mut env = Adsr::new(1000.0, 0.1, 0.1, 0.5, 0.1);
+        env.set_sample_rate(2000.0);
+        env.note_on();
+        let mut n = 0;
+        while env.state() == EnvelopeState::Attack && n < 10_000 {
+            env.tick();
+            n += 1;
+        }
+        assert!((190..=210).contains(&n), "attack took {n} samples");
     }
 }

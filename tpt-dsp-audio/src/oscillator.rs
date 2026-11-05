@@ -4,6 +4,8 @@
 //! configurable frequency and sample rate. All state is a single phase value,
 //! so it is allocation-free and real-time safe.
 
+use crate::util::{is_valid_sample_rate, sanitize_frequency, sanitize_sample_rate, wrap_phase};
+
 /// The shape produced by an [`Oscillator`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Waveform {
@@ -34,32 +36,34 @@ pub struct Oscillator {
 impl Oscillator {
     /// Create a sine oscillator at `frequency` Hz running at `sample_rate` Hz.
     pub fn new(sample_rate: f32, frequency: f32) -> Self {
-        Self {
-            waveform: Waveform::Sine,
-            phase: 0.0,
-            frequency,
-            sample_rate,
-        }
+        Self::with_waveform(sample_rate, frequency, Waveform::Sine)
     }
 
     /// Create an oscillator of an explicit waveform.
+    ///
+    /// A non-finite or negative `frequency` is stored as `0.0`; a non-finite
+    /// or non-positive `sample_rate` falls back to 48 kHz.
     pub fn with_waveform(sample_rate: f32, frequency: f32, waveform: Waveform) -> Self {
         Self {
             waveform,
             phase: 0.0,
-            frequency,
-            sample_rate,
+            frequency: sanitize_frequency(frequency),
+            sample_rate: sanitize_sample_rate(sample_rate),
         }
     }
 
-    /// Set the oscillator frequency in Hz.
+    /// Set the oscillator frequency in Hz. Non-finite or negative values are
+    /// stored as `0.0`.
     pub fn set_frequency(&mut self, frequency: f32) {
-        self.frequency = frequency;
+        self.frequency = sanitize_frequency(frequency);
     }
 
-    /// Set the sample rate in Hz (e.g. after a device switch).
+    /// Set the sample rate in Hz (e.g. after a device switch). Non-finite or
+    /// non-positive values are ignored, keeping the previous rate.
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
-        self.sample_rate = sample_rate;
+        if is_valid_sample_rate(sample_rate) {
+            self.sample_rate = sample_rate;
+        }
     }
 
     /// Replace the waveform.
@@ -87,10 +91,7 @@ impl Oscillator {
             }
             Waveform::Triangle => 1.0 - 4.0 * (self.phase - 0.5).abs(),
         };
-        self.phase += self.frequency / self.sample_rate;
-        while self.phase >= 1.0 {
-            self.phase -= 1.0;
-        }
+        self.phase = wrap_phase(self.phase + self.frequency / self.sample_rate);
         sample
     }
 
@@ -138,5 +139,43 @@ mod tests {
             osc.tick();
         }
         assert!(osc.phase >= 0.0 && osc.phase < 1.0);
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    #[test]
+    fn huge_frequency_terminates_and_keeps_phase_in_range() {
+        // A step far larger than one cycle used to spin forever in the
+        // `while phase >= 1.0` wrap loop.
+        let mut osc = Oscillator::new(48_000.0, 1.0e30);
+        for _ in 0..16 {
+            let s = osc.tick();
+            assert!(s.is_finite());
+            assert!((0.0..1.0).contains(&osc.phase));
+        }
+    }
+
+    #[test]
+    fn non_finite_frequency_is_rejected() {
+        for bad in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN, -440.0] {
+            let mut osc = Oscillator::new(48_000.0, 440.0);
+            osc.set_frequency(bad);
+            for _ in 0..8 {
+                assert!(osc.tick().is_finite());
+            }
+            assert!((0.0..1.0).contains(&osc.phase));
+        }
+    }
+
+    #[test]
+    fn invalid_sample_rate_is_ignored() {
+        let mut osc = Oscillator::new(48_000.0, 440.0);
+        osc.set_sample_rate(0.0);
+        osc.set_sample_rate(f32::NAN);
+        assert!(osc.tick().is_finite());
+        assert_eq!(osc.sample_rate, 48_000.0);
     }
 }

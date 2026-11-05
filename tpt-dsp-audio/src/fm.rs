@@ -5,6 +5,8 @@
 //! (`mod_index` is the classic FM modulation index divided by 2π). The output
 //! is `sin(2π·(carrier_phase + mod_index·modulator))`.
 
+use crate::util::{is_valid_sample_rate, sanitize_frequency, sanitize_sample_rate, wrap_phase};
+
 /// A 2-operator FM synthesizer voice.
 #[derive(Debug, Clone)]
 pub struct FmSynth {
@@ -26,23 +28,25 @@ impl FmSynth {
     /// * `mod_index` — peak phase deviation in cycles.
     pub fn new(sample_rate: f32, carrier: f32, modulator: f32, mod_index: f32) -> Self {
         Self {
-            carrier_freq: carrier,
-            mod_freq: modulator,
+            carrier_freq: sanitize_frequency(carrier),
+            mod_freq: sanitize_frequency(modulator),
             mod_index,
-            sample_rate,
+            sample_rate: sanitize_sample_rate(sample_rate),
             carrier_phase: 0.0,
             mod_phase: 0.0,
         }
     }
 
-    /// Set the carrier frequency in Hz.
+    /// Set the carrier frequency in Hz. Non-finite or negative values are
+    /// stored as `0.0`.
     pub fn set_carrier_frequency(&mut self, carrier: f32) {
-        self.carrier_freq = carrier;
+        self.carrier_freq = sanitize_frequency(carrier);
     }
 
-    /// Set the modulator frequency in Hz.
+    /// Set the modulator frequency in Hz. Non-finite or negative values are
+    /// stored as `0.0`.
     pub fn set_modulator_frequency(&mut self, modulator: f32) {
-        self.mod_freq = modulator;
+        self.mod_freq = sanitize_frequency(modulator);
     }
 
     /// Set the modulation index (peak phase deviation, in cycles).
@@ -50,9 +54,12 @@ impl FmSynth {
         self.mod_index = mod_index;
     }
 
-    /// Set the sample rate in Hz.
+    /// Set the sample rate in Hz. Non-finite or non-positive values are
+    /// ignored, keeping the previous rate.
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
-        self.sample_rate = sample_rate;
+        if is_valid_sample_rate(sample_rate) {
+            self.sample_rate = sample_rate;
+        }
     }
 
     /// Reset both phase accumulators.
@@ -66,14 +73,8 @@ impl FmSynth {
         let two_pi = core::f32::consts::TAU;
         let mod_sig = self.mod_index * (two_pi * self.mod_phase).sin();
         let sample = (two_pi * (self.carrier_phase + mod_sig)).sin();
-        self.carrier_phase += self.carrier_freq / self.sample_rate;
-        self.mod_phase += self.mod_freq / self.sample_rate;
-        while self.carrier_phase >= 1.0 {
-            self.carrier_phase -= 1.0;
-        }
-        while self.mod_phase >= 1.0 {
-            self.mod_phase -= 1.0;
-        }
+        self.carrier_phase = wrap_phase(self.carrier_phase + self.carrier_freq / self.sample_rate);
+        self.mod_phase = wrap_phase(self.mod_phase + self.mod_freq / self.sample_rate);
         sample
     }
 
@@ -118,5 +119,20 @@ mod tests {
             energy += s * s;
         }
         assert!(energy > 0.0);
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    #[test]
+    fn huge_frequencies_terminate_and_stay_finite() {
+        let mut fm = FmSynth::new(48_000.0, 1.0e30, 1.0e30, 2.0);
+        for _ in 0..16 {
+            assert!(fm.tick().is_finite());
+        }
+        assert!((0.0..1.0).contains(&fm.carrier_phase));
+        assert!((0.0..1.0).contains(&fm.mod_phase));
     }
 }

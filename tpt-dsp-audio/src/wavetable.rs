@@ -5,6 +5,8 @@
 //! oscillator replacement for naive per-sample math, and the basis for more
 //! elaborate synthesis (morphing, single-cycle samples).
 
+use crate::util::{is_valid_sample_rate, sanitize_frequency, sanitize_sample_rate, wrap_phase};
+
 /// A single-cycle wavetable oscillator.
 #[derive(Debug, Clone)]
 pub struct Wavetable {
@@ -23,8 +25,8 @@ impl Wavetable {
         Self {
             table,
             phase: 0.0,
-            frequency,
-            sample_rate,
+            frequency: sanitize_frequency(frequency),
+            sample_rate: sanitize_sample_rate(sample_rate),
         }
     }
 
@@ -57,19 +59,23 @@ impl Wavetable {
         Self {
             table: samples.to_vec(),
             phase: 0.0,
-            frequency,
-            sample_rate,
+            frequency: sanitize_frequency(frequency),
+            sample_rate: sanitize_sample_rate(sample_rate),
         }
     }
 
-    /// Set the playback frequency in Hz.
+    /// Set the playback frequency in Hz. Non-finite or negative values are
+    /// stored as `0.0`.
     pub fn set_frequency(&mut self, frequency: f32) {
-        self.frequency = frequency;
+        self.frequency = sanitize_frequency(frequency);
     }
 
-    /// Set the sample rate in Hz.
+    /// Set the sample rate in Hz. Non-finite or non-positive values are
+    /// ignored, keeping the previous rate.
     pub fn set_sample_rate(&mut self, sample_rate: f32) {
-        self.sample_rate = sample_rate;
+        if is_valid_sample_rate(sample_rate) {
+            self.sample_rate = sample_rate;
+        }
     }
 
     /// Reset the read phase to the start of the table.
@@ -95,10 +101,7 @@ impl Wavetable {
         let i1 = (i0 + 1) % self.table.len();
         let frac = pos - pos.floor();
         let s = self.table[i0] * (1.0 - frac) + self.table[i1] * frac;
-        self.phase += self.frequency / self.sample_rate;
-        while self.phase >= 1.0 {
-            self.phase -= 1.0;
-        }
+        self.phase = wrap_phase(self.phase + self.frequency / self.sample_rate);
         s
     }
 
@@ -133,5 +136,30 @@ mod tests {
             wt.tick();
         }
         assert!(wt.phase >= 0.0 && wt.phase < 1.0);
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+    use crate::Waveform;
+
+    #[test]
+    fn huge_frequency_terminates_and_keeps_phase_in_range() {
+        let mut wt = Wavetable::from_waveform(64, 48_000.0, 1.0e30, Waveform::Sine);
+        for _ in 0..16 {
+            assert!(wt.tick().is_finite());
+            assert!((0.0..1.0).contains(&wt.phase));
+        }
+    }
+
+    #[test]
+    fn non_finite_frequency_is_rejected() {
+        let mut wt = Wavetable::from_waveform(64, 48_000.0, 440.0, Waveform::Sine);
+        wt.set_frequency(f32::INFINITY);
+        for _ in 0..8 {
+            assert!(wt.tick().is_finite());
+        }
+        assert!((0.0..1.0).contains(&wt.phase));
     }
 }

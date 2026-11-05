@@ -9,6 +9,9 @@ use tpt_dsp_core::{Biquad, BiquadType};
 
 use crate::envelope::Adsr;
 
+/// Number of samples between filter coefficient redesigns.
+const COEFF_UPDATE_INTERVAL: u32 = 32;
+
 /// A subtractive-synthesis voice.
 #[derive(Debug, Clone)]
 pub struct SubtractiveVoice {
@@ -20,11 +23,20 @@ pub struct SubtractiveVoice {
     filter_env_amount: f32,
     base_cutoff: f32,
     sample_rate: f32,
+    /// Samples remaining until the next coefficient redesign.
+    coeff_countdown: u32,
 }
 
 impl SubtractiveVoice {
     /// Create a voice with a sawtooth oscillator and sensible defaults.
+    ///
+    /// A non-finite or non-positive `sample_rate` falls back to 48 kHz.
     pub fn new(sample_rate: f32) -> Self {
+        let sample_rate = if sample_rate.is_finite() && sample_rate > 0.0 {
+            sample_rate
+        } else {
+            48_000.0
+        };
         let osc = crate::Oscillator::with_waveform(sample_rate, 220.0, crate::Waveform::Sawtooth);
         let filter = Biquad::<f32>::design(BiquadType::LowPass, sample_rate, 1200.0, 4.0, 0.0);
         let amp_env = Adsr::new(sample_rate, 0.01, 0.2, 0.7, 0.3);
@@ -37,10 +49,12 @@ impl SubtractiveVoice {
             filter_env_amount: 3000.0,
             base_cutoff: 1200.0,
             sample_rate,
+            coeff_countdown: 0,
         }
     }
 
-    /// Start a note at `frequency` Hz.
+    /// Start a note at `frequency` Hz. Non-finite or negative frequencies
+    /// are treated as silence (0 Hz).
     pub fn note_on(&mut self, frequency: f32) {
         self.osc.set_frequency(frequency);
         self.amp_env.note_on();
@@ -58,12 +72,37 @@ impl SubtractiveVoice {
         self.amp_env.state() == crate::envelope::EnvelopeState::Idle
     }
 
+    /// Set the sample rate in Hz (e.g. after a device switch). Non-finite or
+    /// non-positive values are ignored.
+    pub fn set_sample_rate(&mut self, sample_rate: f32) {
+        if sample_rate.is_finite() && sample_rate > 0.0 {
+            self.sample_rate = sample_rate;
+            self.osc.set_sample_rate(sample_rate);
+            self.amp_env.set_sample_rate(sample_rate);
+            self.filter_env.set_sample_rate(sample_rate);
+            // Force a coefficient refresh on the next tick.
+            self.coeff_countdown = 0;
+        }
+    }
+
     /// Advance one sample and return it.
+    ///
+    /// The filter coefficients are redesigned once every
+    /// `COEFF_UPDATE_INTERVAL` samples rather than every sample; the cutoff
+    /// modulation is slow enough that this is inaudible, and it avoids a
+    /// trigonometric design call per sample on the audio thread.
     pub fn tick(&mut self) -> f32 {
-        let cutoff = self.base_cutoff + self.filter_env_amount * self.filter_env.tick();
-        let cutoff = cutoff.clamp(20.0, self.sample_rate * 0.45);
-        let c = Biquad::<f32>::design(BiquadType::LowPass, self.sample_rate, cutoff, 4.0, 0.0);
-        self.filter.set_coeffs(*c.coeffs());
+        let env = self.filter_env.tick();
+        if self.coeff_countdown == 0 {
+            let cutoff = self.base_cutoff + self.filter_env_amount * env;
+            // `max` before `min` so a very low sample rate can't invert the
+            // clamp bounds (which would panic).
+            let cutoff = cutoff.max(20.0).min(self.sample_rate * 0.45);
+            let c = Biquad::<f32>::design(BiquadType::LowPass, self.sample_rate, cutoff, 4.0, 0.0);
+            self.filter.set_coeffs(*c.coeffs());
+            self.coeff_countdown = COEFF_UPDATE_INTERVAL;
+        }
+        self.coeff_countdown -= 1;
         let s = self.osc.tick();
         let mut filtered = [0.0f32; 1];
         self.filter.process(&[s], &mut filtered);
