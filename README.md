@@ -1,5 +1,11 @@
 # tpt-dsp
 
+[![crates.io](https://img.shields.io/crates/v/tpt-dsp-core.svg)](https://crates.io/crates/tpt-dsp-core)
+[![docs.rs](https://img.shields.io/docsrs/tpt-dsp-core)](https://docs.rs/tpt-dsp-core)
+[![CI](https://github.com/tpt-solutions/tpt-dsp/actions/workflows/ci.yml/badge.svg)](https://github.com/tpt-solutions/tpt-dsp/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](LICENSE-MIT)
+[![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)](Cargo.toml)
+
 A pure-Rust, real-time-safe digital signal processing framework.
 
 **Web pedalboard demo:** [https://tpt-solutions.github.io/tpt-dsp/](https://tpt-solutions.github.io/tpt-dsp/)
@@ -76,12 +82,12 @@ analysis, io). The dependency graph is acyclic.
 
 ## Getting started
 
-Every crate is published on [crates.io](https://crates.io) at 0.1.0:
+Every crate is published on [crates.io](https://crates.io) at 0.2.0:
 
 ```toml
 [dependencies]
-tpt-dsp-core = "0.1"
-tpt-dsp-audio = "0.1"
+tpt-dsp-core = "0.2"
+tpt-dsp-audio = "0.2"
 ```
 
 ### Design a biquad low-pass filter

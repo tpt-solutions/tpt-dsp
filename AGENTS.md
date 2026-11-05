@@ -146,5 +146,5 @@ Known stale spots, verified against the code:
   `.github/workflows/pages.yml` (`--out-dir ../www/pkg`, artifact = `www`) assume.
   Only the worklet touches the wasm-bindgen JS glue; `main.js` compiles the `.wasm`
   itself and hands the `WebAssembly.Module` to the worklet via `processorOptions`.
-- `todo.md` is the live status log (see its "Last synced" date). `todo 1260804.md` and
-  `spec.txt` are the original snapshots — historical, not current state.
+- `todo.md` is the live status log (see its "Last synced" date). `docs/archive/history/todo 1260804.md`
+  and `docs/archive/spec.txt` are the original snapshots — historical, not current state.

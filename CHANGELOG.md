@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `tpt-dsp-io` audio is fully in-tree: the `audio` feature links no system ALSA library, so CI no longer installs `libasound2-dev`.
+- `tpt-dsp-viz` is on eframe 0.37 (the bump was not recorded here before).
+
+### Fixed
+- Oscillator, wavetable, FM and envelope phase wrap no longer hangs on huge or non-finite frequencies; parameters are validated.
+- `ConvolutionReverb` no longer shifts the stream after a short final block. Output now has a fixed one-block latency and the dry signal is delayed to match.
+- `SubtractiveVoice` redesigns its filter every 32 samples instead of every sample.
+- `Eq` and `IirFilter` reserve scratch at construction, so `process` no longer allocates on first use.
+- `OutlierDetector` uses a total order, so NaN samples no longer panic.
+- `Linear` spectrum averaging keeps tracking after about 16M frames instead of freezing.
+- `Ema` rejects `alpha = 0`.
+- WAV reader: bounded chunk reads, RIFF pad byte consumed, partial trailing frames dropped. The writer checks size arithmetic and rejects partial frames.
+- `Delay` supports fractional, glided delay times and flushes denormal and NaN feedback.
+- `Pid` derivative acts on the measurement, removing the derivative kick on setpoint changes. Adds an optional derivative filter and `update_with_dt`.
+- Biquad state is scrubbed of NaN and subnormal values once per block.
+
+### Added
+- Fallible constructors: `Pid::try_new`, `TrapezoidalProfile::try_new`, `InputShaper::try_new_zvd`, `BiquadCoeffs::try_design`, `Fir::try_new`, `FirDesign::try_design`, `Eq::try_new`.
+- `set_sample_rate` on `Adsr`, `SubtractiveVoice` and `Eq`.
+- `Eq::with_max_block` and `IirFilter::with_max_block`.
+
+### Removed
+- `tpt-dsp-core/tests/debug_biquad.rs`, a print-only test. Its coverage is in `allpass_preserves_magnitude`.
+
+### Repository
+- Logs, `audio_check*.txt` and `gate.txt` are untracked and ignored. `history/` and `spec.txt` moved to `docs/archive/`.
+
 ## [0.2.0] - 2026-11-01
 
 ### Added

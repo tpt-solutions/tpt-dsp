@@ -12,7 +12,7 @@
 
 ## 1. Overview & design principles
 
-`tpt-dsp` is a pure-Rust, real-time-safe DSP framework split into five crates.
+`tpt-dsp` is a pure-Rust, real-time-safe DSP framework split into eight workspace crates, plus two excluded standalone wrappers (`tpt-dsp-nihplug`, `tpt-dsp-py`).
 The guiding contract is:
 
 - **Hot paths never allocate.** Processing functions take caller-supplied or
@@ -149,9 +149,10 @@ Building blocks already available in `tpt-dsp-audio` (all mono, in-place
 - `RealtimeEngine` — drives a `FnMut(&[f32], &mut [f32])` per fixed block
   (constants `BLOCK_128`, `BLOCK_256`).
 
-**Not yet implemented** (from `todo.md`): the `wasm32`/`wasm-bindgen` build
-setup, Web Audio API integration, the pedalboard UI, and the GitHub Pages deploy.
-The `wasm32-unknown-unknown` target is exercised only as a `cargo check` in CI,
+**Implemented** (see `tpt-dsp-wasm` and `www/`): the `wasm32`/`wasm-bindgen`
+build, Web Audio `AudioWorklet` integration, the pedalboard UI, and the GitHub
+Pages deploy (`.github/workflows/pages.yml`). The pedalboard is a fixed chain,
+not a general graph. The `wasm32-unknown-unknown` target is exercised only as a `cargo check` in CI,
 not a working audio app.
 
 > Note: effects expose `process(&mut [f32])` (in-place) whereas `AudioGraph`
@@ -298,19 +299,21 @@ schema.
 
 **Zero-alloc contract** — see §3.2. Net: allocation-free in steady state for
 core math/filters/reverb/EQ/OutlierDetector, but per-frame allocation in the
-async adapters and grow-only scratch in `IirFilter`/`Eq`.
+async adapters. `IirFilter`/`Eq` scratch is reserved at construction
+(`with_max_block`), so `process` is allocation-free for blocks within that size;
+a longer block grows the buffer once.
 
 **Functionality gaps:**
 - Audio graph: linear mono chain only (no DAG/fan-in/fan-out/multichannel).
 - Oscillators: naive/aliasing waveforms (no PolyBLEP); wavetable/FM are minimal
   (no mipmaps, 2-operator only).
-- Delay: integer-only; Waveshaper: no oversampling; ConvolutionReverb: long IRs
+- Waveshaper: no oversampling; ConvolutionReverb: long IRs
   truncated (no partitioned convolution).
 - Windows: f32-only, Hann/Hamming/Blackman only (no Kaiser/Tukey/flat-top).
-- DCT: direct O(N²) only (no fast DCT).
+- DCT/MDCT: FFT-backed fast plans exist (`FastDct2Plan`, `FastDctIvPlan`, `FastMdctPlan`); the direct O(N²) forms are the reference.
 - Hand-rolled `fft`: power-of-two only (use `FftPlan`/RustFFT for arbitrary
   lengths).
-- I/O: built-in WASAPI output mono (+ capture); serial read-only; `tcp` single-connection; no
+- I/O: built-in WASAPI (runtime-validated), raw ALSA and CoreAudio (compile-checked only); mono output (+ capture); serial read-only; `tcp` single-connection; no
   cross-read buffering for mid-sample splits beyond `IqStream`.
 - `tpt-dsp-control` depends on `tpt-dsp-core` but does not currently use it.
 - `portable-simd` FFT/complex optimization: **implemented**, nightly-gated

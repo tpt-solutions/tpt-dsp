@@ -225,6 +225,74 @@ gaps that were not previously tracked._
 
 ---
 
+## Phase 6: Platform Review Follow-ups (2026-11-06)
+
+Source: static review of 0.2.0 (nothing built/run). Reproduce each bug with a failing test first. Plan: `~/.claude/plans/pasted-content-id-87af-review-platform-polymorphic-dream.md`.
+
+_Status (2026-11-06, this pass): sections A and B and the housekeeping item are worked through with tests; C, D, F and most of E are not started. Items that need outside access (publishing, hardware, GitHub/PyPI) are left open. Regression tests were written for each A item. Only two were run against the unfixed code and seen to fail: the oscillator hang (the test never returned) and the envelope's NaN output. The rest were checked against the fixed code only._
+
+### A. Bugs & robustness
+- [x] Oscillator/Wavetable phase wrap hang (`tpt-dsp-audio/src/oscillator.rs:91`, `wavetable.rs:99`): `wrap_phase` (constant-time, `util.rs`) replaces the `while` loop; non-finite/negative frequency → 0, invalid sample rate ignored; same for `fm.rs`. `envelope.rs`: non-finite times/sustain sanitised, `set_sample_rate` added.
+- [x] `OutlierDetector` NaN panic (`tpt-dsp-analysis/src/timeseries.rs`): `total_cmp`. `Ema::new` now rejects `alpha = 0`.
+- [x] WAV parser hardening (`tpt-dsp-io/src/wav.rs`): chunk bodies read via `take` (no up-front allocation from a declared size), RIFF pad byte consumed for `fmt `/`data`, partial trailing frames dropped, writer uses checked arithmetic and rejects `len % channels != 0`.
+- [~] `try_*` constructors: **done** for `BiquadCoeffs::try_design` (f0 > Nyquist, q <= 0, non-finite gain), `FirDesign::try_design` (even/zero taps; single tap no longer divides by zero), `Fir::try_new` (empty taps), `Pid::try_new`, `TrapezoidalProfile::try_new` (`q0 == q1` now valid, zero duration), `InputShaper::try_new_zvd` (too-low sample rate is an error, not a silent degenerate shaper), `Eq::try_new`. `Eq::try_with_shelves` added in a later pass.
+- [x] Remove first-call allocation: `IirFilter::with_max_block` / `Eq::with_max_block`; `new` reserves a default 1024-sample block.
+- [x] `Subtractive::tick` redesigns the biquad every 32 samples instead of every sample; the clamp can no longer panic at very low sample rates.
+- [x] Denormal/NaN guards: biquad state scrubbed once per block (`process_biquad`), `Delay` feedback flushed, `ConvolutionReverb` input/output sanitised, `RealtimeSpectrumAnalyzer` treats non-finite bins as silence for that frame.
+- [x] `Linear` averaging: blend floored at `1/LINEAR_EXACT_FRAMES` (2^16) so the average keeps tracking; exact cumulative mean below that.
+- [x] `Delay`: fractional delay (linear interpolation) and a glided target so time changes don't click.
+- [x] `ConvolutionReverb` short final block: now accumulates input to whole blocks, so the stream stays continuous across calls of any length. Output has a fixed one-block latency (dry signal delayed to match) — this is a behaviour change, documented in the type's docs.
+- [x] PID: derivative on measurement (no kick), optional `set_derivative_filter`, `update_with_dt`; `InputShaper::new_zvd` degenerate case fixed (see `try_*` above).
+- [~] Add `set_sample_rate` to `Adsr`, `Subtractive`, `Eq` — **done**. `Delay` **not added on purpose**: it stores time in samples and has no sample-rate state; `set_delay_seconds` already takes the rate per call.
+- [x] Housekeeping: logs, `audio_check*.txt` and `gate.txt` untracked and gitignored; `tpt-dsp-core/tests/debug_biquad.rs` removed (its all-pass check is covered by `allpass_preserves_magnitude`); `history/` and `spec.txt` moved to `docs/archive/` (AGENTS.md updated).
+
+### B. Doc & status drift
+- [x] `README.md` says 0.2.0 now; badges added (crates.io, docs.rs, CI, license, MSRV 1.85)
+- [x] `ARCHITECTURE.md`: wasm/Pages status corrected, fast DCT/MDCT noted, Linux/macOS backends noted, "eight crates" instead of "five"; zero-alloc note updated for reserved scratch
+- [ ] Tidy this file: stale items at "Phase 1 MVP released"/"v0.1.0 on crates.io"/"Phase 3 complete"; merge "Known Gaps" duplicates; remove mid-file "(End of file)" — _partly done: the v0.1.0 publish is superseded by 0.2.0 (see `PUBLISHING.md`); the remaining clean-up of the Phase 1–3 bullets and the "Known Gaps" section is not done_
+- [ ] Track: GitHub Release for v0.2.0 (manual, `gh` not installed), PyPI release for `tpt-dsp-py`, real RTL-SDR driver (or document `rtl_tcp` as the supported path)
+- [x] `ci.yml`: cpal comments removed and `libasound2-dev` dropped (the audio backend has no system library; **not yet confirmed by a CI run**); `CHANGELOG [Unreleased]` records the eframe 0.37 bump; `nihplug`/`py` manifests now pin core 0.2.0
+
+### C. Missing DSP features
+- [~] Filter design — **partly done** (`tpt-dsp-core/src/iir_design.rs`): `butterworth` (LP/HP, any order, −3 dB at cutoff verified for orders 1–8), `OnePole`, `DcBlocker`, `Svf` (TPT, LP/BP/HP), `magnitude_response` / `cascade_magnitude_response`. **Outstanding:** Chebyshev and elliptic designs, Parks-McClellan/firwin FIR from a spec, group delay and pole-zero helpers.
+- [x] Windows — `WindowType` gained `Rectangular`, `FlatTop`, `Kaiser(beta)`, `Tukey(alpha)`, `Gaussian(sigma)`; f64 (`windowed_f64`) and symmetric (`windowed_symmetric`, `windowed_symmetric_f64`) variants. Kaiser benchmark added to `dsp_bench.rs`; the unmeasured `window/kaiser_f32` figure in `BENCHMARKS.md` was replaced with "not yet measured" (it had no backing benchmark).
+- [~] Multirate/RF — **partly done**: `Goertzel`, `Nco` (32-bit phase accumulator, complex mixer), `CicDecimator` (alloc) in `tpt-dsp-core/src/rf.rs`. **Outstanding:** polyphase + rational resampler, Farrow fractional delay, half-band, PLL, Costas, AGC, squelch, AM/SSB demod.
+- [~] Dynamics & modulation — **partly done** (`tpt-dsp-audio/src/dynamics.rs`, `modulation.rs`): `Compressor`, `Limiter` (no lookahead, instant attack), `Gate` (expander), `Lfo`, `Tremolo`. **Outstanding:** chorus, flanger, phaser, algorithmic reverb (FDN/Freeverb).
+- [~] Synthesis — **partly done** (`tpt-dsp-audio/src/synthesis.rs`): `PolyBlepOscillator` (saw, square), `poly_blep`, `PinkNoise`, `TpdfDither`, `NoiseSource`. **Outstanding:** oversampling (PolyBLEP suppresses but does not remove aliasing).
+- [~] Analysis — **partly done** (`tpt-dsp-analysis/src/features.rs`): `spectral_flatness`, `spectral_rolloff`, `spectral_flux` (onset detection input). **Outstanding:** YIN pitch, MFCC, LUFS, STFT/phase vocoder. Onset detection is only the flux measure, not a peak-picker.
+
+### D. Innovation
+- [ ] `Processor` trait (`process`, `process_in_place`, `reset`) + `Chain`/`Cascade` combinators; unify `process` signatures and f32/f64 policy
+- [ ] Declarative pipeline spec (TOML/JSON, `serde` feature) shared by CLI, wasm and Python (replaces CLI effect DSL)
+- [ ] `tpt-dsp-testkit`: extract `alloc_probe` so users can assert their chains are allocation-free
+- [ ] Golden-vector conformance tests generated from scipy/librosa
+- [ ] `Smoothed<F>` parameter smoother for click-free live control
+- [ ] Browser filter designer in `www/` (response plot + export coefficients / Rust snippet)
+
+### E. Automation & CI
+- [ ] CI: Windows + macOS jobs, MSRV (1.85) job, `cargo-semver-checks`, coverage (llvm-cov), `RUSTDOCFLAGS=-D warnings`, `cargo bench --no-run`, `cargo-hack` feature powerset, nightly `tpt_portable_simd` job, build `nihplug` + `py`
+- [ ] `proptest` round trips (FFT/IFFT, DCT, LSP, WAV, ring buffer) and `cargo-fuzz` targets (WAV, IQ, LPC/LSP)
+- [ ] Tag-triggered release workflow (or `release-plz`): publish in dependency order + GitHub Release
+- [ ] `concurrency` group w/ cancel-in-progress; pin actions by SHA
+- [ ] Per-package `[package.metadata.docs.rs]` (workspace-level is ignored by docs.rs); `SECURITY.md`, `CODE_OF_CONDUCT.md`
+- [ ] Decide on committing `Cargo.lock` (workspace ships 2 binaries)
+- [ ] Benches for `analysis`, `control`, `io` + regression tracking
+
+### F. Adoption
+- [ ] `tpt-dsp` facade crate with prelude + feature flags (`audio`, `analysis`, `io`, `control`)
+- [ ] Root README "WAV in -> filter -> analyse -> write" walkthrough as compiled doctest; examples table; examples for wasm, cli, embedded `thumbv7em`
+- [ ] nihplug "swap in your own effect" plugin template; extend `templates/dsp-effect-crate`
+- [ ] CLI: `design`/`response` (CSV), `gen`, `resample`, `completions` subcommands
+- [ ] Python: `pyproject.toml` (maturin), `.pyi` + `py.typed`, numpy interop, stateful classes (Biquad/Pid/Oscillator), wheels workflow
+- [ ] API ergonomics: builders/named params instead of 5 positional `f32`s, shared error type; `control` declares unused `core` dep
+- [ ] Docs: "choosing a crate" guide, cookbook (FM radio, guitar pedal, motion profile), RT-safety guide
+
+### Suggested order
+1. Phase 1: A (oscillator, OutlierDetector, WAV), housekeeping, B, CI quick wins (Win/macOS/MSRV/semver, docs.rs)
+2. Phase 2: rest of A, `Processor`/`Chain`, facade crate, `try_*` ctors, proptest + fuzz
+3. Phase 3: C1-C4, CLI `design`, Python packaging, examples/templates
+4. Phase 4: D, C5-C7
+
 ## Known Gaps (last updated 2026-08-20)
 
 **Build/test health (all green)**

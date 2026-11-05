@@ -19,6 +19,6 @@ crate-type = ["cdylib"]
 # linked into a normal binary/test. `abi3-py38` pins the stable ABI so the
 # extension module builds without a Python interpreter present.
 [dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.1.0" }
-tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.1.0" }
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
+tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.2.0" }
 pyo3 = { version = "0.30", features = ["extension-module", "abi3-py38"] }

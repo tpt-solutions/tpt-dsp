@@ -81,7 +81,7 @@ Other transforms (1024-sample `f32` block unless noted):
 | `hilbert/1024` | 20.4 µs | 50.3 Melem/s |
 | `window/hann_f32/1024` | 4.17 µs | 245 Melem/s |
 | `window/blackman_f32/1024` | 4.07 µs | 251 Melem/s |
-| `window/kaiser_f32/1024` | 4.25 µs | 241 Melem/s |
+| `window/kaiser_f32/1024` | not yet measured (benchmark added; run `cargo bench -p tpt-dsp-core --bench dsp_bench`) | — |
 | `complex/mul/1024` | 2.42 µs | 423 Melem/s |
 | `complex/magnitude/1024` | 4.78 µs | 215 Melem/s |
 | `complex/phase/1024` | 8.06 µs | 127 Melem/s |

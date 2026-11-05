@@ -12,3 +12,8 @@ node_modules/
 /ac_*.txt
 /viz_*.txt
 /gate_*.txt
+
+# local run logs and captured check output (kept out of the repo)
+*.log
+audio_check*.txt
+gate.txt
