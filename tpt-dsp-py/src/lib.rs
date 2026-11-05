@@ -12,7 +12,7 @@
 //! - `analyze(samples, sample_rate, fft_size, window)` — a summary `dict`
 //!   (dominant frequency, peak dB, RMS, zero-crossing rate, centroid, top peaks).
 //!
-//! The extension module is named `tpt_dsp` (see `[lib] name` in `Cargo.toml`).
+//! The compiled module is `tpt_dsp._native`; the `tpt_dsp` package re-exports it.
 //!
 //! # License
 //!
@@ -24,7 +24,7 @@ use pyo3::types::PyDict;
 use tpt_dsp_analysis::{
     find_peaks, Averaging, RealtimeSpectrumAnalyzer, SpectrumConfig, DEFAULT_DB_FLOOR,
 };
-use tpt_dsp_core::{Complex32, FmDemodulator, WindowType};
+use tpt_dsp_core::{BiquadType, Complex32, FmDemodulator, WindowType};
 
 fn parse_window(name: &str) -> Result<WindowType, PyErr> {
     match name.to_ascii_lowercase().as_str() {
@@ -168,14 +168,107 @@ fn process_all(analyzer: &mut RealtimeSpectrumAnalyzer, samples: &[f32]) {
     }
 }
 
-/// The `tpt_dsp` Python extension module.
+fn parse_biquad_kind(name: &str) -> Result<BiquadType, PyErr> {
+    match name.to_ascii_lowercase().as_str() {
+        "lowpass" | "lp" => Ok(BiquadType::LowPass),
+        "highpass" | "hp" => Ok(BiquadType::HighPass),
+        "bandpass" | "bp" => Ok(BiquadType::BandPass),
+        "notch" => Ok(BiquadType::Notch),
+        "allpass" => Ok(BiquadType::AllPass),
+        "peaking" => Ok(BiquadType::Peaking),
+        "lowshelf" => Ok(BiquadType::LowShelf),
+        "highshelf" => Ok(BiquadType::HighShelf),
+        other => Err(PyValueError::new_err(format!(
+            "unknown biquad kind `{other}`"
+        ))),
+    }
+}
+
+/// A stateful RBJ biquad filter.
+///
+/// `kind` is one of `lowpass`, `highpass`, `bandpass`, `notch`, `allpass`,
+/// `peaking`, `lowshelf` or `highshelf`. `gain_db` applies to the peaking and
+/// shelving kinds only.
+#[pyclass(name = "Biquad", module = "tpt_dsp._native")]
+pub struct PyBiquad {
+    inner: tpt_dsp_core::Biquad<f32>,
+}
+
+#[pymethods]
+impl PyBiquad {
+    #[new]
+    #[pyo3(signature = (kind, sample_rate, freq, q = 0.707, gain_db = 0.0))]
+    fn new(kind: &str, sample_rate: f32, freq: f32, q: f32, gain_db: f32) -> PyResult<Self> {
+        let k = parse_biquad_kind(kind)?;
+        let coeffs =
+            tpt_dsp_core::BiquadCoeffs::<f32>::try_design(k, sample_rate, freq, q, gain_db)
+                .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self {
+            inner: tpt_dsp_core::Biquad::from_coeffs(coeffs),
+        })
+    }
+
+    /// Filter a list of samples. State carries over between calls.
+    fn process(&mut self, samples: Vec<f32>) -> Vec<f32> {
+        samples.into_iter().map(|x| self.inner.tick(x)).collect()
+    }
+
+    /// Clear the filter state.
+    fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
+/// A PID controller with anti-windup on the output limits.
+#[pyclass(name = "Pid", module = "tpt_dsp._native")]
+pub struct PyPid {
+    inner: tpt_dsp_control::Pid,
+}
+
+#[pymethods]
+impl PyPid {
+    #[new]
+    fn new(kp: f32, ki: f32, kd: f32, sample_time: f32) -> PyResult<Self> {
+        let inner = tpt_dsp_control::Pid::try_new(kp, ki, kd, sample_time)
+            .map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(Self { inner })
+    }
+
+    /// Set the target value.
+    fn set_setpoint(&mut self, setpoint: f32) {
+        self.inner.set_setpoint(setpoint);
+    }
+
+    /// Clamp the output to `[min, max]`.
+    fn set_output_limits(&mut self, min: f32, max: f32) -> PyResult<()> {
+        if min.is_nan() || max.is_nan() || min > max {
+            return Err(PyValueError::new_err("min must be <= max"));
+        }
+        self.inner.set_output_limits(min, max);
+        Ok(())
+    }
+
+    /// Advance one step with a new measurement and return the output.
+    fn update(&mut self, measurement: f32) -> f32 {
+        self.inner.update(measurement)
+    }
+
+    /// Clear the integral and derivative history.
+    fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
+/// The compiled extension module; `tpt_dsp` re-exports everything from here.
 #[pymodule]
-fn tpt_dsp(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rms, m)?)?;
     m.add_function(wrap_pyfunction!(zero_crossing_rate, m)?)?;
     m.add_function(wrap_pyfunction!(spectral_centroid, m)?)?;
     m.add_function(wrap_pyfunction!(spectrum, m)?)?;
     m.add_function(wrap_pyfunction!(fm_demod, m)?)?;
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
+    m.add_class::<PyBiquad>()?;
+    m.add_class::<PyPid>()?;
     Ok(())
 }

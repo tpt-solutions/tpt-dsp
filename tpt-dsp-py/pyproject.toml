@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "tpt-dsp"
+version = "0.2.0"
+description = "Python bindings for the tpt-dsp real-time DSP framework (analysis, filters, PID)."
+readme = "README.md"
+license = { text = "MIT OR Apache-2.0" }
+requires-python = ">=3.9"
+authors = [{ name = "TPT Solutions" }]
+keywords = ["dsp", "signal-processing", "fft", "audio", "control"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Repository = "https://github.com/tpt-solutions/tpt-dsp"
+
+[tool.maturin]
+# The compiled module is tpt_dsp._native; python/tpt_dsp is the package.
+module-name = "tpt_dsp._native"
+python-source = "python"
+features = ["pyo3/extension-module"]
