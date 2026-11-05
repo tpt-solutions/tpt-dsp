@@ -262,30 +262,31 @@ _Status (2026-11-06, this pass): sections A and B and the housekeeping item are 
 - [~] Analysis — **mostly done**: `spectral_flatness`, `spectral_rolloff`, `spectral_flux` (`features.rs`); `yin_pitch` (`yin.rs`); `Mfcc` and `hz_to_mel`/`mel_to_hz` (`mfcc.rs`); `LoudnessMeter` (`loudness.rs`, K-weighting uses RBJ designs, so verify against the BS.1770 reference before any compliance use); `stft`, `istft`, `time_stretch` (phase vocoder) (`stft.rs`). **Outstanding:** a peak-picking onset detector (only the flux measure exists), and a STFT-based pitch shifter (time-stretch exists).
 
 ### D. Innovation
-- [ ] `Processor` trait (`process`, `process_in_place`, `reset`) + `Chain`/`Cascade` combinators; unify `process` signatures and f32/f64 policy
-- [ ] Declarative pipeline spec (TOML/JSON, `serde` feature) shared by CLI, wasm and Python (replaces CLI effect DSL)
-- [ ] `tpt-dsp-testkit`: extract `alloc_probe` so users can assert their chains are allocation-free
-- [ ] Golden-vector conformance tests generated from scipy/librosa
-- [ ] `Smoothed<F>` parameter smoother for click-free live control
-- [ ] Browser filter designer in `www/` (response plot + export coefficients / Rust snippet)
+- [x] `Processor` trait (`process`, `process_block`, `reset`) + `Chain` combinator (`tpt-dsp-core/src/process.rs`). Implemented for `Biquad`, `OnePole`, `DcBlocker`. _Not done: a `Cascade` (dynamic, `Vec`-based) combinator, and the f64 policy (the trait is f32-only)._
+- [ ] Declarative pipeline spec (TOML/JSON, `serde` feature) shared by CLI, wasm and Python (replaces CLI effect DSL) — _not started; it needs a `serde` dependency and a design for how the CLI, wasm and Python bindings share one format._
+- [x] `tpt-dsp-testkit`: `CountingAllocator` + `assert_no_alloc` / `allocations_in`, with tests. The wasm `alloc_probe` is not yet switched over to it.
+- [ ] Golden-vector conformance tests generated from scipy/librosa — _not started: no Python is available in the build environment, so the vectors cannot be generated here._
+- [x] `Smoothed<F>` parameter smoother (`process.rs`), generic over `Float`.
+- [ ] Browser filter designer in `www/` (response plot + export coefficients / Rust snippet) — _not started: needs a UI and the `magnitude_response` function exposed to wasm._
 
 ### E. Automation & CI
-- [ ] CI: Windows + macOS jobs, MSRV (1.85) job, `cargo-semver-checks`, coverage (llvm-cov), `RUSTDOCFLAGS=-D warnings`, `cargo bench --no-run`, `cargo-hack` feature powerset, nightly `tpt_portable_simd` job, build `nihplug` + `py`
-- [ ] `proptest` round trips (FFT/IFFT, DCT, LSP, WAV, ring buffer) and `cargo-fuzz` targets (WAV, IQ, LPC/LSP)
-- [ ] Tag-triggered release workflow (or `release-plz`): publish in dependency order + GitHub Release
-- [ ] `concurrency` group w/ cancel-in-progress; pin actions by SHA
-- [ ] Per-package `[package.metadata.docs.rs]` (workspace-level is ignored by docs.rs); `SECURITY.md`, `CODE_OF_CONDUCT.md`
-- [ ] Decide on committing `Cargo.lock` (workspace ships 2 binaries)
-- [ ] Benches for `analysis`, `control`, `io` + regression tracking
+- [x] CI: concurrency group, `RUSTDOCFLAGS=-D warnings` on docs, MSRV (1.85) `cargo check` job, Windows test job, macOS build job, nightly `simd` job (continue-on-error), and a build job for `tpt-dsp-py` and `tpt-dsp-nihplug`. _None of the new jobs has run on a GitHub runner yet, so each may need a fix on first run._
+- [ ] `cargo-semver-checks`, coverage (llvm-cov), `cargo bench --no-run` in CI, `cargo-hack` feature powerset — _not started._
+- [ ] `proptest` round trips and `cargo-fuzz` targets — _not started: these need new dev-dependencies, which I did not add without a way to check the registry here._
+- [ ] Tag-triggered release workflow (or `release-plz`): publish in dependency order + GitHub Release — _not started; publishing is out of scope for this pass._
+- [ ] pin actions by SHA — _not done: the SHAs need to be looked up on GitHub._
+- [x] Per-package `[package.metadata.docs.rs]` (all-features) on every member crate; `SECURITY.md` and `CODE_OF_CONDUCT.md` added.
+- [x] `Cargo.lock`: kept gitignored for now. The library crates are what is published; revisit if the binaries (`tpt-dsp-cli`, `tpt-dsp-viz`) are distributed.
+- [ ] Benches for `analysis`, `control`, `io` + regression tracking — _not started._
 
 ### F. Adoption
-- [ ] `tpt-dsp` facade crate with prelude + feature flags (`audio`, `analysis`, `io`, `control`)
-- [ ] Root README "WAV in -> filter -> analyse -> write" walkthrough as compiled doctest; examples table; examples for wasm, cli, embedded `thumbv7em`
-- [ ] nihplug "swap in your own effect" plugin template; extend `templates/dsp-effect-crate`
-- [ ] CLI: `design`/`response` (CSV), `gen`, `resample`, `completions` subcommands
-- [ ] Python: `pyproject.toml` (maturin), `.pyi` + `py.typed`, numpy interop, stateful classes (Biquad/Pid/Oscillator), wheels workflow
-- [ ] API ergonomics: builders/named params instead of 5 positional `f32`s, shared error type; `control` declares unused `core` dep
-- [ ] Docs: "choosing a crate" guide, cookbook (FM radio, guitar pedal, motion profile), RT-safety guide
+- [x] `tpt-dsp` facade crate with prelude + feature flags (`audio`, `analysis`, `control`, `io`), default audio/analysis/control.
+- [ ] Root README "WAV in -> filter -> analyse -> write" walkthrough as compiled doctest; examples table; examples for wasm, cli, embedded `thumbv7em` — _not started._
+- [ ] nihplug "swap in your own effect" plugin template; extend `templates/dsp-effect-crate` — _not started._
+- [ ] CLI: `design`/`response` (CSV), `gen`, `resample`, `completions` subcommands — _not started._
+- [ ] Python: `pyproject.toml` (maturin), `.pyi` + `py.typed`, numpy interop, stateful classes (Biquad/Pid/Oscillator), wheels workflow — _not started._
+- [ ] API ergonomics: builders/named params instead of 5 positional `f32`s, shared error type; `control` declares unused `core` dep — _not started. Shared error type is partly in place: `FilterDesignError` is used by the filters and the EQ._
+- [x] Docs: `docs/CHOOSING_A_CRATE.md`, `docs/COOKBOOK.md` (ten recipes; code not compiled), `docs/RT_SAFETY.md`.
 
 ### Suggested order
 1. Phase 1: A (oscillator, OutlierDetector, WAV), housekeeping, B, CI quick wins (Win/macOS/MSRV/semver, docs.rs)
