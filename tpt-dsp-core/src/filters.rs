@@ -83,10 +83,40 @@ impl<F: Float> BiquadCoeffs<F> {
     ///
     /// Panics if `fs <= 0` or `f0` is not in `(0, fs/2]`.
     pub fn design(kind: BiquadType, fs: F, f0: F, q: F, gain_db: F) -> Self {
+        match Self::try_design(kind, fs, f0, q, gain_db) {
+            Ok(c) => c,
+            Err(e) => panic!("{e}"),
+        }
+    }
+
+    /// Fallible version of [`design`](Self::design).
+    ///
+    /// Returns an error instead of panicking, and also rejects a non-positive
+    /// `q` for the Q-parameterised shapes (LP/HP/BP/Notch/AP/Peaking), which
+    /// would otherwise produce infinite or NaN coefficients. Shelves ignore
+    /// `q`.
+    pub fn try_design(
+        kind: BiquadType,
+        fs: F,
+        f0: F,
+        q: F,
+        gain_db: F,
+    ) -> Result<Self, FilterDesignError> {
         let half = F::from(0.5).unwrap();
         let two = F::from(2.0).unwrap();
-        assert!(fs > F::zero(), "sample rate must be positive");
-        assert!(f0 > F::zero() && f0 <= fs * half, "frequency out of range");
+        if !(fs.is_finite() && fs > F::zero()) {
+            return Err(FilterDesignError::SampleRate);
+        }
+        if !(f0.is_finite() && f0 > F::zero() && f0 <= fs * half) {
+            return Err(FilterDesignError::FrequencyOutOfRange);
+        }
+        let q_used = !matches!(kind, BiquadType::LowShelf | BiquadType::HighShelf);
+        if q_used && !(q.is_finite() && q > F::zero()) {
+            return Err(FilterDesignError::Q);
+        }
+        if !gain_db.is_finite() {
+            return Err(FilterDesignError::Gain);
+        }
 
         let w0 = pi::<F>() * F::from(2.0).unwrap() * f0 / fs;
         let cosw = w0.cos();
@@ -170,13 +200,46 @@ impl<F: Float> BiquadCoeffs<F> {
             }
         };
 
-        Self {
+        Ok(Self {
             b0: b0 / a0,
             b1: b1 / a0,
             b2: b2 / a0,
             a1: a1 / a0,
             a2: a2 / a0,
-        }
+        })
+    }
+}
+
+/// Error returned by [`BiquadCoeffs::try_design`] for an unusable parameter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilterDesignError {
+    /// Sample rate was not finite and positive.
+    SampleRate,
+    /// Corner/centre frequency was outside `(0, fs/2]`.
+    FrequencyOutOfRange,
+    /// Q was not finite and positive for a Q-parameterised shape.
+    Q,
+    /// Gain in dB was not finite.
+    Gain,
+    /// A FIR filter was given no taps.
+    EmptyTaps,
+    /// A windowed-sinc design needs an odd tap count.
+    EvenTapCount,
+    /// A filter order was zero.
+    InvalidOrder,
+}
+
+impl core::fmt::Display for FilterDesignError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            FilterDesignError::SampleRate => "sample rate must be positive",
+            FilterDesignError::FrequencyOutOfRange => "frequency out of range",
+            FilterDesignError::Q => "Q must be finite and positive",
+            FilterDesignError::Gain => "gain must be finite",
+            FilterDesignError::EmptyTaps => "FIR filter needs at least one tap",
+            FilterDesignError::EvenTapCount => "FIR tap count must be odd and nonzero",
+            FilterDesignError::InvalidOrder => "filter order must be at least 1",
+        })
     }
 }
 
@@ -205,10 +268,20 @@ pub fn process_biquad<F: Float>(
         y1 = y0;
         output[i] = y0;
     }
-    state[0] = x1;
-    state[1] = x2;
-    state[2] = y1;
-    state[3] = y2;
+    // Once per block: scrub NaN/inf that would otherwise persist in the state,
+    // and flush subnormal-range values that make the next block very slow.
+    let tiny = F::from(1.0e-30).unwrap();
+    let scrub = |v: F| {
+        if v.is_finite() && v.abs() >= tiny {
+            v
+        } else {
+            F::zero()
+        }
+    };
+    state[0] = scrub(x1);
+    state[1] = scrub(x2);
+    state[2] = scrub(y1);
+    state[3] = scrub(y2);
 }
 
 /// Single biquad stage with embedded state. Fully `no_std`.
@@ -279,13 +352,28 @@ pub struct Fir<F: Float> {
 #[cfg(feature = "alloc")]
 impl<F: Float> Fir<F> {
     /// Create a filter from explicit taps.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `taps` is empty. Use [`Fir::try_new`] to get an error.
     pub fn new(taps: alloc::vec::Vec<F>) -> Self {
+        match Self::try_new(taps) {
+            Ok(f) => f,
+            Err(e) => panic!("{e}"),
+        }
+    }
+
+    /// Fallible constructor: rejects an empty tap list.
+    pub fn try_new(taps: alloc::vec::Vec<F>) -> Result<Self, FilterDesignError> {
+        if taps.is_empty() {
+            return Err(FilterDesignError::EmptyTaps);
+        }
         let history = alloc::vec![F::zero(); taps.len()];
-        Self {
+        Ok(Self {
             taps,
             history,
             pos: 0,
-        }
+        })
     }
 
     /// Number of taps.
@@ -357,10 +445,24 @@ impl FirDesign {
     ///
     /// Panics if `taps == 0`, is even, or cutoffs are out of range.
     pub fn design<F: Float>(self, taps: usize) -> Fir<F> {
-        assert!(
-            taps > 0 && taps % 2 == 1,
-            "FIR tap count must be odd and nonzero"
-        );
+        match self.try_design(taps) {
+            Ok(f) => f,
+            Err(e) => panic!("{e}"),
+        }
+    }
+
+    /// Fallible version of [`design`](Self::design).
+    ///
+    /// Rejects an even or zero tap count, and a band that is not
+    /// `0 <= lo < hi <= 0.5` (cycles/sample). A single tap is accepted and is
+    /// an identity-like impulse.
+    pub fn try_design<F: Float>(self, taps: usize) -> Result<Fir<F>, FilterDesignError> {
+        if taps == 0 {
+            return Err(FilterDesignError::EmptyTaps);
+        }
+        if taps % 2 == 0 {
+            return Err(FilterDesignError::EvenTapCount);
+        }
         let half = (taps / 2) as f32;
 
         let (lo, hi) = match self {
@@ -370,14 +472,19 @@ impl FirDesign {
                 (center - bandwidth / 2.0, center + bandwidth / 2.0)
             }
         };
-        assert!(lo >= 0.0 && hi <= 0.5 && lo < hi, "bad filter design band");
+        if !(lo.is_finite() && hi.is_finite() && lo >= 0.0 && hi <= 0.5 && lo < hi) {
+            return Err(FilterDesignError::FrequencyOutOfRange);
+        }
 
         let mut coeffs = alloc::vec![F::zero(); taps];
+        // The Blackman window divides by `taps - 1`; a single tap has no
+        // window to shape, so it is taken as 1.
+        let span = (taps as f32 - 1.0).max(1.0);
         for (i, c) in coeffs.iter_mut().enumerate() {
             let n = i as f32 - half;
             // Blackman window.
-            let w = 0.42 - 0.5 * (core::f32::consts::TAU * i as f32 / (taps as f32 - 1.0)).cos()
-                + 0.08 * (core::f32::consts::TAU * 2.0 * i as f32 / (taps as f32 - 1.0)).cos();
+            let w = 0.42 - 0.5 * (core::f32::consts::TAU * i as f32 / span).cos()
+                + 0.08 * (core::f32::consts::TAU * 2.0 * i as f32 / span).cos();
             let mut h = if n == 0.0 {
                 2.0 * (hi - lo)
             } else {
@@ -388,7 +495,7 @@ impl FirDesign {
             h *= w;
             *c = F::from(h).unwrap();
         }
-        Fir::new(coeffs)
+        Fir::try_new(coeffs)
     }
 }
 
@@ -409,11 +516,21 @@ pub struct IirFilter<F: Float> {
 
 #[cfg(feature = "alloc")]
 impl<F: Float> IirFilter<F> {
-    /// Create a filter from a cascade of biquad stages.
+    /// Block length whose scratch space [`IirFilter::new`] reserves.
+    pub const DEFAULT_MAX_BLOCK: usize = 1024;
+
+    /// Create a filter from a cascade of biquad stages, reserving scratch for
+    /// blocks of up to [`IirFilter::DEFAULT_MAX_BLOCK`] samples.
     pub fn new(stages: alloc::vec::Vec<IirStage<F>>) -> Self {
+        Self::with_max_block(stages, Self::DEFAULT_MAX_BLOCK)
+    }
+
+    /// Create a filter, reserving scratch for blocks of up to `max_block`
+    /// samples so that [`process`](Self::process) never allocates for them.
+    pub fn with_max_block(stages: alloc::vec::Vec<IirStage<F>>, max_block: usize) -> Self {
         Self {
             stages,
-            scratch: alloc::vec::Vec::new(),
+            scratch: alloc::vec![F::zero(); max_block],
         }
     }
 
@@ -432,13 +549,13 @@ impl<F: Float> IirFilter<F> {
 
     /// Process one block through every stage.
     ///
-    /// Uses a single internal scratch buffer that is (re)allocated only when
-    /// the block length grows, so steady-state real-time use is allocation
-    /// free.
+    /// Uses a single internal scratch buffer that is reserved at construction
+    /// (see [`IirFilter::with_max_block`]). It grows only for a block longer
+    /// than that, so real-time use within the reserved size is allocation free.
     pub fn process(&mut self, input: &[F], output: &mut [F]) {
         assert!(output.len() >= input.len(), "output too small for IIR");
         if self.scratch.len() < input.len() {
-            self.scratch = alloc::vec![F::zero(); input.len()];
+            self.scratch.resize(input.len(), F::zero());
         }
         output[..input.len()].copy_from_slice(input);
         for stage in self.stages.iter_mut() {
@@ -542,5 +659,100 @@ mod tests {
         f.process(&input, &mut out);
         assert!(out.iter().all(|x| x.is_finite()));
         f.reset();
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    const FS: f32 = 48_000.0;
+
+    #[test]
+    fn try_design_rejects_bad_parameters() {
+        assert_eq!(
+            BiquadCoeffs::<f32>::try_design(BiquadType::LowPass, FS, 1000.0, 0.0, 0.0).unwrap_err(),
+            FilterDesignError::Q
+        );
+        assert_eq!(
+            BiquadCoeffs::<f32>::try_design(BiquadType::LowPass, FS, 30_000.0, 0.7, 0.0)
+                .unwrap_err(),
+            FilterDesignError::FrequencyOutOfRange
+        );
+        assert_eq!(
+            BiquadCoeffs::<f32>::try_design(BiquadType::LowPass, 0.0, 1000.0, 0.7, 0.0)
+                .unwrap_err(),
+            FilterDesignError::SampleRate
+        );
+        assert_eq!(
+            BiquadCoeffs::<f32>::try_design(BiquadType::Peaking, FS, 1000.0, 1.0, f32::NAN)
+                .unwrap_err(),
+            FilterDesignError::Gain
+        );
+        // Shelves ignore Q, so a zero Q is not an error for them.
+        assert!(BiquadCoeffs::<f32>::try_design(BiquadType::LowShelf, FS, 200.0, 0.0, 3.0).is_ok());
+    }
+
+    #[test]
+    #[should_panic(expected = "frequency out of range")]
+    fn design_still_panics_with_the_same_message() {
+        let _ = BiquadCoeffs::<f32>::design(BiquadType::LowPass, FS, 30_000.0, 0.7, 0.0);
+    }
+
+    #[test]
+    fn nan_input_does_not_poison_the_biquad_state() {
+        let mut f = Biquad::<f32>::design(BiquadType::LowPass, FS, 1000.0, 0.707, 0.0);
+        let mut block = [0.5f32, f32::NAN, 0.5, 0.5];
+        let mut out = [0.0f32; 4];
+        f.process(&block, &mut out);
+        block = [0.25; 4];
+        f.process(&block, &mut out);
+        // Next block: the state was scrubbed, so the output is finite and
+        // recovers instead of staying NaN forever.
+        assert!(out.iter().all(|v| v.is_finite()), "{out:?}");
+    }
+
+    #[test]
+    fn fir_rejects_empty_taps() {
+        assert!(matches!(
+            Fir::<f32>::try_new(alloc::vec::Vec::new()),
+            Err(FilterDesignError::EmptyTaps)
+        ));
+        assert!(Fir::<f32>::try_new(alloc::vec![1.0]).is_ok());
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod fir_design_robustness_tests {
+    use super::*;
+
+    #[test]
+    fn fir_design_try_rejects_bad_inputs() {
+        assert!(matches!(
+            FirDesign::LowPass(0.1).try_design::<f32>(0),
+            Err(FilterDesignError::EmptyTaps)
+        ));
+        assert!(matches!(
+            FirDesign::LowPass(0.1).try_design::<f32>(10),
+            Err(FilterDesignError::EvenTapCount)
+        ));
+        assert!(matches!(
+            FirDesign::LowPass(0.7).try_design::<f32>(11),
+            Err(FilterDesignError::FrequencyOutOfRange)
+        ));
+        assert!(matches!(
+            FirDesign::BandPass {
+                center: 0.1,
+                bandwidth: 0.0
+            }
+            .try_design::<f32>(11),
+            Err(FilterDesignError::FrequencyOutOfRange)
+        ));
+    }
+
+    #[test]
+    fn single_tap_design_is_finite() {
+        let f = FirDesign::LowPass(0.25).try_design::<f32>(1).unwrap();
+        assert!(f.taps.iter().all(|t| t.is_finite()));
     }
 }

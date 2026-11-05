@@ -59,6 +59,7 @@ pub mod demod;
 mod fft;
 mod filters;
 mod hilbert;
+mod iir_design;
 mod lpc;
 #[cfg(feature = "alloc")]
 mod lsp;
@@ -68,6 +69,7 @@ mod pitch;
 mod psychoacoustic;
 #[cfg(feature = "alloc")]
 pub mod resample;
+mod rf;
 mod ring;
 mod vq;
 mod windows;
@@ -102,8 +104,13 @@ pub use fft::{
     fft, fft_inplace, fft_inplace_f32, ifft, ifft_inplace, is_power_of_two, next_power_of_two,
     twiddles,
 };
-pub use filters::{process_biquad, Biquad, BiquadCoeffs, BiquadType};
+pub use filters::{process_biquad, Biquad, BiquadCoeffs, BiquadType, FilterDesignError};
 pub use hilbert::hilbert;
+#[cfg(feature = "alloc")]
+pub use iir_design::{butterworth, Response};
+pub use iir_design::{
+    cascade_magnitude_response, magnitude_response, DcBlocker, OnePole, Svf, SvfOutput,
+};
 pub use lpc::{autocorrelation, levinson_durbin, predict, residual, synthesize};
 pub use mdct::{imdct, mdct, sine_window as mdct_sine_window, MdctPlan};
 pub use noise_shaping::{noise_shape_step, noise_shaper_is_stable};
@@ -116,10 +123,13 @@ pub use psychoacoustic::{
     noise_masking_offset_db, perceptual_weight_db, power_to_db, simultaneous_masking,
     spreading_function_db, threshold_in_quiet, tonal_masking_offset_db,
 };
+#[cfg(feature = "alloc")]
+pub use rf::CicDecimator;
+pub use rf::{Goertzel, Nco};
 pub use ring::{RingBuffer, RingRead, RingWrite};
 pub use simd::{complex_add_simd, complex_mul_simd, magnitude_simd};
 pub use vq::{nearest_vector, nearest_vector_accelerated, vq_decode, vq_encode, DistanceMetric};
-pub use windows::{windowed, WindowType};
+pub use windows::{windowed, windowed_f64, windowed_symmetric, windowed_symmetric_f64, WindowType};
 
 #[cfg(feature = "alloc")]
 pub use convolution::{ConvolvePlan, FftConvolver};

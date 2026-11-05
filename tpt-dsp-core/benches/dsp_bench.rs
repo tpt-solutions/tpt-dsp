@@ -548,6 +548,7 @@ fn bench_windows(c: &mut Criterion) {
         ("hann", WindowType::Hann),
         ("hamming", WindowType::Hamming),
         ("blackman", WindowType::Blackman),
+        ("kaiser", WindowType::Kaiser(8.0)),
     ] {
         group.bench_function(BenchmarkId::new(name, n), |b| {
             b.iter(|| windowed(black_box(kind), black_box(n), black_box(&mut out)))
