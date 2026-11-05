@@ -1,0 +1,30 @@
+[package]
+name = "tpt-dsp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Facade for the tpt-dsp framework: one dependency, feature-gated re-exports and a prelude."
+keywords = ["dsp", "audio", "rf", "control", "real-time"]
+categories = ["multimedia::audio", "science", "embedded"]
+readme = "README.md"
+
+[features]
+default = ["audio", "analysis", "control"]
+audio = ["dep:tpt-dsp-audio"]
+analysis = ["dep:tpt-dsp-analysis"]
+control = ["dep:tpt-dsp-control"]
+io = ["dep:tpt-dsp-io"]
+
+[dependencies]
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0", default-features = false }
+tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.2.0", optional = true }
+tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.2.0", optional = true }
+tpt-dsp-control = { path = "../tpt-dsp-control", version = "0.2.0", optional = true }
+tpt-dsp-io = { path = "../tpt-dsp-io", version = "0.2.0", optional = true }
+
+[package.metadata.docs.rs]
+all-features = true

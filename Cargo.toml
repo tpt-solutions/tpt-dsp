@@ -9,6 +9,8 @@ members = [
     "tpt-dsp-viz",
     "tpt-dsp-wasm",
     "tpt-dsp-cli",
+    "tpt-dsp-testkit",
+    "tpt-dsp",
 ]
 
 # `tpt-dsp-nihplug` (CLAP/VST3 wrapper) and `tpt-dsp-py` (Python bindings) are

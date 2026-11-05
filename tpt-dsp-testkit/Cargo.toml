@@ -1,0 +1,17 @@
+[package]
+name = "tpt-dsp-testkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Test helpers for checking that tpt-dsp processing paths are allocation-free."
+keywords = ["dsp", "testing", "allocation", "real-time"]
+categories = ["development-tools::testing", "multimedia::audio"]
+readme = "README.md"
+
+[dependencies]
+
+[dev-dependencies]
