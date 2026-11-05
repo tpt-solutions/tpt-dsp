@@ -61,6 +61,9 @@ jobs:
         run: cargo build -p tpt-dsp-core --no-default-features
       - name: no_std check (core, alloc only)
         run: cargo build -p tpt-dsp-core --no-default-features --features alloc
+      # Compile-only: the benches must keep building, but CI does not time them.
+      - name: cargo bench (compile only)
+        run: cargo bench --workspace --no-run
 
   wasm:
     name: Build (wasm32-unknown-unknown)

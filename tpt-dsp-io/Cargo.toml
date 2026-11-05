@@ -28,7 +28,12 @@ serialport = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
+criterion = "0.8"
 tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
+
+[[bench]]
+name = "io_bench"
+harness = false
 
 [[example]]
 name = "audio_check"

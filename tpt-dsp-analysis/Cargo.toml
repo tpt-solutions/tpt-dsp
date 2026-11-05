@@ -28,6 +28,11 @@ futures = { workspace = true, optional = true }
 async-std = { workspace = true, optional = true }
 
 [dev-dependencies]
+criterion = "0.8"
+
+[[bench]]
+name = "analysis_bench"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true
