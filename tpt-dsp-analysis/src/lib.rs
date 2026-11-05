@@ -31,8 +31,11 @@
 #![warn(rust_2018_idioms)]
 
 mod features;
+mod loudness;
+mod mfcc;
 mod spectrogram;
 mod spectrum;
+mod stft;
 mod timeseries;
 mod yin;
 
@@ -43,12 +46,15 @@ pub use features::{
     rms, spectral_centroid, spectral_centroid_normalized, spectral_flatness, spectral_flux,
     spectral_rolloff, zero_crossing_rate,
 };
+pub use loudness::LoudnessMeter;
+pub use mfcc::{hz_to_mel, mel_to_hz, Mfcc};
 pub use spectrogram::Spectrogram;
 pub use spectrum::{
     db_to_linear, dominant_frequency, find_peaks, linear_to_db, parabolic_interpolate, peak_bin,
     Averaging, RealtimeSpectrumAnalyzer, SpectralPeak, SpectrumAnalyzer, SpectrumConfig,
     DEFAULT_DB_FLOOR,
 };
+pub use stft::{istft, stft, time_stretch};
 pub use timeseries::{Ema, MovingAverage, OutlierDetector, RunningMean};
 pub use yin::yin_pitch;
 
