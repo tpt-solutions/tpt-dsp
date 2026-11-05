@@ -162,3 +162,303 @@ mod tests {
         }
     }
 }
+
+/// Interpolated delay line used by the modulated-delay effects.
+#[derive(Debug, Clone)]
+struct ModDelay {
+    buffer: Vec<f32>,
+    pos: usize,
+}
+
+impl ModDelay {
+    fn new(max_samples: usize) -> Self {
+        Self {
+            buffer: vec![0.0; max_samples.max(4)],
+            pos: 0,
+        }
+    }
+
+    /// Read `delay` samples back (fractional, linearly interpolated).
+    fn read(&self, delay: f32) -> f32 {
+        let len = self.buffer.len();
+        let max = (len - 2) as f32;
+        let d = delay.clamp(1.0, max);
+        let read_pos = self.pos as f32 - d;
+        let base = read_pos.floor();
+        let frac = read_pos - base;
+        let i0 = (base as isize).rem_euclid(len as isize) as usize;
+        let i1 = (i0 + 1) % len;
+        self.buffer[i0] * (1.0 - frac) + self.buffer[i1] * frac
+    }
+
+    /// Write one sample and advance.
+    fn write(&mut self, x: f32) {
+        self.buffer[self.pos] = x;
+        self.pos = (self.pos + 1) % self.buffer.len();
+    }
+
+    fn reset(&mut self) {
+        self.buffer.iter_mut().for_each(|v| *v = 0.0);
+        self.pos = 0;
+    }
+}
+
+/// Chorus: a short delay swept by an LFO, mixed with the dry signal.
+#[derive(Debug, Clone)]
+pub struct Chorus {
+    line: ModDelay,
+    lfo: Lfo,
+    base_samples: f32,
+    depth_samples: f32,
+    mix: f32,
+}
+
+impl Chorus {
+    /// Create a chorus. The delay centres at 15 ms with `depth_ms` of sweep;
+    /// the LFO runs at `rate_hz`. `mix` is clamped to `[0, 1]`.
+    pub fn new(sample_rate: f32, rate_hz: f32, depth_ms: f32, mix: f32) -> Self {
+        let sr = if is_valid_sample_rate(sample_rate) {
+            sample_rate
+        } else {
+            48_000.0
+        };
+        let base = 0.015 * sr;
+        let depth = (depth_ms.max(0.0) * 0.001 * sr).clamp(0.0, base - 2.0);
+        let max = (base + depth + 4.0).ceil() as usize;
+        Self {
+            line: ModDelay::new(max),
+            lfo: Lfo::new(sr, rate_hz, Waveform::Sine),
+            base_samples: base,
+            depth_samples: depth,
+            mix: clamp_unit(mix),
+        }
+    }
+
+    /// Set the wet/dry mix in `[0, 1]` (NaN becomes 0).
+    pub fn set_mix(&mut self, mix: f32) {
+        self.mix = clamp_unit(mix);
+    }
+
+    /// Clear the delay line.
+    pub fn reset(&mut self) {
+        self.line.reset();
+        self.lfo.reset();
+    }
+
+    /// Process one sample.
+    pub fn tick(&mut self, x: f32) -> f32 {
+        let x = if x.is_finite() { x } else { 0.0 };
+        let m = self.lfo.tick();
+        let wet = self.line.read(self.base_samples + self.depth_samples * m);
+        self.line.write(x);
+        x * (1.0 - self.mix) + wet * self.mix
+    }
+}
+
+/// Flanger: a very short delay swept by an LFO, with feedback.
+#[derive(Debug, Clone)]
+pub struct Flanger {
+    line: ModDelay,
+    lfo: Lfo,
+    base_samples: f32,
+    depth_samples: f32,
+    feedback: f32,
+    mix: f32,
+}
+
+impl Flanger {
+    /// Create a flanger. The delay sweeps about 1 ms, ± `depth_ms`. `feedback`
+    /// is clamped to `[-0.95, 0.95]` and `mix` to `[0, 1]`.
+    pub fn new(sample_rate: f32, rate_hz: f32, depth_ms: f32, feedback: f32, mix: f32) -> Self {
+        let sr = if is_valid_sample_rate(sample_rate) {
+            sample_rate
+        } else {
+            48_000.0
+        };
+        let base = 0.001 * sr + 2.0;
+        let depth = (depth_ms.max(0.0) * 0.001 * sr).clamp(0.0, base - 2.0);
+        let max = (base + depth + 4.0).ceil() as usize;
+        Self {
+            line: ModDelay::new(max),
+            lfo: Lfo::new(sr, rate_hz, Waveform::Sine),
+            base_samples: base,
+            depth_samples: depth,
+            feedback: if feedback.is_finite() {
+                feedback.clamp(-0.95, 0.95)
+            } else {
+                0.0
+            },
+            mix: clamp_unit(mix),
+        }
+    }
+
+    /// Clear the delay line.
+    pub fn reset(&mut self) {
+        self.line.reset();
+        self.lfo.reset();
+    }
+
+    /// Process one sample.
+    pub fn tick(&mut self, x: f32) -> f32 {
+        let x = if x.is_finite() { x } else { 0.0 };
+        let m = self.lfo.tick();
+        let wet = self.line.read(self.base_samples + self.depth_samples * m);
+        self.line.write(x + self.feedback * wet);
+        x * (1.0 - self.mix) + wet * self.mix
+    }
+}
+
+/// Phaser: a cascade of LFO-swept all-pass stages mixed with the dry signal,
+/// which produces moving notches.
+#[derive(Debug, Clone)]
+pub struct Phaser {
+    stages: Vec<tpt_dsp_core::Biquad<f32>>,
+    lfo: Lfo,
+    sample_rate: f32,
+    min_hz: f32,
+    max_hz: f32,
+    mix: f32,
+    countdown: u32,
+}
+
+/// Samples between all-pass coefficient refreshes.
+const PHASER_COEFF_INTERVAL: u32 = 32;
+
+impl Phaser {
+    /// Create a phaser with `stages` all-pass sections (clamped to `1..=12`)
+    /// sweeping between `min_hz` and `max_hz` at `rate_hz`.
+    pub fn new(
+        sample_rate: f32,
+        rate_hz: f32,
+        stages: usize,
+        min_hz: f32,
+        max_hz: f32,
+        mix: f32,
+    ) -> Self {
+        let sr = if is_valid_sample_rate(sample_rate) {
+            sample_rate
+        } else {
+            48_000.0
+        };
+        let n = stages.clamp(1, 12);
+        let initial = tpt_dsp_core::BiquadCoeffs::design(
+            tpt_dsp_core::BiquadType::AllPass,
+            sr,
+            1000.0,
+            0.7,
+            0.0,
+        );
+        let stage_vec = (0..n)
+            .map(|_| tpt_dsp_core::Biquad::from_coeffs(initial))
+            .collect();
+        let lo = min_hz.clamp(20.0, sr * 0.45);
+        let hi = max_hz.clamp(20.0, sr * 0.45);
+        Self {
+            stages: stage_vec,
+            lfo: Lfo::new(sr, rate_hz, Waveform::Sine),
+            sample_rate: sr,
+            min_hz: lo.min(hi),
+            max_hz: lo.max(hi),
+            mix: clamp_unit(mix),
+            countdown: 0,
+        }
+    }
+
+    /// Clear the all-pass state.
+    pub fn reset(&mut self) {
+        for s in self.stages.iter_mut() {
+            s.reset();
+        }
+        self.lfo.reset();
+        self.countdown = 0;
+    }
+
+    /// Process one sample.
+    pub fn tick(&mut self, x: f32) -> f32 {
+        let x = if x.is_finite() { x } else { 0.0 };
+        if self.countdown == 0 {
+            let m = 0.5 * (self.lfo.tick() + 1.0);
+            // Exponential sweep: equal musical steps across the range.
+            let f = self.min_hz * (self.max_hz / self.min_hz).powf(m);
+            let c = tpt_dsp_core::BiquadCoeffs::design(
+                tpt_dsp_core::BiquadType::AllPass,
+                self.sample_rate,
+                f,
+                0.7,
+                0.0,
+            );
+            for s in self.stages.iter_mut() {
+                s.set_coeffs(c);
+            }
+            self.countdown = PHASER_COEFF_INTERVAL;
+        }
+        self.countdown -= 1;
+        let mut y = x;
+        for s in self.stages.iter_mut() {
+            y = s.tick(y);
+        }
+        x * (1.0 - self.mix) + y * self.mix
+    }
+}
+
+#[cfg(test)]
+mod effect_tests {
+    use super::*;
+
+    const SR: f32 = 48_000.0;
+
+    fn sine(n: usize) -> Vec<f32> {
+        (0..n)
+            .map(|i| (i as f32 * 440.0 * core::f32::consts::TAU / SR).sin())
+            .collect()
+    }
+
+    #[test]
+    fn chorus_with_zero_mix_is_dry() {
+        let mut c = Chorus::new(SR, 0.5, 2.0, 0.0);
+        for x in sine(2000) {
+            assert!((c.tick(x) - x).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn chorus_changes_the_signal_when_wet() {
+        let mut c = Chorus::new(SR, 0.5, 2.0, 0.5);
+        let input = sine(24_000);
+        let diff: f32 = input
+            .iter()
+            .skip(4000)
+            .map(|&x| (c.tick(x) - x).abs())
+            .sum();
+        assert!(diff > 10.0, "barely wet: {diff}");
+    }
+
+    #[test]
+    fn flanger_feedback_stays_bounded() {
+        let mut f = Flanger::new(SR, 0.25, 0.5, 0.95, 0.5);
+        for x in sine(48_000) {
+            let y = f.tick(x);
+            assert!(y.is_finite() && y.abs() < 10.0, "{y}");
+        }
+    }
+
+    #[test]
+    fn phaser_with_zero_mix_is_dry() {
+        let mut p = Phaser::new(SR, 0.3, 4, 200.0, 2000.0, 0.0);
+        for x in sine(1000) {
+            assert!((p.tick(x) - x).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn phaser_wet_output_is_finite() {
+        let mut p = Phaser::new(SR, 0.3, 4, 200.0, 2000.0, 0.5);
+        let mut energy = 0.0f32;
+        for x in sine(48_000) {
+            let y = p.tick(x);
+            assert!(y.is_finite());
+            energy += y * y;
+        }
+        assert!(energy > 0.0);
+    }
+}

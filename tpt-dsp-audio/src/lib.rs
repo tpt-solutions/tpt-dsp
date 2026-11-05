@@ -44,7 +44,7 @@ pub use fm::FmSynth;
 pub use graph::{
     AudioGraph, AudioNode, ClosureNode, ClosureSink, ClosureSource, Passthrough, Sink, Source,
 };
-pub use modulation::{Lfo, Tremolo};
+pub use modulation::{Chorus, Flanger, Lfo, Phaser, Tremolo};
 pub use oscillator::{Oscillator, Waveform};
 pub use reverb::{generate_decay_ir, ConvolutionReverb};
 pub use subtractive::SubtractiveVoice;
