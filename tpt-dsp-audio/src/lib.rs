@@ -29,6 +29,7 @@ mod freeverb;
 mod graph;
 mod modulation;
 mod oscillator;
+mod oversampling;
 mod reverb;
 mod subtractive;
 mod synthesis;
@@ -48,6 +49,7 @@ pub use graph::{
 };
 pub use modulation::{Chorus, Flanger, Lfo, Phaser, Tremolo};
 pub use oscillator::{Oscillator, Waveform};
+pub use oversampling::Oversampler;
 pub use reverb::{generate_decay_ir, ConvolutionReverb};
 pub use subtractive::SubtractiveVoice;
 pub use synthesis::{poly_blep, BlepShape, NoiseSource, PinkNoise, PolyBlepOscillator, TpdfDither};
