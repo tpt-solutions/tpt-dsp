@@ -124,13 +124,12 @@ pub fn read_wav_f32_reader<R: Read + Seek>(mut reader: R) -> Result<WavData, Wav
         let size = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
 
         if &id == b"data" {
-            let mut bytes = vec![0u8; size];
-            reader.read_exact(&mut bytes)?;
-            data = Some(bytes);
+            data = Some(read_chunk_body(&mut reader, size)?);
+            skip_pad_byte(&mut reader, size)?;
         } else if &id == b"fmt " {
-            let mut chunk = vec![0u8; size];
-            reader.read_exact(&mut chunk)?;
+            let chunk = read_chunk_body(&mut reader, size)?;
             spec = Some(parse_fmt(&chunk)?);
+            skip_pad_byte(&mut reader, size)?;
         } else {
             // Unknown chunk: skip it, honouring the even-padding rule.
             let skip = size + (size & 1);
@@ -177,18 +176,33 @@ pub fn write_wav_f32_writer<W: Write>(
             "the writer emits 32-bit IEEE float only".into(),
         ));
     }
-    let data_len = (interleaved.len() * 4) as u32;
+    if interleaved.len() % spec.channels as usize != 0 {
+        return Err(WavError::Invalid(
+            "sample count is not a whole number of frames",
+        ));
+    }
+    // Every size and rate field is a u32/u16 on disk: check each product so a
+    // large or odd input fails cleanly instead of wrapping into a corrupt header.
+    let too_large = || WavError::Unsupported("data too large for a RIFF/WAVE file".into());
+    let data_len = u32::try_from(interleaved.len().checked_mul(4).ok_or_else(too_large)?)
+        .map_err(|_| too_large())?;
+    let riff_len = 36u32.checked_add(data_len).ok_or_else(too_large)?;
+    let block_align = spec.channels.checked_mul(4).ok_or_else(too_large)?;
+    let byte_rate = spec
+        .sample_rate
+        .checked_mul(u32::from(block_align))
+        .ok_or_else(too_large)?;
+
     writer.write_all(b"RIFF")?;
-    writer.write_all(&(36 + data_len).to_le_bytes())?;
+    writer.write_all(&riff_len.to_le_bytes())?;
     writer.write_all(b"WAVE")?;
     writer.write_all(b"fmt ")?;
     writer.write_all(&16u32.to_le_bytes())?;
     writer.write_all(&3u16.to_le_bytes())?; // IEEE float
     writer.write_all(&spec.channels.to_le_bytes())?;
     writer.write_all(&spec.sample_rate.to_le_bytes())?;
-    let byte_rate = spec.sample_rate * spec.channels as u32 * 4;
     writer.write_all(&byte_rate.to_le_bytes())?;
-    writer.write_all(&(spec.channels * 4).to_le_bytes())?; // block align
+    writer.write_all(&block_align.to_le_bytes())?;
     writer.write_all(&32u16.to_le_bytes())?;
     writer.write_all(b"data")?;
     writer.write_all(&data_len.to_le_bytes())?;
@@ -242,6 +256,31 @@ fn parse_fmt(chunk: &[u8]) -> Result<WavSpec, WavError> {
     })
 }
 
+/// Read exactly `size` bytes of a chunk body. The buffer grows as bytes
+/// actually arrive, so a bogus declared size can't force a huge up-front
+/// allocation; a short stream is reported as an I/O error.
+fn read_chunk_body<R: Read>(reader: &mut R, size: usize) -> Result<Vec<u8>, WavError> {
+    let mut body = Vec::new();
+    let got = reader.by_ref().take(size as u64).read_to_end(&mut body)?;
+    if got != size {
+        return Err(WavError::Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "chunk ends before its declared size",
+        )));
+    }
+    Ok(body)
+}
+
+/// Consume the RIFF pad byte that follows an odd-sized chunk. A missing pad at
+/// end of file is tolerated (some writers omit it).
+fn skip_pad_byte<R: Read>(reader: &mut R, size: usize) -> Result<(), WavError> {
+    if size & 1 == 1 {
+        let mut pad = [0u8; 1];
+        read_fill(reader, &mut pad)?;
+    }
+    Ok(())
+}
+
 fn decode_samples(spec: &WavSpec, raw: &[u8]) -> Result<Vec<f32>, WavError> {
     let bytes = (spec.bits_per_sample as usize) / 8;
     if bytes == 0 || spec.bits_per_sample % 8 != 0 {
@@ -250,7 +289,11 @@ fn decode_samples(spec: &WavSpec, raw: &[u8]) -> Result<Vec<f32>, WavError> {
             spec.bits_per_sample
         )));
     }
-    let frames = raw.len() / (bytes * spec.channels as usize);
+    // Drop any trailing partial frame so the output always holds whole frames
+    // of `channels` samples, even for a truncated or misaligned data chunk.
+    let frame_bytes = bytes * spec.channels as usize;
+    let raw = &raw[..raw.len() - raw.len() % frame_bytes];
+    let frames = raw.len() / frame_bytes;
     let mut out = Vec::with_capacity(frames * spec.channels as usize);
     match spec.sample_format {
         SampleFormat::Float => match spec.bits_per_sample {
@@ -434,6 +477,87 @@ mod tests {
         let back = read_wav_f32_reader(Cursor::new(bytes)).unwrap();
         assert_eq!(back.interleaved, samples);
     }
+    #[test]
+    fn pad_byte_after_odd_data_chunk_is_consumed() {
+        // 3 mono 8-bit samples (odd length) followed by the RIFF pad byte and a
+        // trailing LIST chunk. Without consuming the pad, the LIST header is
+        // misread and the parse fails or drops data.
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(b"WAVE");
+        bytes.extend_from_slice(b"fmt ");
+        bytes.extend_from_slice(&16u32.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes()); // PCM
+        bytes.extend_from_slice(&1u16.to_le_bytes()); // mono
+        bytes.extend_from_slice(&8_000u32.to_le_bytes());
+        bytes.extend_from_slice(&8_000u32.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&8u16.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&3u32.to_le_bytes());
+        bytes.extend_from_slice(&[128, 255, 0]);
+        bytes.push(0); // pad byte
+        bytes.extend_from_slice(b"LIST");
+        bytes.extend_from_slice(&4u32.to_le_bytes());
+        bytes.extend_from_slice(b"INFO");
+        let riff_len = (bytes.len() - 8) as u32;
+        bytes[4..8].copy_from_slice(&riff_len.to_le_bytes());
+        let back = read_wav_f32_reader(Cursor::new(bytes)).unwrap();
+        assert_eq!(back.interleaved.len(), 3);
+        assert_eq!(back.interleaved[0], 0.0);
+    }
+
+    #[test]
+    fn huge_declared_chunk_size_fails_without_huge_allocation() {
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(b"WAVE");
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&0xFFFF_FFF0u32.to_le_bytes()); // claims ~4 GiB
+        bytes.extend_from_slice(&[0u8; 16]); // actual payload is tiny
+        assert!(matches!(
+            read_wav_f32_reader(Cursor::new(bytes)),
+            Err(WavError::Io(_))
+        ));
+    }
+
+    #[test]
+    fn partial_trailing_frame_is_dropped() {
+        // Stereo 16-bit with 6 data bytes: one whole frame plus half a frame.
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend_from_slice(b"RIFF");
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(b"WAVE");
+        bytes.extend_from_slice(b"fmt ");
+        bytes.extend_from_slice(&16u32.to_le_bytes());
+        bytes.extend_from_slice(&1u16.to_le_bytes());
+        bytes.extend_from_slice(&2u16.to_le_bytes());
+        bytes.extend_from_slice(&44_100u32.to_le_bytes());
+        bytes.extend_from_slice(&(44_100u32 * 4).to_le_bytes());
+        bytes.extend_from_slice(&4u16.to_le_bytes());
+        bytes.extend_from_slice(&16u16.to_le_bytes());
+        bytes.extend_from_slice(b"data");
+        bytes.extend_from_slice(&6u32.to_le_bytes());
+        bytes.extend_from_slice(&[0x00, 0x40, 0x00, 0xC0, 0x34, 0x12]);
+        let riff_len = (bytes.len() - 8) as u32;
+        bytes[4..8].copy_from_slice(&riff_len.to_le_bytes());
+        let back = read_wav_f32_reader(Cursor::new(bytes)).unwrap();
+        assert_eq!(back.interleaved.len(), 2);
+        assert_eq!(back.interleaved.len() % 2, 0);
+    }
+
+    #[test]
+    fn writer_rejects_partial_frames() {
+        let spec = WavSpec {
+            channels: 2,
+            ..FLOAT_SPEC
+        };
+        let mut buf = Cursor::new(Vec::new());
+        assert!(write_wav_f32_writer(&mut buf, &spec, &[0.0, 0.0, 0.0]).is_err());
+    }
+
     #[test]
     fn extensible_float_header_is_accepted() {
         // Build a WAVE_FORMAT_EXTENSIBLE float32 file from scratch.
