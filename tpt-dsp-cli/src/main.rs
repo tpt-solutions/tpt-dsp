@@ -1,19 +1,29 @@
 //! `tpt-dsp-cli` — command-line WAV/IQ DSP pipeline.
 //!
 //! ```text
+//! tpt-dsp-cli gen      --output tone.wav --waveform sine --freq 1000 --seconds 2
+//! tpt-dsp-cli resample --input in.wav --output out.wav --to-rate 44100
+//! tpt-dsp-cli design   --kind cheby1 --order 4 --cutoff 1000 --ripple 1 --csv lp.csv
+//! tpt-dsp-cli response --effect biquad:lowpass:1000 --rate 48000
 //! tpt-dsp-cli filter   --input in.wav --output out.wav --effect biquad:lowpass:1000 --effect delay:0.25
 //! tpt-dsp-cli demod    --input iq.u8 --output audio.wav --format u8 --iq-rate 2400000
 //! tpt-dsp-cli spectrum --input in.wav --fft-size 2048 --csv spectrum.csv --top 10
 //! tpt-dsp-cli info     --input iq.u8 --format i16le
+//! tpt-dsp-cli completions bash > tpt-dsp-cli.bash
 //! ```
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use tpt_dsp_cli::tools::{
+    design_response, effect_response, generate, resample, DesignKind, DesignSpec, GenSpec,
+    GenWaveform,
+};
 use tpt_dsp_cli::{
-    analyze_complex, analyze_real, demod_file, filter_wav, read_iq, write_spectrum_csv, Effect,
-    WavData,
+    analyze_complex, analyze_real, demod_file, filter_wav, read_iq, write_spectrum_csv, write_wav,
+    Effect, WavData,
 };
 use tpt_dsp_core::WindowType;
 use tpt_dsp_io::IqFormat;
@@ -63,6 +73,81 @@ impl WindowArg {
     }
 }
 
+/// Waveform for `gen`.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum WaveArg {
+    /// Sine.
+    Sine,
+    /// Band-limited sawtooth.
+    Saw,
+    /// Band-limited square.
+    Square,
+    /// White noise.
+    Noise,
+    /// Sweep from 20 Hz up to `--freq`.
+    Chirp,
+}
+
+impl WaveArg {
+    fn to_gen(self) -> GenWaveform {
+        match self {
+            WaveArg::Sine => GenWaveform::Sine,
+            WaveArg::Saw => GenWaveform::Saw,
+            WaveArg::Square => GenWaveform::Square,
+            WaveArg::Noise => GenWaveform::Noise,
+            WaveArg::Chirp => GenWaveform::Chirp,
+        }
+    }
+}
+
+/// Filter family for `design`.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum DesignArg {
+    /// Butterworth.
+    Butter,
+    /// Chebyshev type I.
+    Cheby1,
+    /// Chebyshev type II.
+    Cheby2,
+}
+
+impl DesignArg {
+    fn to_kind(self) -> DesignKind {
+        match self {
+            DesignArg::Butter => DesignKind::Butterworth,
+            DesignArg::Cheby1 => DesignKind::Chebyshev1,
+            DesignArg::Cheby2 => DesignKind::Chebyshev2,
+        }
+    }
+}
+
+/// Shells for `completions`.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum ShellArg {
+    /// Bash.
+    Bash,
+    /// Zsh.
+    Zsh,
+    /// Fish.
+    Fish,
+    /// PowerShell.
+    Powershell,
+    /// Elvish.
+    Elvish,
+}
+
+impl ShellArg {
+    fn to_shell(self) -> clap_complete::Shell {
+        match self {
+            ShellArg::Bash => clap_complete::Shell::Bash,
+            ShellArg::Zsh => clap_complete::Shell::Zsh,
+            ShellArg::Fish => clap_complete::Shell::Fish,
+            ShellArg::Powershell => clap_complete::Shell::PowerShell,
+            ShellArg::Elvish => clap_complete::Shell::Elvish,
+        }
+    }
+}
+
 /// tpt-dsp command-line DSP pipeline.
 #[derive(Parser)]
 #[command(
@@ -77,6 +162,84 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Generate a test WAV file (sine, saw, square, noise or chirp).
+    Gen {
+        /// Output WAV file.
+        #[arg(long)]
+        output: PathBuf,
+        /// Waveform.
+        #[arg(long, value_enum, default_value_t = WaveArg::Sine)]
+        waveform: WaveArg,
+        /// Frequency in Hz (sweep end for chirp).
+        #[arg(long, default_value_t = 440.0)]
+        freq: f32,
+        /// Duration in seconds.
+        #[arg(long, default_value_t = 1.0)]
+        seconds: f32,
+        /// Sample rate in Hz.
+        #[arg(long, default_value_t = 48_000)]
+        rate: u32,
+        /// Peak amplitude in [0, 1].
+        #[arg(long, default_value_t = 0.5)]
+        amplitude: f32,
+        /// Number of channels.
+        #[arg(long, default_value_t = 1)]
+        channels: u16,
+    },
+    /// Resample a WAV file to another sample rate (polyphase, rational ratio).
+    Resample {
+        /// Input WAV file.
+        #[arg(long)]
+        input: PathBuf,
+        /// Output WAV file.
+        #[arg(long)]
+        output: PathBuf,
+        /// Target sample rate in Hz.
+        #[arg(long)]
+        to_rate: u32,
+    },
+    /// Print the magnitude response of a designed low-pass filter as CSV.
+    Design {
+        /// Filter family.
+        #[arg(long, value_enum, default_value_t = DesignArg::Butter)]
+        kind: DesignArg,
+        /// Filter order.
+        #[arg(long, default_value_t = 4)]
+        order: usize,
+        /// Sample rate in Hz.
+        #[arg(long, default_value_t = 48_000.0)]
+        rate: f32,
+        /// Cutoff (or Chebyshev II stopband edge) in Hz.
+        #[arg(long, default_value_t = 1_000.0)]
+        cutoff: f32,
+        /// Passband ripple in dB (Chebyshev I).
+        #[arg(long, default_value_t = 1.0)]
+        ripple: f32,
+        /// Stopband attenuation in dB (Chebyshev II).
+        #[arg(long, default_value_t = 40.0)]
+        atten: f32,
+        /// Number of frequency points from DC to Nyquist.
+        #[arg(long, default_value_t = 512)]
+        points: usize,
+        /// Write CSV here instead of standard output.
+        #[arg(long)]
+        csv: Option<PathBuf>,
+    },
+    /// Measure the magnitude response of an effect chain as CSV.
+    Response {
+        /// Effect spec, repeatable (same syntax as `filter`).
+        #[arg(long = "effect", action = clap::ArgAction::Append)]
+        effects: Vec<String>,
+        /// Sample rate in Hz.
+        #[arg(long, default_value_t = 48_000.0)]
+        rate: f32,
+        /// Impulse-response length and FFT size (power of two).
+        #[arg(long, default_value_t = 8192)]
+        fft_size: usize,
+        /// Write CSV here instead of standard output.
+        #[arg(long)]
+        csv: Option<PathBuf>,
+    },
     /// Apply a chain of effects to a WAV file (one chain per channel).
     Filter {
         /// Input WAV file.
@@ -146,11 +309,86 @@ enum Command {
         #[arg(long, default_value_t = 2_400_000.0)]
         iq_rate: f64,
     },
+    /// Print a shell completion script to standard output.
+    Completions {
+        /// Target shell.
+        #[arg(value_enum)]
+        shell: ShellArg,
+    },
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Command::Gen {
+            output,
+            waveform,
+            freq,
+            seconds,
+            rate,
+            amplitude,
+            channels,
+        } => {
+            let data = generate(&GenSpec {
+                waveform: waveform.to_gen(),
+                freq_hz: freq,
+                seconds,
+                sample_rate: rate,
+                amplitude,
+                channels,
+            })?;
+            write_wav(&output, &data)?;
+            println!("wrote `{}`", output.display());
+        }
+        Command::Resample {
+            input,
+            output,
+            to_rate,
+        } => {
+            let data = tpt_dsp_cli::read_wav(&input)?;
+            let out = resample(&data, to_rate)?;
+            write_wav(&output, &out)?;
+            println!(
+                "wrote `{}` at {} Hz ({} frames)",
+                output.display(),
+                out.sample_rate,
+                out.channels.first().map_or(0, Vec::len)
+            );
+        }
+        Command::Design {
+            kind,
+            order,
+            rate,
+            cutoff,
+            ripple,
+            atten,
+            points,
+            csv,
+        } => {
+            let resp = design_response(&DesignSpec {
+                kind: kind.to_kind(),
+                order,
+                sample_rate: rate,
+                cutoff_hz: cutoff,
+                ripple_db: ripple,
+                atten_db: atten,
+                points,
+            })?;
+            emit_response(&resp, csv.as_deref())?;
+        }
+        Command::Response {
+            effects,
+            rate,
+            fft_size,
+            csv,
+        } => {
+            let specs: Vec<Effect> = effects
+                .iter()
+                .map(|s| Effect::parse(s))
+                .collect::<Result<Vec<_>>>()?;
+            let resp = effect_response(&specs, rate, fft_size)?;
+            emit_response(&resp, csv.as_deref())?;
+        }
         Command::Filter {
             input,
             output,
@@ -240,6 +478,34 @@ fn main() -> Result<()> {
                     frames,
                     frames as f64 / data.sample_rate as f64
                 );
+            }
+        }
+        Command::Completions { shell } => {
+            let mut cmd = Cli::command();
+            clap_complete::generate(
+                shell.to_shell(),
+                &mut cmd,
+                "tpt-dsp-cli",
+                &mut std::io::stdout(),
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Write a `(frequency_hz, dB)` response as CSV to a file, or to standard
+/// output when no path is given.
+fn emit_response(resp: &[(f64, f64)], csv: Option<&Path>) -> Result<()> {
+    match csv {
+        Some(path) => {
+            write_spectrum_csv(path, resp)?;
+            println!("wrote response CSV to `{}`", path.display());
+        }
+        None => {
+            let mut out = std::io::stdout().lock();
+            writeln!(out, "frequency_hz,magnitude_db")?;
+            for (f, db) in resp {
+                writeln!(out, "{f},{db}")?;
             }
         }
     }

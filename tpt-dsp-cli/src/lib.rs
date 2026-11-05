@@ -18,6 +18,8 @@
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+pub mod tools;
+
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
