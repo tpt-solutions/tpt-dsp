@@ -38,7 +38,10 @@ mod timeseries;
 #[cfg(any(feature = "async-tokio", feature = "async-std"))]
 pub mod async_adapters;
 
-pub use features::{rms, spectral_centroid, spectral_centroid_normalized, zero_crossing_rate};
+pub use features::{
+    rms, spectral_centroid, spectral_centroid_normalized, spectral_flatness, spectral_flux,
+    spectral_rolloff, zero_crossing_rate,
+};
 pub use spectrogram::Spectrogram;
 pub use spectrum::{
     db_to_linear, dominant_frequency, find_peaks, linear_to_db, parabolic_interpolate, peak_bin,

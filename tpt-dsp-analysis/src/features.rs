@@ -122,3 +122,108 @@ mod tests {
         assert!(c > (n as f32 / 2.0), "centroid {c}");
     }
 }
+
+/// Spectral flatness (Wiener entropy) in `[0, 1]`: the ratio of the geometric
+/// to the arithmetic mean of the magnitudes.
+///
+/// Near 1 for noise-like (flat) spectra, near 0 for tonal spectra. Bins at or
+/// below zero are floored to a tiny positive value so the logarithm is finite.
+/// Returns `0.0` for an empty or all-zero spectrum.
+pub fn spectral_flatness(magnitude: &[f32]) -> f32 {
+    if magnitude.is_empty() {
+        return 0.0;
+    }
+    let mut log_sum = 0.0f64;
+    let mut sum = 0.0f64;
+    let mut any = false;
+    for &m in magnitude {
+        let v = f64::from(m.max(0.0));
+        any |= v > 0.0;
+        log_sum += v.max(1e-12).ln();
+        sum += v;
+    }
+    if !any {
+        return 0.0;
+    }
+    let n = magnitude.len() as f64;
+    let geometric = (log_sum / n).exp();
+    let arithmetic = sum / n;
+    (geometric / arithmetic).clamp(0.0, 1.0) as f32
+}
+
+/// Spectral rolloff: the lowest bin index below which `fraction` of the total
+/// magnitude lies (typically `fraction = 0.85`).
+///
+/// Returns `0` for an empty or all-zero spectrum, and clamps `fraction` to
+/// `[0, 1]`.
+pub fn spectral_rolloff(magnitude: &[f32], fraction: f32) -> usize {
+    let total: f32 = magnitude.iter().map(|m| m.max(0.0)).sum();
+    if total <= 0.0 || !total.is_finite() {
+        return 0;
+    }
+    let target = total * fraction.clamp(0.0, 1.0);
+    let mut acc = 0.0f32;
+    for (k, &m) in magnitude.iter().enumerate() {
+        acc += m.max(0.0);
+        if acc >= target {
+            return k;
+        }
+    }
+    magnitude.len().saturating_sub(1)
+}
+
+/// Spectral flux: the half-wave-rectified sum of per-bin magnitude increases
+/// from `previous` to `current`. Large values mark onsets (note starts,
+/// transients).
+///
+/// Only the first `min(len)` bins are compared. Non-finite bins are ignored.
+pub fn spectral_flux(previous: &[f32], current: &[f32]) -> f32 {
+    previous
+        .iter()
+        .zip(current.iter())
+        .map(|(&p, &c)| {
+            if c.is_finite() && p.is_finite() {
+                (c - p).max(0.0)
+            } else {
+                0.0
+            }
+        })
+        .sum()
+}
+
+#[cfg(test)]
+mod spectral_tests {
+    use super::*;
+
+    #[test]
+    fn flatness_separates_noise_from_tone() {
+        let flat = vec![1.0f32; 64];
+        assert!((spectral_flatness(&flat) - 1.0).abs() < 1e-5);
+        let mut tonal = vec![1e-6f32; 64];
+        tonal[10] = 1.0;
+        assert!(spectral_flatness(&tonal) < 0.05);
+    }
+
+    #[test]
+    fn flatness_handles_empty_and_zero() {
+        assert_eq!(spectral_flatness(&[]), 0.0);
+        assert_eq!(spectral_flatness(&[0.0; 8]), 0.0);
+    }
+
+    #[test]
+    fn rolloff_finds_the_fraction_bin() {
+        // Energy evenly spread over 10 bins: 85% is reached at bin 8.
+        let m = vec![1.0f32; 10];
+        assert_eq!(spectral_rolloff(&m, 0.85), 8);
+        assert_eq!(spectral_rolloff(&m, 1.0), 9);
+        assert_eq!(spectral_rolloff(&[0.0; 4], 0.5), 0);
+    }
+
+    #[test]
+    fn flux_counts_only_increases() {
+        let prev = [1.0f32, 2.0, 3.0];
+        let cur = [2.0f32, 1.0, 3.5];
+        assert!((spectral_flux(&prev, &cur) - 1.5).abs() < 1e-6);
+        assert_eq!(spectral_flux(&prev, &[f32::NAN, 2.0, 3.0]), 0.0);
+    }
+}

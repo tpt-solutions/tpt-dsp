@@ -114,9 +114,14 @@ pub struct Ema {
 impl Ema {
     /// Create an EMA with smoothing factor `alpha` in `(0, 1]`.
     ///
-    /// Larger `alpha` weights recent samples more heavily.
+    /// Larger `alpha` weights recent samples more heavily. `alpha = 0` is
+    /// rejected: it would never move off the first sample.
+    ///
+    /// # Panics
+    ///
+    /// Panics unless `0 < alpha <= 1`.
     pub fn new(alpha: f32) -> Self {
-        assert!((0.0..=1.0).contains(&alpha), "alpha must be in (0, 1]");
+        assert!(alpha > 0.0 && alpha <= 1.0, "alpha must be in (0, 1]");
         Self {
             alpha,
             value: 0.0,
@@ -193,12 +198,14 @@ impl OutlierDetector {
 
         let m = self.filled;
         self.scratch[..m].copy_from_slice(&self.window[..m]);
-        self.scratch[..m].sort_by(|a, b| a.partial_cmp(b).unwrap());
+        // `total_cmp` gives a total order, so a NaN sample (from a malformed
+        // sensor or upstream DSP) cannot panic the sort.
+        self.scratch[..m].sort_by(f32::total_cmp);
         let median = self.scratch[m / 2];
         for v in &mut self.scratch[..m] {
             *v = (*v - median).abs();
         }
-        self.scratch[..m].sort_by(|a, b| a.partial_cmp(b).unwrap());
+        self.scratch[..m].sort_by(f32::total_cmp);
         let mad = self.scratch[m / 2].max(1e-9);
         (x - median).abs() > self.sigma * 1.4826 * mad
     }
@@ -207,6 +214,24 @@ impl OutlierDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    #[should_panic(expected = "alpha")]
+    fn ema_rejects_zero_alpha() {
+        let _ = Ema::new(0.0);
+    }
+
+    #[test]
+    fn outlier_detector_survives_nan_samples() {
+        // `partial_cmp().unwrap()` used to panic on any NaN in the window.
+        let mut d = OutlierDetector::new(8, 3.0);
+        for i in 0..8 {
+            d.push(i as f32);
+        }
+        let _ = d.push(f32::NAN);
+        let _ = d.push(1.0);
+        let _ = d.push(f32::NAN);
+    }
 
     #[test]
     fn moving_average_tracks_mean() {

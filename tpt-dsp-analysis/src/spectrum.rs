@@ -191,9 +191,19 @@ pub enum Averaging {
     /// Exponential smoothing specified as a time constant in seconds; the
     /// coefficient is derived from the block duration `fft_size / sample_rate`.
     TimeConstant(f32),
-    /// Cumulative (linear) average of every frame since the last reset.
+    /// Cumulative (linear) average of frames since the last reset.
+    ///
+    /// This is an exact running mean for the first
+    /// `LINEAR_EXACT_FRAMES` frames. After that the blend is floored at
+    /// `1 / LINEAR_EXACT_FRAMES`, so the average keeps tracking the input. An
+    /// unbounded `1/(n+1)` blend would fall below f32 precision after about
+    /// 16 million frames and the spectrum would silently freeze.
     Linear,
 }
+
+/// Frames for which [`Averaging::Linear`] is an exact cumulative mean; the
+/// effective window is capped here so f32 precision never stalls the average.
+pub const LINEAR_EXACT_FRAMES: u64 = 1 << 16;
 
 /// Configuration for a [`RealtimeSpectrumAnalyzer`].
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -401,6 +411,9 @@ impl RealtimeSpectrumAnalyzer {
                 2.0
             };
             let m = z.norm() * scale * fold;
+            // A NaN/inf bin (from malformed input) would otherwise stick in the
+            // running average forever; treat it as silence for this frame.
+            let m = if m.is_finite() { m } else { 0.0 };
             *slot = keep * *slot + blend * m;
         }
 
@@ -469,7 +482,10 @@ impl RealtimeSpectrumAnalyzer {
             return 1.0;
         }
         match self.config.averaging {
-            Averaging::Linear => 1.0 / (self.frames + 1) as f32,
+            Averaging::Linear => {
+                let n = self.frames.min(LINEAR_EXACT_FRAMES - 1) + 1;
+                1.0 / n as f32
+            }
             _ => self.coefficient,
         }
     }
@@ -551,6 +567,26 @@ mod tests {
         mag[10] = 1.0;
         let f = dominant_frequency(&mag, 6400.0, 64);
         assert!((f - 1000.0).abs() < 1e-3, "freq {f}");
+    }
+
+    #[test]
+    fn linear_averaging_keeps_tracking_after_many_frames() {
+        // Previously the blend fell below f32 precision after ~16M frames and
+        // the average froze. Simulate that by jumping the frame counter.
+        let mut sa = analyzer(Averaging::Linear);
+        sa.frames = 1 << 30;
+        let blend = sa.blend_coefficient();
+        assert!(
+            blend >= 1.0 / LINEAR_EXACT_FRAMES as f32 - 1e-12,
+            "blend {blend}"
+        );
+
+        let quiet = vec![0.0f32; N];
+        sa.process(&quiet);
+        let before = sa.magnitude()[10];
+        sa.process(&sine(10.0, 1.0));
+        let after = sa.magnitude()[10];
+        assert!(after > before, "average frozen: {before} -> {after}");
     }
 
     #[test]
@@ -855,5 +891,29 @@ mod tests {
     #[should_panic(expected = "exponential averaging must be in (0, 1]")]
     fn invalid_averaging_is_rejected() {
         let _ = analyzer(Averaging::Exponential(0.0));
+    }
+}
+
+#[cfg(test)]
+mod nan_frame_tests {
+    use super::*;
+
+    #[test]
+    fn nan_frame_does_not_poison_the_average() {
+        let mut sa = RealtimeSpectrumAnalyzer::new(SpectrumConfig {
+            fft_size: 256,
+            sample_rate: 48_000.0,
+            averaging: Averaging::Exponential(0.5),
+            ..SpectrumConfig::default()
+        });
+        let mut bad = vec![0.0f32; 256];
+        bad[3] = f32::NAN;
+        sa.process(&bad);
+        let clean: Vec<f32> = (0..256).map(|i| (i as f32 * 0.2).sin()).collect();
+        for _ in 0..4 {
+            sa.process(&clean);
+        }
+        assert!(sa.magnitude().iter().all(|m| m.is_finite()));
+        assert!(sa.magnitude_db().iter().all(|d| d.is_finite()));
     }
 }
