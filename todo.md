@@ -277,13 +277,13 @@ _Status (2026-11-06, this pass): sections A and B and the housekeeping item are 
 - [ ] pin actions by SHA — _not done: the SHAs need to be looked up on GitHub._
 - [x] Per-package `[package.metadata.docs.rs]` (all-features) on every member crate; `SECURITY.md` and `CODE_OF_CONDUCT.md` added.
 - [x] `Cargo.lock`: kept gitignored for now. The library crates are what is published; revisit if the binaries (`tpt-dsp-cli`, `tpt-dsp-viz`) are distributed.
-- [ ] Benches for `analysis`, `control`, `io` + regression tracking — _not started._
+- [~] Benches for `analysis`, `control`, `io` — **added** (`analysis_bench`, `control_bench`, `io_bench`; criterion), and CI compiles all benches. _Not done: regression tracking (storing baselines and failing on a slowdown)._
 
 ### F. Adoption
 - [x] `tpt-dsp` facade crate with prelude + feature flags (`audio`, `analysis`, `control`, `io`), default audio/analysis/control.
-- [ ] Root README "WAV in -> filter -> analyse -> write" walkthrough as compiled doctest; examples table; examples for wasm, cli, embedded `thumbv7em` — _not started._
+- [~] Walkthrough "WAV in -> filter -> analyse -> write" as a compiled doctest (`tpt-dsp/src/walkthrough.rs`, runs under `--all-features`). _Not done: a README examples table, and examples for wasm and embedded `thumbv7em`._
 - [ ] nihplug "swap in your own effect" plugin template; extend `templates/dsp-effect-crate` — _not started._
-- [ ] CLI: `design`/`response` (CSV), `gen`, `resample`, `completions` subcommands — _not started._
+- [x] CLI: `gen` (sine, saw, square, noise, chirp), `resample` (polyphase), `design` (Butterworth / Chebyshev I / II response CSV), `response` (effect-chain response from its impulse response, CSV), and `completions` (bash, zsh, fish, powershell, elvish). Library side in `tpt-dsp-cli/src/tools.rs`. Smoke-tested end to end.
 - [ ] Python: `pyproject.toml` (maturin), `.pyi` + `py.typed`, numpy interop, stateful classes (Biquad/Pid/Oscillator), wheels workflow — _not started._
 - [ ] API ergonomics: builders/named params instead of 5 positional `f32`s, shared error type; `control` declares unused `core` dep — _not started. Shared error type is partly in place: `FilterDesignError` is used by the filters and the EQ._
 - [x] Docs: `docs/CHOOSING_A_CRATE.md`, `docs/COOKBOOK.md` (ten recipes; code not compiled), `docs/RT_SAFETY.md`.
