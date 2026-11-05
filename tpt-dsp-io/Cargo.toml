@@ -33,3 +33,6 @@ tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
 [[example]]
 name = "audio_check"
 required-features = ["audio"]
+
+[package.metadata.docs.rs]
+all-features = true

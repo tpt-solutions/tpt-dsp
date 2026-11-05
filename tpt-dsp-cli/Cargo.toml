@@ -26,3 +26,6 @@ anyhow = { workspace = true }
 
 [dev-dependencies]
 tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
+
+[package.metadata.docs.rs]
+all-features = true

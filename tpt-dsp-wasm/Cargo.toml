@@ -41,3 +41,6 @@ web-sys = { workspace = true, features = [
     "Window",
     "Worklet",
 ] }
+
+[package.metadata.docs.rs]
+all-features = true

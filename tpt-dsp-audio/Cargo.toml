@@ -25,3 +25,6 @@ harness = false
 [[bench]]
 name = "synth_bench"
 harness = false
+
+[package.metadata.docs.rs]
+all-features = true

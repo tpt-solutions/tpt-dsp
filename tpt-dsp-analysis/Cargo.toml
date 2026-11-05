@@ -28,3 +28,6 @@ futures = { workspace = true, optional = true }
 async-std = { workspace = true, optional = true }
 
 [dev-dependencies]
+
+[package.metadata.docs.rs]
+all-features = true

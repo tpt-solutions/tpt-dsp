@@ -14,6 +14,11 @@ on:
 permissions:
   contents: read
 
+# A new push to the same branch or PR cancels the superseded run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -118,6 +123,9 @@ jobs:
   docs:
     name: Docs
     runs-on: ubuntu-latest
+    env:
+      # Broken intra-doc links and missing docs are errors, not warnings.
+      RUSTDOCFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v7
       - name: Install stable toolchain
@@ -141,3 +149,70 @@ jobs:
         uses: taiki-e/install-action@cargo-machete
       - name: cargo machete
         run: cargo machete
+
+  msrv:
+    name: Minimum supported Rust (1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust 1.85
+        uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - name: Install system libraries (libudev)
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      - name: cargo check (workspace, all features)
+        run: cargo check --workspace --all-features
+
+  windows:
+    name: Test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The native audio backend (WASAPI) is compiled here; its runtime path
+      # needs a sound device, so only the default feature set is tested.
+      - name: cargo test (default features)
+        run: cargo test --workspace
+
+  macos:
+    name: Build (macOS)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # CoreAudio backend: compile-checked only (no sound device on runners).
+      - name: cargo build (audio and io features)
+        run: cargo build -p tpt-dsp-io --features audio
+
+  nightly-simd:
+    name: Test (nightly portable SIMD)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      # Enables the core::simd path (tpt_portable_simd cfg set by build.rs).
+      - name: cargo test tpt-dsp-core with simd
+        run: cargo test -p tpt-dsp-core --features simd
+
+  excluded-crates:
+    name: Build excluded wrappers (nihplug, py)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # These are standalone workspaces excluded from the main build.
+      - name: cargo build tpt-dsp-py
+        working-directory: tpt-dsp-py
+        run: cargo build
+      - name: cargo build tpt-dsp-nihplug
+        working-directory: tpt-dsp-nihplug
+        run: cargo build
