@@ -25,6 +25,7 @@ mod engine;
 mod envelope;
 mod eq;
 mod fm;
+mod freeverb;
 mod graph;
 mod modulation;
 mod oscillator;
@@ -41,6 +42,7 @@ pub use engine::{RealtimeEngine, BLOCK_128, BLOCK_256};
 pub use envelope::{Adsr, EnvelopeState};
 pub use eq::Eq;
 pub use fm::FmSynth;
+pub use freeverb::Freeverb;
 pub use graph::{
     AudioGraph, AudioNode, ClosureNode, ClosureSink, ClosureSource, Passthrough, Sink, Source,
 };
