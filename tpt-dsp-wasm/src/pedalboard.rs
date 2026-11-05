@@ -484,6 +484,9 @@ mod tests {
         pedal.set_reverb_mix(0.0);
         let input = test_block();
         let mut output = [0.0f32; BLOCK];
+        // The convolution reverb has one block of latency, so the first call
+        // yields priming silence; the second call returns the first block.
+        pedal.process_block_128(&input, &mut output);
         pedal.process_block_128(&input, &mut output);
         for (out, dry) in output.iter().zip(input.iter()) {
             assert!((out - dry).abs() < 0.05, "{out} vs {dry}");
