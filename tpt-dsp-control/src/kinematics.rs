@@ -97,6 +97,26 @@ impl JerkLimiter {
     }
 }
 
+/// Error returned by [`TrapezoidalProfile::try_new`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProfileError {
+    /// A start or end position was NaN or infinite.
+    NonFinitePosition,
+    /// A velocity or acceleration limit was not finite and positive.
+    InvalidLimit,
+}
+
+impl core::fmt::Display for ProfileError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ProfileError::NonFinitePosition => f.write_str("positions must be finite"),
+            ProfileError::InvalidLimit => {
+                f.write_str("velocity and acceleration limits must be finite and positive")
+            }
+        }
+    }
+}
+
 /// A trapezoidal (constant-acceleration) point-to-point trajectory.
 ///
 /// Pre-computes the accelerate / cruise / decelerate segment durations for a
@@ -118,13 +138,27 @@ pub struct TrapezoidalProfile {
 impl TrapezoidalProfile {
     /// Plan a move from `q0` to `q1`.
     ///
+    /// A zero-length move (`q0 == q1`) is valid and has zero duration.
+    ///
     /// # Panics
     ///
-    /// Panics if `v_max` or `a_max` are not positive, or if `q0 == q1`.
+    /// Panics if `v_max` or `a_max` are not finite and positive, or if `q0`
+    /// or `q1` is not finite. Use [`TrapezoidalProfile::try_new`] to get an
+    /// error instead.
     pub fn new(q0: f32, q1: f32, v_max: f32, a_max: f32) -> Self {
-        assert!(v_max > 0.0 && a_max > 0.0, "limits must be positive");
-        assert!(q0 != q1, "degenerate move (q0 == q1)");
-        let dir = if q1 > q0 { 1.0 } else { -1.0 };
+        Self::try_new(q0, q1, v_max, a_max).expect("invalid trapezoidal profile parameters")
+    }
+
+    /// Fallible constructor; see [`TrapezoidalProfile::new`].
+    pub fn try_new(q0: f32, q1: f32, v_max: f32, a_max: f32) -> Result<Self, ProfileError> {
+        if !(q0.is_finite() && q1.is_finite()) {
+            return Err(ProfileError::NonFinitePosition);
+        }
+        if !(v_max.is_finite() && v_max > 0.0 && a_max.is_finite() && a_max > 0.0) {
+            return Err(ProfileError::InvalidLimit);
+        }
+        // Zero distance: `dir` is arbitrary, the move has zero duration.
+        let dir = if q1 >= q0 { 1.0 } else { -1.0 };
         let dist = (q1 - q0).abs();
         let d_acc = 0.5 * v_max * v_max / a_max; // distance to reach v_max
         let (t_acc, t_cruise, v_peak) = if 2.0 * d_acc <= dist {
@@ -136,7 +170,7 @@ impl TrapezoidalProfile {
             (t, 0.0, a_max * t)
         };
         let t_total = 2.0 * t_acc + t_cruise;
-        Self {
+        Ok(Self {
             q0,
             q1,
             dir,
@@ -145,7 +179,7 @@ impl TrapezoidalProfile {
             t_acc,
             t_cruise,
             t_total,
-        }
+        })
     }
 
     /// Total move duration (s).
@@ -263,5 +297,34 @@ mod tests {
         let (p, v, _a) = prof.at(prof.duration());
         assert!((p - 0.5).abs() < 1e-4);
         assert!(v.abs() < 1e-4);
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    #[test]
+    fn zero_length_move_is_valid_and_instant() {
+        let p = TrapezoidalProfile::try_new(3.0, 3.0, 1.0, 1.0).unwrap();
+        assert_eq!(p.duration(), 0.0);
+        let (pos, vel, acc) = p.at(0.5);
+        assert_eq!((pos, vel, acc), (3.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn try_new_rejects_bad_inputs() {
+        assert_eq!(
+            TrapezoidalProfile::try_new(0.0, f32::NAN, 1.0, 1.0).unwrap_err(),
+            ProfileError::NonFinitePosition
+        );
+        assert_eq!(
+            TrapezoidalProfile::try_new(0.0, 1.0, 0.0, 1.0).unwrap_err(),
+            ProfileError::InvalidLimit
+        );
+        assert_eq!(
+            TrapezoidalProfile::try_new(0.0, 1.0, 1.0, f32::INFINITY).unwrap_err(),
+            ProfileError::InvalidLimit
+        );
     }
 }

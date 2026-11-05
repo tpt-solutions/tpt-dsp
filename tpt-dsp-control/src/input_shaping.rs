@@ -7,6 +7,30 @@
 //! It is a fixed-coefficient FIR running on a pre-allocated delay line, so it
 //! is allocation-free and real-time safe.
 
+/// Error returned by [`InputShaper::try_new_zvd`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShaperError {
+    /// Natural frequency was not finite and positive.
+    InvalidFrequency,
+    /// Damping ratio was not finite or outside `[0, 1)`.
+    InvalidDamping,
+    /// Sample rate was not finite and positive.
+    InvalidSampleRate,
+    /// The sample rate is too low to place the impulses on distinct samples.
+    SampleRateTooLow,
+}
+
+impl core::fmt::Display for ShaperError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            ShaperError::InvalidFrequency => "natural frequency must be finite and positive",
+            ShaperError::InvalidDamping => "damping ratio must be finite and in [0, 1)",
+            ShaperError::InvalidSampleRate => "sample rate must be finite and positive",
+            ShaperError::SampleRateTooLow => "sample rate too low to resolve the damped period",
+        })
+    }
+}
+
 /// An input shaper that reshapes a command stream to suppress ringing.
 #[derive(Debug, Clone)]
 pub struct InputShaper {
@@ -28,11 +52,27 @@ impl InputShaper {
     ///
     /// # Panics
     ///
-    /// Panics if `wn <= 0`, `zeta` is outside `[0, 1)` or `sample_rate <= 0`.
+    /// Panics on any condition [`InputShaper::try_new_zvd`] rejects.
     pub fn new_zvd(wn: f32, zeta: f32, sample_rate: f32) -> Self {
-        assert!(wn > 0.0, "natural frequency must be positive");
-        assert!((0.0..1.0).contains(&zeta), "damping must be in [0, 1)");
-        assert!(sample_rate > 0.0, "sample rate must be positive");
+        Self::try_new_zvd(wn, zeta, sample_rate).expect("invalid input-shaper parameters")
+    }
+
+    /// Fallible ZVD constructor.
+    ///
+    /// Rejects non-finite or out-of-range parameters, and a `sample_rate` too
+    /// low to resolve the damped period: the two-sample impulse spacing would
+    /// round to zero or one sample, silently producing a shaper that doesn't
+    /// cancel the resonance.
+    pub fn try_new_zvd(wn: f32, zeta: f32, sample_rate: f32) -> Result<Self, ShaperError> {
+        if !(wn.is_finite() && wn > 0.0) {
+            return Err(ShaperError::InvalidFrequency);
+        }
+        if !(zeta.is_finite() && (0.0..1.0).contains(&zeta)) {
+            return Err(ShaperError::InvalidDamping);
+        }
+        if !(sample_rate.is_finite() && sample_rate > 0.0) {
+            return Err(ShaperError::InvalidSampleRate);
+        }
 
         let wd = wn * (1.0 - zeta * zeta).sqrt();
         let td = 2.0 * core::f32::consts::PI / wd; // damped period
@@ -43,10 +83,14 @@ impl InputShaper {
         let a1 = k / denom;
         let a2 = k * k / denom;
 
-        let d2 = (td * sample_rate).round() as usize;
-        let d1 = (d2 / 2).max(1);
+        let d2 = (td * sample_rate).round();
+        if !(2.0..16_777_216.0).contains(&d2) {
+            return Err(ShaperError::SampleRateTooLow);
+        }
+        let d2 = d2 as usize;
+        let d1 = d2 / 2;
         let len = d2 + 1;
-        Self {
+        Ok(Self {
             a0,
             a1,
             a2,
@@ -54,7 +98,7 @@ impl InputShaper {
             pos: 0,
             d1,
             d2,
-        }
+        })
     }
 
     /// Sum of impulse amplitudes (should be 1.0 — unity DC gain).
@@ -121,5 +165,36 @@ mod tests {
         assert!((s.a0 - 1.0 / 3.0).abs() < 1e-6);
         assert!((s.a1 - 1.0 / 3.0).abs() < 1e-6);
         assert!((s.a2 - 1.0 / 3.0).abs() < 1e-6);
+    }
+}
+
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    #[test]
+    fn too_low_sample_rate_is_rejected_not_silently_degenerate() {
+        // 10 rad/s resonance has a ~0.63 s damped period; at 2 Hz that is
+        // about one sample, which can't place three distinct impulses.
+        assert_eq!(
+            InputShaper::try_new_zvd(10.0, 0.1, 2.0).unwrap_err(),
+            ShaperError::SampleRateTooLow
+        );
+    }
+
+    #[test]
+    fn try_new_rejects_bad_parameters() {
+        assert_eq!(
+            InputShaper::try_new_zvd(0.0, 0.1, 1000.0).unwrap_err(),
+            ShaperError::InvalidFrequency
+        );
+        assert_eq!(
+            InputShaper::try_new_zvd(10.0, 1.0, 1000.0).unwrap_err(),
+            ShaperError::InvalidDamping
+        );
+        assert_eq!(
+            InputShaper::try_new_zvd(10.0, 0.1, f32::NAN).unwrap_err(),
+            ShaperError::InvalidSampleRate
+        );
     }
 }

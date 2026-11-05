@@ -16,6 +16,6 @@ mod input_shaping;
 mod kinematics;
 mod pid;
 
-pub use input_shaping::InputShaper;
-pub use kinematics::{JerkLimiter, TrapezoidalProfile};
-pub use pid::{AntiWindup, Pid};
+pub use input_shaping::{InputShaper, ShaperError};
+pub use kinematics::{JerkLimiter, ProfileError, TrapezoidalProfile};
+pub use pid::{AntiWindup, Pid, PidError};
