@@ -213,9 +213,17 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # These are standalone workspaces excluded from the main build.
-      - name: cargo build tpt-dsp-py
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the Python wheel and run its tests (tpt-dsp-py)
         working-directory: tpt-dsp-py
-        run: cargo build
+        run: |
+          python -m pip install maturin
+          maturin build --release --out dist
+          python -m pip install dist/*.whl
+          python -m unittest discover -s tests
       - name: cargo build tpt-dsp-nihplug
         working-directory: tpt-dsp-nihplug
         run: cargo build
