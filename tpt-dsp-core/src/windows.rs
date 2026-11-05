@@ -119,11 +119,13 @@ fn sample(win: WindowType, i: usize, len: usize, symmetric: bool) -> f64 {
         WindowType::Blackman => 0.42 - 0.5 * x.cos() + 0.08 * (2.0 * x).cos(),
         WindowType::FlatTop => {
             // Five-term flat-top (Heinzel et al. coefficients).
-            const A0: f64 = 0.215_578_95;
-            const A1: f64 = 0.416_631_58;
-            const A2: f64 = 0.277_263_16;
-            const A3: f64 = 0.083_578_95;
-            const A4: f64 = 0.006_947_37;
+            // Full-precision coefficients (they match scipy's flattop exactly;
+            // truncating them to 8 decimals moves samples by about 1e-9).
+            const A0: f64 = 0.21557895;
+            const A1: f64 = 0.41663158;
+            const A2: f64 = 0.277263158;
+            const A3: f64 = 0.083578947;
+            const A4: f64 = 0.006947368;
             A0 - A1 * x.cos() + A2 * (2.0 * x).cos() - A3 * (3.0 * x).cos() + A4 * (4.0 * x).cos()
         }
         WindowType::Kaiser(beta) => {

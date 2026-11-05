@@ -380,21 +380,6 @@ mod tests {
     }
 }
 
-/// First-order bilinear low-pass section with cutoff `f1` Hz.
-#[cfg(feature = "alloc")]
-fn first_order_lowpass(fs: f32, f1: f32) -> Result<BiquadCoeffs<f32>, FilterDesignError> {
-    check_cutoff(fs, f1)?;
-    let kk = (core::f32::consts::PI * f1 / fs).tan();
-    let c = 1.0 / (kk + 1.0);
-    Ok(BiquadCoeffs {
-        b0: kk * c,
-        b1: kk * c,
-        b2: 0.0,
-        a1: (kk - 1.0) / (kk + 1.0),
-        a2: 0.0,
-    })
-}
-
 /// Chebyshev type I low-pass of order `order`, as a biquad cascade.
 ///
 /// `ripple_db` is the passband ripple (for example `0.5` or `1.0`). The
@@ -423,29 +408,36 @@ pub fn chebyshev1_lowpass(
     if !(ripple_db.is_finite() && ripple_db > 0.0) {
         return Err(FilterDesignError::Gain);
     }
-    let eps = (10.0f32.powf(ripple_db / 10.0) - 1.0).sqrt();
-    let n = order as f32;
+    // Pre-warp the cutoff, then scale the prototype poles to it, so the
+    // digital −ripple dB point lands exactly at `fc` (as scipy's cheby1 does).
+    let (fs64, fc64) = (f64::from(fs), f64::from(fc));
+    let wa = 2.0 * fs64 * (core::f64::consts::PI * fc64 / fs64).tan();
+    let eps = (10.0f64.powf(f64::from(ripple_db) / 10.0) - 1.0).sqrt();
+    let n = order as f64;
     let a = (1.0 / eps).asinh() / n;
     let (sh, ch) = (a.sinh(), a.cosh());
     let mut sections = alloc::vec::Vec::with_capacity(order.div_ceil(2));
     for k in 0..order / 2 {
-        // Prototype pole pair on the left half-plane ellipse.
-        let theta = core::f32::consts::PI * (2.0 * k as f32 + 1.0) / (2.0 * n);
-        let sigma = -sh * theta.sin();
-        let omega = ch * theta.cos();
-        let w0 = (sigma * sigma + omega * omega).sqrt();
-        let q = w0 / (-2.0 * sigma);
-        sections.push(BiquadCoeffs::<f32>::try_design(
-            BiquadType::LowPass,
-            fs,
-            fc * w0,
-            q,
-            0.0,
-        )?);
+        // Prototype pole pair on the left half-plane ellipse, scaled to wa.
+        let theta = core::f64::consts::PI * (2.0 * k as f64 + 1.0) / (2.0 * n);
+        let sigma = -sh * theta.sin() * wa;
+        let omega = ch * theta.cos() * wa;
+        // Denominator s² − 2σ·s + |p|²; the gain is absorbed by normalisation.
+        let mag2 = sigma * sigma + omega * omega;
+        sections.push(bilinear_biquad(
+            [mag2, 0.0, 0.0],
+            [mag2, -2.0 * sigma, 1.0],
+            fs64,
+        ));
     }
     if order % 2 == 1 {
         // The real prototype pole sits at −sinh(a).
-        sections.push(first_order_lowpass(fs, fc * sh)?);
+        let p_real = -sh * wa;
+        sections.push(bilinear_biquad(
+            [-p_real, 0.0, 0.0],
+            [-p_real, 1.0, 0.0],
+            fs64,
+        ));
     }
     // Normalise to unity DC gain: product of each section's DC gain.
     let dc: f32 = sections
