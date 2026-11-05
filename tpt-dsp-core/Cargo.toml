@@ -58,3 +58,6 @@ harness = false
 name = "resampling_bench"
 harness = false
 
+
+[package.metadata.docs.rs]
+all-features = true

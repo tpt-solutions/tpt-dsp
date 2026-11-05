@@ -67,6 +67,7 @@ mod mdct;
 mod noise_shaping;
 mod pitch;
 mod polyphase;
+mod process;
 mod psychoacoustic;
 mod receiver;
 #[cfg(feature = "alloc")]
@@ -123,6 +124,7 @@ pub use pitch::{
 pub use polyphase::FarrowDelay;
 #[cfg(feature = "alloc")]
 pub use polyphase::RationalResampler;
+pub use process::{Chain, Processor, Smoothed};
 pub use psychoacoustic::{
     classify_tonal_bins, combined_threshold_db, db_to_power, is_tonal_peak,
     noise_masking_offset_db, perceptual_weight_db, power_to_db, simultaneous_masking,
