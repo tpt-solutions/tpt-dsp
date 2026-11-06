@@ -361,60 +361,7 @@ pub fn render_demo(sample_rate: f32, frequency: f32, frames: usize) -> Vec<f32> 
 
 #[cfg(test)]
 #[global_allocator]
-static ALLOCATOR: alloc_probe::CountingAllocator = alloc_probe::CountingAllocator;
-
-/// A counting global allocator used to prove the real-time path is
-/// allocation-free. Counting is per-thread and opt-in, so parallel tests do
-/// not disturb each other.
-#[cfg(test)]
-mod alloc_probe {
-    use std::alloc::{GlobalAlloc, Layout, System};
-    use std::cell::Cell;
-
-    thread_local! {
-        static ARMED: Cell<bool> = const { Cell::new(false) };
-        static COUNT: Cell<usize> = const { Cell::new(0) };
-    }
-
-    pub struct CountingAllocator;
-
-    fn record() {
-        let armed = ARMED.try_with(|a| a.get()).unwrap_or(false);
-        if armed {
-            let _ = COUNT.try_with(|c| c.set(c.get() + 1));
-        }
-    }
-
-    unsafe impl GlobalAlloc for CountingAllocator {
-        unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-            record();
-            unsafe { System.alloc(layout) }
-        }
-
-        unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-            unsafe { System.dealloc(ptr, layout) }
-        }
-
-        unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-            record();
-            unsafe { System.alloc_zeroed(layout) }
-        }
-
-        unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-            record();
-            unsafe { System.realloc(ptr, layout, new_size) }
-        }
-    }
-
-    /// Count the allocations made by `f` on the current thread.
-    pub fn count_allocations(f: impl FnOnce()) -> usize {
-        COUNT.with(|c| c.set(0));
-        ARMED.with(|a| a.set(true));
-        f();
-        ARMED.with(|a| a.set(false));
-        COUNT.with(|c| c.get())
-    }
-}
+static ALLOCATOR: tpt_dsp_testkit::CountingAllocator = tpt_dsp_testkit::CountingAllocator;
 
 #[cfg(test)]
 mod tests {
@@ -431,7 +378,7 @@ mod tests {
         let mut output = [0.0f32; BLOCK];
         pedal.process_block_128(&input, &mut output);
 
-        let allocations = alloc_probe::count_allocations(|| {
+        let ((), allocations) = tpt_dsp_testkit::allocations_in(|| {
             for _ in 0..64 {
                 pedal.process_block_128(&input, &mut output);
             }
@@ -444,7 +391,7 @@ mod tests {
 
     #[test]
     fn counting_allocator_actually_sees_allocations() {
-        let allocations = alloc_probe::count_allocations(|| {
+        let ((), allocations) = tpt_dsp_testkit::allocations_in(|| {
             let v: Vec<f32> = vec![0.0; 1024];
             core::hint::black_box(&v);
         });
