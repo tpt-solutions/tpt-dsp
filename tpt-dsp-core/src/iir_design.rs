@@ -245,7 +245,7 @@ pub fn butterworth(
         };
         sections.push(coeffs);
     }
-    Ok(sections)
+    checked_design(sections)
 }
 
 /// Magnitude `|H(e^{jω})|` of one biquad at frequency `f` Hz.
@@ -451,7 +451,7 @@ pub fn chebyshev1_lowpass(
         first.b1 *= g;
         first.b2 *= g;
     }
-    Ok(sections)
+    checked_design(sections)
 }
 
 #[cfg(test)]
@@ -515,6 +515,20 @@ fn bilinear_biquad(num: [f64; 3], den: [f64; 3], fs: f64) -> BiquadCoeffs<f32> {
     let c2 = c * c;
     let [n0, n1, n2] = num;
     let [d0, d1, d2] = den;
+    if n2 == 0.0 && d2 == 0.0 {
+        // A first-order section. The second-order form below would carry a
+        // factor (1 + z⁻¹) in both numerator and denominator, and that factor
+        // leaves a pole at z = −1 that rounding to f32 can push outside the
+        // unit circle. Cancel it analytically, so a2 = b2 = 0.
+        let dn = d0 + d1 * c;
+        return BiquadCoeffs {
+            b0: ((n0 + n1 * c) / dn) as f32,
+            b1: ((n0 - n1 * c) / dn) as f32,
+            b2: 0.0,
+            a1: ((d0 - d1 * c) / dn) as f32,
+            a2: 0.0,
+        };
+    }
     // Coefficients of z², z¹, z⁰ after multiplying through by (z+1)².
     let bh = n0 + n1 * c + n2 * c2;
     let b1 = 2.0 * n0 - 2.0 * n2 * c2;
@@ -604,7 +618,7 @@ pub fn chebyshev2_lowpass(
         first.b1 *= g;
         first.b2 *= g;
     }
-    Ok(sections)
+    checked_design(sections)
 }
 
 #[cfg(test)]
@@ -986,7 +1000,7 @@ pub fn elliptic_lowpass(
         first.b1 *= g;
         first.b2 *= g;
     }
-    Ok(sections)
+    checked_design(sections)
 }
 
 #[cfg(all(test, feature = "alloc"))]
@@ -1098,7 +1112,7 @@ pub fn elliptic_highpass(
         first.b1 /= g;
         first.b2 /= g;
     }
-    Ok(sections)
+    checked_design(sections)
 }
 
 #[cfg(all(test, feature = "alloc"))]
@@ -1319,7 +1333,7 @@ pub fn elliptic_bandpass(
     let (zeros, poles) = elliptic_prototype(order, f64::from(rp_db), f64::from(rs_db));
     let mut sections = bandpass_sections(&poles, &zeros, wl, wh, f64::from(fs));
     normalise_bandpass(&mut sections, fs, wl, wh);
-    Ok(sections)
+    checked_design(sections)
 }
 
 /// Butterworth band-pass filter as a biquad cascade of order `2·order`.
@@ -1353,7 +1367,7 @@ pub fn butterworth_bandpass(
     }
     let mut sections = bandpass_sections(&poles, &[], wl, wh, f64::from(fs));
     normalise_bandpass(&mut sections, fs, wl, wh);
-    Ok(sections)
+    checked_design(sections)
 }
 
 /// Chebyshev type I band-pass filter as a biquad cascade of order `2·order`.
@@ -1394,7 +1408,36 @@ pub fn chebyshev1_bandpass(
     }
     let mut sections = bandpass_sections(&poles, &[], wl, wh, f64::from(fs));
     normalise_bandpass(&mut sections, fs, wl, wh);
-    Ok(sections)
+    checked_design(sections)
+}
+
+/// Return the cascade only if it is finite and stable.
+///
+/// A design can be valid by its parameters and still fail once its
+/// coefficients are rounded to `f32`. Overflow or underflow gives NaN. A band
+/// edge close to Nyquist, or to DC, puts poles at `z ≈ −1` or `z ≈ 1`, where
+/// rounding can move them onto or past the unit circle. Both are reported as
+/// [`FilterDesignError::NumericallyDegenerate`] instead of being returned.
+#[cfg(feature = "alloc")]
+fn checked_design(
+    sections: alloc::vec::Vec<BiquadCoeffs<f32>>,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    if sections.iter().all(biquad_is_stable) {
+        Ok(sections)
+    } else {
+        Err(FilterDesignError::NumericallyDegenerate)
+    }
+}
+
+/// Finite coefficients, and both poles of `z² + a1·z + a2` strictly inside the
+/// unit circle (the Jury conditions for a second-order denominator).
+#[cfg(feature = "alloc")]
+fn biquad_is_stable(c: &BiquadCoeffs<f32>) -> bool {
+    if ![c.b0, c.b1, c.b2, c.a1, c.a2].iter().all(|v| v.is_finite()) {
+        return false;
+    }
+    let (a1, a2) = (f64::from(c.a1), f64::from(c.a2));
+    a2.abs() < 1.0 && a1.abs() < 1.0 + a2
 }
 
 /// Complex product `a·b` for `(re, im)` pairs.
@@ -1495,7 +1538,7 @@ pub fn butterworth_bandstop(
     let poles = butterworth_prototype_poles(order);
     let mut sections = bandstop_sections(&poles, &[], wl, wh, f64::from(fs));
     normalise_dc(&mut sections, fs);
-    Ok(sections)
+    checked_design(sections)
 }
 
 /// Butterworth low-pass prototype poles (edge at 1 rad/s): one per conjugate
@@ -1540,7 +1583,7 @@ pub fn chebyshev1_bandstop(
     let poles = chebyshev1_prototype_poles(order, f64::from(ripple_db));
     let mut sections = bandstop_sections(&poles, &[], wl, wh, f64::from(fs));
     normalise_dc(&mut sections, fs);
-    Ok(sections)
+    checked_design(sections)
 }
 
 /// Chebyshev I low-pass prototype poles (edge at 1 rad/s), in the same
@@ -1587,7 +1630,7 @@ pub fn elliptic_bandstop(
     let (zeros, poles) = elliptic_prototype(order, f64::from(rp_db), f64::from(rs_db));
     let mut sections = bandstop_sections(&poles, &zeros, wl, wh, f64::from(fs));
     normalise_dc(&mut sections, fs);
-    Ok(sections)
+    checked_design(sections)
 }
 
 /// Chebyshev type II prototype with the stopband edge at 1 rad/s.
@@ -1658,7 +1701,7 @@ pub fn chebyshev2_bandpass(
     let (zeros, poles) = chebyshev2_prototype(order, atten);
     let mut sections = bandpass_sections(&poles, &zeros, wl, wh, f64::from(fs));
     normalise_bandpass(&mut sections, fs, wl, wh);
-    Ok(sections)
+    checked_design(sections)
 }
 
 /// Chebyshev type II band-stop filter as a biquad cascade of order `2·order`.
@@ -1684,5 +1727,129 @@ pub fn chebyshev2_bandstop(
     let (zeros, poles) = chebyshev2_prototype(order, atten);
     let mut sections = bandstop_sections(&poles, &zeros, wl, wh, f64::from(fs));
     normalise_dc(&mut sections, fs);
-    Ok(sections)
+    checked_design(sections)
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod degenerate_tests {
+    use super::*;
+
+    type Design = Result<Vec<BiquadCoeffs<f32>>, FilterDesignError>;
+
+    /// Finite coefficients, and both poles of each section strictly inside the
+    /// unit circle (the same test the designs apply before returning).
+    fn assert_stable(sections: &[BiquadCoeffs<f32>], what: &str) {
+        for c in sections {
+            assert!(
+                biquad_is_stable(c),
+                "{what}: unstable or non-finite section {c:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_order_sections_have_no_second_order_terms() {
+        // A real pole is a first-order section: a2 = b2 = 0 exactly, so no
+        // pole is left at z = -1 for rounding to push outside the circle.
+        let s = chebyshev1_lowpass(1, 48_000.0, 1000.0, 1.0).unwrap();
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].a2, 0.0);
+        assert_eq!(s[0].b2, 0.0);
+        let s = chebyshev1_lowpass(3, 48_000.0, 1000.0, 1.0).unwrap();
+        let last = s.last().unwrap();
+        assert_eq!(last.a2, 0.0, "odd order: the real section is first-order");
+        assert_eq!(last.b2, 0.0);
+    }
+
+    #[test]
+    fn odd_order_cheby1_low_pass_is_stable() {
+        // The order-3 and order-5 Chebyshev I low-passes used to come back
+        // with a pole at z ≈ −1.0002 from the cancelled z = −1 pole.
+        for order in [3usize, 5] {
+            let s = chebyshev1_lowpass(order, 48_000.0, 1000.0, 1.0).unwrap();
+            assert_stable(&s, "cheby1 low-pass");
+        }
+    }
+
+    #[test]
+    fn designs_that_return_ok_are_always_stable() {
+        // A deterministic sweep over orders, edges (including ones close to DC
+        // and Nyquist), and ripple/attenuation. A design may be rejected as
+        // degenerate, but an accepted one must be finite and stable.
+        let mut accepted = 0usize;
+        for &fs in &[8_000.0f32, 44_100.0, 48_000.0, 192_000.0] {
+            for order in 1..=6usize {
+                for &f1f in &[0.0005f32, 0.01, 0.1, 0.25, 0.4, 0.45, 0.49] {
+                    for &f2f in &[0.02f32, 0.3, 0.46, 0.49] {
+                        let f1 = fs * f1f;
+                        let f2 = fs * f2f;
+                        if f2 <= f1 {
+                            continue;
+                        }
+                        let designs: [(&str, Design); 5] = [
+                            (
+                                "butterworth_bandpass",
+                                butterworth_bandpass(order, fs, f1, f2),
+                            ),
+                            (
+                                "butterworth_bandstop",
+                                butterworth_bandstop(order, fs, f1, f2),
+                            ),
+                            (
+                                "chebyshev1_bandstop",
+                                chebyshev1_bandstop(order, fs, f1, f2, 1.0),
+                            ),
+                            (
+                                "chebyshev2_bandpass",
+                                chebyshev2_bandpass(order, fs, f1, f2, 40.0),
+                            ),
+                            (
+                                "chebyshev2_bandstop",
+                                chebyshev2_bandstop(order, fs, f1, f2, 40.0),
+                            ),
+                        ];
+                        for (name, result) in designs {
+                            if let Ok(s) = result {
+                                accepted += 1;
+                                assert_stable(
+                                    &s,
+                                    &format!("{name} order {order} fs {fs} f {f1}..{f2}"),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            accepted > 100,
+            "the sweep should accept many designs, got {accepted}"
+        );
+    }
+
+    #[test]
+    fn fuzzer_found_degenerate_inputs_are_rejected_not_returned() {
+        // Inputs from a random sweep that used to return NaN or unstable
+        // coefficients with no error.
+        let cases = [
+            // Edge at 0.49·fs: poles near z = −1 round outside the circle.
+            butterworth_bandpass(1, 93_231.83, 14_837.044, 45_683.598).map(|_| ()),
+            // Ripple so small that 10^(R/10) − 1 rounds to zero.
+            chebyshev1_bandstop(3, 48_000.0, 1000.0, 3000.0, 2.4e-38).map(|_| ()),
+            // Edges so small against fs that the pre-warp underflows.
+            butterworth_bandstop(2, 8.1e-20, 7.9e-38, 2.5e-36).map(|_| ()),
+        ];
+        for result in cases {
+            match result {
+                Ok(()) => {}
+                Err(e) => assert_eq!(e, FilterDesignError::NumericallyDegenerate),
+            }
+        }
+        // Each case above must be an error or a stable design; the first is
+        // the one that used to pass the validation and come back unstable.
+        let first = butterworth_bandpass(1, 93_231.83, 14_837.044, 45_683.598);
+        if let Ok(s) = first {
+            assert_stable(&s, "order-1 band-pass near Nyquist");
+        }
+    }
 }

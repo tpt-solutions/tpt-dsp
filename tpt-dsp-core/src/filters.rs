@@ -229,6 +229,12 @@ pub enum FilterDesignError {
     InvalidOrder,
     /// A half-band filter needs a tap count of the form 4k + 3.
     HalfbandTaps,
+    /// The parameters are valid, but the coefficients cannot be represented
+    /// stably in `f32`: they overflow or underflow, or a pole lies on or
+    /// outside the unit circle once rounded. Typical causes are a band edge
+    /// above about 0.45 × the sample rate or tiny against it, or a ripple or
+    /// attenuation so small that `10^(x/10) - 1` rounds to zero.
+    NumericallyDegenerate,
 }
 
 impl core::fmt::Display for FilterDesignError {
@@ -242,6 +248,9 @@ impl core::fmt::Display for FilterDesignError {
             FilterDesignError::EvenTapCount => "FIR tap count must be odd and nonzero",
             FilterDesignError::InvalidOrder => "filter order must be at least 1",
             FilterDesignError::HalfbandTaps => "half-band filters need 4k+3 taps",
+            FilterDesignError::NumericallyDegenerate => {
+                "parameters are degenerate in f32: the filter is not finite or not stable"
+            }
         })
     }
 }
