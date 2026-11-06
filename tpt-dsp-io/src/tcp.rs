@@ -49,6 +49,39 @@ pub struct TcpIqSource<R = std::net::TcpStream> {
     end: usize,
 }
 
+/// The greeting `rtl_tcp` sends before its sample stream.
+///
+/// `rtl_tcp` writes the magic `RTL0`, then the tuner type and the number of
+/// tuner gain steps as big-endian `u32`s, and then unsigned 8-bit I/Q pairs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RtlTcpInfo {
+    /// Tuner type code reported by the dongle (librtlsdr's tuner enum).
+    pub tuner: u32,
+    /// Number of tuner gain steps.
+    pub gain_count: u32,
+}
+
+/// Read and check the 12-byte `rtl_tcp` greeting from `reader`.
+///
+/// # Errors
+///
+/// Returns an error if the stream ends before the greeting is complete, or if
+/// it does not start with the magic `RTL0`.
+pub fn read_rtl_tcp_greeting(reader: &mut impl Read) -> std::io::Result<RtlTcpInfo> {
+    let mut buf = [0u8; 12];
+    reader.read_exact(&mut buf)?;
+    if &buf[..4] != b"RTL0" {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "not an rtl_tcp stream: missing RTL0 greeting",
+        ));
+    }
+    Ok(RtlTcpInfo {
+        tuner: u32::from_be_bytes([buf[4], buf[5], buf[6], buf[7]]),
+        gain_count: u32::from_be_bytes([buf[8], buf[9], buf[10], buf[11]]),
+    })
+}
+
 impl TcpIqSource<std::net::TcpStream> {
     /// Connect to a TCP server streaming raw I/Q in `format`.
     ///
@@ -57,6 +90,24 @@ impl TcpIqSource<std::net::TcpStream> {
     /// Returns the connection error.
     pub fn connect(addr: impl std::net::ToSocketAddrs, format: IqFormat) -> std::io::Result<Self> {
         Ok(Self::new(std::net::TcpStream::connect(addr)?, format))
+    }
+
+    /// Connect to an `rtl_tcp` server (the RTL-SDR network protocol).
+    ///
+    /// Reads the greeting first, so the first sample is the first I/Q pair.
+    /// The stream is unsigned 8-bit pairs, as [`IqFormat::U8`]. Start the
+    /// server with `rtl_tcp -a <addr> -p <port>` (librtlsdr).
+    ///
+    /// # Errors
+    ///
+    /// Returns the connection error, or an error for a missing or invalid
+    /// greeting.
+    pub fn connect_rtl_tcp(
+        addr: impl std::net::ToSocketAddrs,
+    ) -> std::io::Result<(Self, RtlTcpInfo)> {
+        let mut stream = std::net::TcpStream::connect(addr)?;
+        let info = read_rtl_tcp_greeting(&mut stream)?;
+        Ok((Self::new(stream, IqFormat::U8), info))
     }
 }
 
@@ -257,6 +308,42 @@ mod tests {
             }
             got.extend_from_slice(&buf[..n]);
         }
+    }
+
+    #[test]
+    fn rtl_tcp_greeting_is_parsed_and_skipped() {
+        let mut payload = b"RTL0".to_vec();
+        payload.extend_from_slice(&5u32.to_be_bytes());
+        payload.extend_from_slice(&29u32.to_be_bytes());
+        let (bytes, expect) = u8_pattern(300);
+        payload.extend_from_slice(&bytes);
+
+        let mut reader = std::io::Cursor::new(payload);
+        let info = read_rtl_tcp_greeting(&mut reader).unwrap();
+        assert_eq!(
+            info,
+            RtlTcpInfo {
+                tuner: 5,
+                gain_count: 29
+            }
+        );
+        // The first sample after the greeting is the first I/Q pair.
+        let mut source = TcpIqSource::new(reader, IqFormat::U8);
+        assert_eq!(collect_all(&mut source, 13), expect);
+    }
+
+    #[test]
+    fn rtl_tcp_greeting_rejects_other_streams() {
+        let mut reader = std::io::Cursor::new(
+            b"HTTP/1.1 200 OK
+"
+            .to_vec(),
+        );
+        let err = read_rtl_tcp_greeting(&mut reader).unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        // A stream that ends inside the greeting is an error, not a panic.
+        let mut short = std::io::Cursor::new(b"RTL0\0\0".to_vec());
+        assert!(read_rtl_tcp_greeting(&mut short).is_err());
     }
 
     #[test]

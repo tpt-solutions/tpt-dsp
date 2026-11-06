@@ -23,7 +23,7 @@
 use std::io::{BufWriter, Write};
 
 use tpt_dsp_core::{Complex32, FIRDecimator, FmDemodulator};
-use tpt_dsp_io::{IqFormat, IqSource, SyntheticIqSource, TcpIqSource};
+use tpt_dsp_io::{IqSource, SyntheticIqSource, TcpIqSource};
 
 const IQ_RATE_HZ: f64 = 2_400_000.0;
 const IQ_DECIM: usize = 10;
@@ -124,8 +124,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let total = (IQ_RATE_HZ * seconds) as u64;
     let mut source: Box<dyn IqSource> = match &tcp {
         Some(addr) => {
-            println!("source: rtl_tcp {addr} (u8 IQ)");
-            Box::new(TcpIqSource::connect(addr.as_str(), IqFormat::U8)?)
+            // `connect_rtl_tcp` reads the RTL0 greeting before the samples.
+            let (source, info) = TcpIqSource::connect_rtl_tcp(addr.as_str())?;
+            println!(
+                "source: rtl_tcp {addr} (tuner {}, {} gain steps, u8 IQ)",
+                info.tuner, info.gain_count
+            );
+            Box::new(source)
         }
         None => {
             println!(
