@@ -53,13 +53,21 @@ build them is available (pyo3's buffer API, or a licence decision on `numpy`).
 no crates.io release yet, so a job would have nothing to compare against. Add
 the job in the same change as the first release.
 
-## Pipelines: JSON in the CLI only
+## Pipelines: JSON and TOML in the CLI only
 
-The declarative pipeline format (`tpt-dsp-cli` `pipeline` subcommand, JSON
-effect list) is the one place a text format is parsed. The WASM and Python
-bindings expose typed constructors (`Biquad`, `Pid`, `FilterSpec`) and do not
-duplicate the parser. Parsing a second format in each binding would give three
-places to keep in sync.
+The declarative pipeline format (`tpt-dsp-cli` `pipeline` subcommand) is the
+one place a text format is parsed. It takes JSON (`{"effects": [...]}`) or
+TOML (`[[effects]]` tables), chosen by the file extension. TOML is converted to
+the same `serde_json::Value` tree and goes through the same field handling, so
+the two formats cannot disagree. A test checks that they give the same effects.
+
+The WASM and Python bindings expose typed constructors (`Biquad`, `Pid`,
+`FilterSpec`) and do not duplicate the parser. Parsing a second format in each
+binding would give three places to keep in sync.
+
+A `serde` derive over typed effect structs is not added. Each field's default
+lives in one place, `effect_spec`, which both formats use. A derive would copy
+those defaults into struct attributes, and the two copies could drift.
 
 ## Benchmarks: recorded weekly, not gated
 

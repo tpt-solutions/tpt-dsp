@@ -19,8 +19,8 @@ use anyhow::Context;
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use tpt_dsp_cli::tools::{
-    design_response, effect_response, generate, parse_pipeline_json, resample, DesignKind,
-    DesignSpec, GenSpec, GenWaveform,
+    design_response, effect_response, generate, parse_pipeline_json, parse_pipeline_toml, resample,
+    DesignKind, DesignSpec, GenSpec, GenWaveform,
 };
 use tpt_dsp_cli::{
     analyze_complex, analyze_real, demod_file, filter_wav, read_iq, write_spectrum_csv, write_wav,
@@ -310,9 +310,10 @@ enum Command {
         #[arg(long, default_value_t = 2_400_000.0)]
         iq_rate: f64,
     },
-    /// Apply a JSON pipeline (an ordered list of effects) to a WAV file.
+    /// Apply a pipeline (an ordered list of effects) to a WAV file.
     Pipeline {
-        /// JSON pipeline file: `{"effects": [ … ]}`.
+        /// Pipeline file: JSON `{"effects": [ … ]}`, or TOML `[[effects]]` tables
+        /// when the name ends in `.toml`.
         #[arg(long)]
         spec: PathBuf,
         /// Input WAV file.
@@ -500,7 +501,14 @@ fn main() -> Result<()> {
         } => {
             let text = std::fs::read_to_string(&spec)
                 .with_context(|| format!("read pipeline `{}`", spec.display()))?;
-            let effects = parse_pipeline_json(&text)?;
+            let is_toml = spec
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("toml"));
+            let effects = if is_toml {
+                parse_pipeline_toml(&text)?
+            } else {
+                parse_pipeline_json(&text)?
+            };
             filter_wav(&input, &output, &effects)?;
             println!(
                 "applied {} effect(s); wrote `{}`",

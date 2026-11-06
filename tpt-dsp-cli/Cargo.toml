@@ -24,6 +24,7 @@ tpt-dsp-io = { path = "../tpt-dsp-io", version = "0.2.0" }
 clap = { workspace = true }
 clap_complete = "4"
 serde_json = "1"
+toml = "1"
 anyhow = { workspace = true }
 
 [dev-dependencies]

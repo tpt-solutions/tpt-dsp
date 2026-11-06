@@ -398,6 +398,42 @@ pub fn parse_pipeline_json(text: &str) -> Result<Vec<Effect>> {
     use anyhow::Context;
     let doc: serde_json::Value =
         serde_json::from_str(text).context("pipeline is not valid JSON")?;
+    parse_pipeline_value(&doc)
+}
+
+/// Parse a TOML pipeline description into effects.
+///
+/// The document has the same shape as the JSON form, written as an
+/// `[[effects]]` array of tables:
+///
+/// ```toml
+/// [[effects]]
+/// kind = "biquad"
+/// type = "lowpass"
+/// freq = 1000
+///
+/// [[effects]]
+/// kind = "eq"
+/// bands = [[200, 3, 1], [3000, -2, 1.2]]
+/// ```
+///
+/// The TOML is converted to the same value tree as the JSON form and then
+/// goes through the same field handling, so the two formats cannot disagree.
+///
+/// # Errors
+/// Returns an error for malformed TOML, an unknown `kind`, or a missing or
+/// mistyped field.
+pub fn parse_pipeline_toml(text: &str) -> Result<Vec<Effect>> {
+    use anyhow::Context;
+    let table: toml::Table = toml::from_str(text).context("pipeline is not valid TOML")?;
+    let doc = serde_json::to_value(&table).context("pipeline could not be converted")?;
+    parse_pipeline_value(&doc)
+}
+
+/// Shared tail of the JSON and TOML parsers: read `effects` and parse each
+/// entry.
+fn parse_pipeline_value(doc: &serde_json::Value) -> Result<Vec<Effect>> {
+    use anyhow::Context;
     let entries = doc
         .get("effects")
         .and_then(|e| e.as_array())
@@ -537,6 +573,29 @@ mod pipeline_tests {
         let unknown = parse_pipeline_json(r#"{"effects":[{"kind":"wobble"}]}"#).unwrap_err();
         assert!(format!("{unknown:#}").contains("wobble"));
         let missing = parse_pipeline_json(r#"{"effects":[{"kind":"delay"}]}"#).unwrap_err();
+        assert!(format!("{missing:#}").contains("seconds"));
+    }
+
+    #[test]
+    fn toml_and_json_give_the_same_effects() {
+        let json = r#"{"effects":[
+            {"kind":"eq","bands":[[200,3,1],[3000,-2,1.2]]},
+            {"kind":"delay","seconds":0.25,"feedback":0.3,"mix":0.4}
+        ]}"#;
+        let toml = "[[effects]]\nkind = \"eq\"\nbands = [[200, 3, 1], [3000, -2, 1.2]]\n\n\
+                    [[effects]]\nkind = \"delay\"\nseconds = 0.25\nfeedback = 0.3\nmix = 0.4\n";
+        let from_json = parse_pipeline_json(json).unwrap();
+        let from_toml = parse_pipeline_toml(toml).unwrap();
+        assert_eq!(format!("{from_json:?}"), format!("{from_toml:?}"));
+    }
+
+    #[test]
+    fn toml_rejects_bad_pipelines_with_a_useful_message() {
+        assert!(parse_pipeline_toml("not = [toml").is_err());
+        assert!(parse_pipeline_toml("effects = 3").is_err());
+        let unknown = parse_pipeline_toml("[[effects]]\nkind = \"wobble\"\n").unwrap_err();
+        assert!(format!("{unknown:#}").contains("wobble"));
+        let missing = parse_pipeline_toml("[[effects]]\nkind = \"delay\"\n").unwrap_err();
         assert!(format!("{missing:#}").contains("seconds"));
     }
 }
