@@ -37,6 +37,29 @@ for measurement in feedback.iter() {
 }
 ```
 
+The derivative term acts on the measurement, not the error, so a setpoint step does
+not cause a derivative kick. An optional derivative filter (`set_derivative_filter`)
+smooths noisy measurements. `update_with_dt` takes the time since the previous call
+when the loop does not run at a fixed rate.
+
+To set everything in one expression, use the builder, and use `try_new` when the
+gains come from user input and need to be checked:
+
+```rust
+use tpt_dsp_control::{AntiWindup, Pid};
+
+let mut pid = Pid::builder(0.01)            // sample time in seconds
+    .kp(1.0)
+    .ki(0.1)
+    .kd(0.01)
+    .output_limits(-10.0, 10.0)
+    .anti_windup(AntiWindup::BackCalculation(0.2))
+    .derivative_filter(0.02)
+    .build()?;                              // Result<Pid, PidError>
+
+let checked = Pid::try_new(1.0, 0.1, 0.01, 0.01)?; // rejects invalid parameters
+```
+
 ### [`InputShaper`]
 
 Zero Vibration Derivative (ZVD) input shaping: a streaming filter that convolves a

@@ -9,6 +9,20 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+### Added
+- `PidBuilder`, from `Pid::builder(sample_time)`: set `kp`, `ki`, `kd`, `setpoint`,
+  `output_limits`, `anti_windup` and `derivative_filter` in one chain, then `build`.
+- Fallible constructors that report invalid parameters instead of accepting them:
+  `Pid::try_new` (`PidError`), `InputShaper::try_new_zvd` (`ShaperError`) and
+  `TrapezoidalProfile::try_new` (`ProfileError`).
+- `Pid::update_with_dt`, for a measurement taken at a sample time that varies from
+  call to call.
+- `Pid::set_derivative_filter`: an optional first-order filter on the derivative term.
+
+### Fixed
+- The `Pid` derivative acts on the measurement rather than the error. A setpoint step
+  no longer produces a derivative kick.
+
 ## [0.2.0] - 2026-11-01
 
 ### Changed
