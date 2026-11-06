@@ -22,8 +22,11 @@
 #![warn(missing_docs)]
 #![warn(rust_2018_idioms)]
 
+mod designer;
 mod pedalboard;
 mod web;
+
+pub use designer::FilterSpec;
 
 pub use pedalboard::{DistortionCurve, Pedalboard, BLOCK, EQ_BAND_COUNT};
 #[cfg(feature = "async")]

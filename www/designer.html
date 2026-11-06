@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>tpt-dsp · Filter designer</title>
+  <style>
+    :root { color-scheme: dark; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      margin: 0; padding: 2rem; background: #12131a; color: #e6e7ee;
+    }
+    a { color: #8ab4ff; }
+    h1 { font-size: 1.4rem; margin: 0 0 0.25rem; }
+    h2 { font-size: 0.95rem; letter-spacing: 0.04em; text-transform: uppercase; color: #8ab4ff; margin: 0 0 0.6rem; }
+    p.sub { margin: 0 0 1.5rem; color: #9aa0b4; font-size: 0.9rem; }
+    .layout { display: grid; grid-template-columns: minmax(230px, 280px) 1fr; gap: 1.25rem; align-items: start; }
+    @media (max-width: 760px) { .layout { grid-template-columns: 1fr; } body { padding: 1rem; } }
+    .panel {
+      background: #1c1e29; border: 1px solid #2c2f3e; border-radius: 12px; padding: 1rem;
+    }
+    .field { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; font-size: 0.85rem; }
+    .field[hidden] { display: none; }
+    .field select, .field input {
+      background: #12131a; color: #e6e7ee; border: 1px solid #2c2f3e; border-radius: 6px;
+      padding: 0.35rem 0.45rem; font: inherit;
+    }
+    .field input[type=range] { padding: 0; accent-color: #8ab4ff; }
+    .field .row { display: flex; justify-content: space-between; color: #9aa0b4; }
+    .field:disabled, .field.disabled { opacity: 0.45; }
+    .error {
+      background: #3a1d24; border: 1px solid #7a2e3c; color: #ffb4c0; border-radius: 8px;
+      padding: 0.6rem 0.8rem; font-size: 0.88rem; margin-bottom: 1rem;
+    }
+    .error[hidden] { display: none; }
+    canvas { width: 100%; height: auto; display: block; background: #12131a; border-radius: 8px; }
+    .meta { font-size: 0.85rem; color: #9aa0b4; margin: 0.6rem 0 1rem; }
+    table { border-collapse: collapse; width: 100%; font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+    th, td { text-align: right; padding: 0.3rem 0.5rem; border-bottom: 1px solid #2c2f3e; }
+    th { color: #9aa0b4; font-weight: 500; }
+    textarea {
+      width: 100%; box-sizing: border-box; min-height: 9rem; background: #12131a; color: #e6e7ee;
+      border: 1px solid #2c2f3e; border-radius: 8px; padding: 0.6rem; font: 0.8rem ui-monospace, Consolas, monospace;
+    }
+    button {
+      background: #2c2f3e; color: #e6e7ee; border: 1px solid #3a3e52; border-radius: 8px;
+      padding: 0.5rem 0.9rem; font-size: 0.85rem; cursor: pointer; margin-top: 0.5rem;
+    }
+    button:hover { border-color: #8ab4ff; }
+    .notes { font-size: 0.8rem; color: #9aa0b4; margin-top: 1.25rem; line-height: 1.5; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  </style>
+</head>
+<body>
+  <h1>Filter designer</h1>
+  <p class="sub">Butterworth, Chebyshev I and II, and elliptic designs from <code>tpt-dsp-core</code>, running in your browser.
+    <a href="./index.html">Back to the pedalboard</a></p>
+
+  <div class="layout">
+    <section class="panel" aria-labelledby="controls-title">
+      <h2 id="controls-title">Design</h2>
+
+      <label class="field">Family
+        <select id="family">
+          <option value="butterworth">Butterworth</option>
+          <option value="chebyshev1" selected>Chebyshev I</option>
+          <option value="chebyshev2">Chebyshev II</option>
+          <option value="elliptic">Elliptic</option>
+        </select>
+      </label>
+
+      <label class="field">Shape
+        <select id="shape">
+          <option value="lowpass" selected>Low-pass</option>
+          <option value="highpass">High-pass</option>
+          <option value="bandpass">Band-pass</option>
+          <option value="bandstop">Band-stop</option>
+        </select>
+      </label>
+
+      <label class="field">
+        <span class="row"><span>Order</span><span id="order-val">4</span></span>
+        <input type="range" id="order" min="1" max="8" step="1" value="4" />
+      </label>
+
+      <label class="field">Sample rate (Hz)
+        <input type="number" id="fs" min="1000" max="384000" step="100" value="48000" />
+      </label>
+
+      <label class="field">
+        <span id="f1-label">Cutoff (Hz)</span>
+        <input type="number" id="f1" min="1" step="1" value="1000" />
+      </label>
+
+      <label class="field" id="f2-field">Upper edge (Hz)
+        <input type="number" id="f2" min="1" step="1" value="3000" />
+      </label>
+
+      <label class="field" id="ripple-field">
+        <span class="row"><span>Passband ripple (dB)</span><span id="ripple-val">1.0</span></span>
+        <input type="range" id="ripple" min="0.05" max="3" step="0.05" value="1" />
+      </label>
+
+      <label class="field" id="atten-field">
+        <span class="row"><span>Stopband attenuation (dB)</span><span id="atten-val">40</span></span>
+        <input type="range" id="atten" min="10" max="100" step="1" value="40" />
+      </label>
+    </section>
+
+    <section aria-labelledby="result-title">
+      <div id="error" class="error" role="alert" hidden></div>
+
+      <div class="panel">
+        <h2 id="result-title">Magnitude response</h2>
+        <canvas id="plot" width="900" height="420" role="img"
+          aria-label="Magnitude response in decibels against log frequency"></canvas>
+        <p class="meta" id="meta" aria-live="polite"></p>
+      </div>
+
+      <div class="panel" style="margin-top:1.25rem;">
+        <h2>Coefficients</h2>
+        <table>
+          <thead><tr><th>#</th><th>b0</th><th>b1</th><th>b2</th><th>a1</th><th>a2</th></tr></thead>
+          <tbody id="coeff-body"></tbody>
+        </table>
+      </div>
+
+      <div class="panel" style="margin-top:1.25rem;">
+        <h2>Rust</h2>
+        <label for="snippet" class="sr-only">Rust snippet</label>
+        <textarea id="snippet" readonly spellcheck="false"></textarea>
+        <button id="copy" type="button">Copy Rust snippet</button>
+      </div>
+    </section>
+  </div>
+
+  <p class="notes">
+    Gain is normalised to unity at DC, the convention of this crate. For an
+    even-order Chebyshev I filter, DC is therefore the ripple peak (0 dB) rather
+    than the ripple trough (−ripple dB) that scipy reports. Band-pass and band-stop
+    edges for Chebyshev II and elliptic designs are the points where the response
+    reaches the stopband attenuation. Coefficients use
+    <code>y = b0·x + b1·x₋₁ + b2·x₋₂ − a1·y₋₁ − a2·y₋₂</code> with <code>a0 = 1</code>.
+  </p>
+
+  <script type="module" src="./designer.js"></script>
+</body>
+</html>
