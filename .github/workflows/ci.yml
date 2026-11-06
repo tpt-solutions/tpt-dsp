@@ -141,6 +141,47 @@ jobs:
       - name: cargo doc
         run: cargo doc --workspace --all-features --no-deps
 
+  feature-matrix:
+    name: Feature powerset (cargo-hack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+      # tpt-dsp-io's serial feature links libudev through pkg-config.
+      - name: Install system libraries (libudev)
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      # Every combination of the library crates' features must compile. This
+      # is what catches a `#[cfg]` gate that only works with some features on,
+      # such as the alloc-only and no-default-features paths of tpt-dsp-core.
+      - name: cargo hack check (feature powerset)
+        run: >
+          cargo hack check --feature-powerset --no-dev-deps
+          -p tpt-dsp-core -p tpt-dsp-audio -p tpt-dsp-analysis
+          -p tpt-dsp-control -p tpt-dsp-io
+
+  fuzz:
+    name: Fuzz smoke test (cargo-fuzz)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install nightly toolchain
+        uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@cargo-fuzz
+      # A short run per target, to catch a regression that a unit test misses.
+      # The corpus is not kept between runs, so each run starts from scratch.
+      - name: Fuzz the IIR designs (tpt-dsp-core)
+        working-directory: tpt-dsp-core/fuzz
+        run: cargo fuzz run iir_designs -- -max_total_time=60
+      - name: Fuzz the WAV reader (tpt-dsp-io)
+        working-directory: tpt-dsp-io/fuzz
+        run: cargo fuzz run wav_reader -- -max_total_time=60
+
   machete:
     name: Unused dependencies (cargo-machete)
     runs-on: ubuntu-latest
