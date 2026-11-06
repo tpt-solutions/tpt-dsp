@@ -28,6 +28,7 @@ serialport = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
+proptest = "1"
 criterion = "0.8"
 tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
 
