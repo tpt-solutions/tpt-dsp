@@ -1,0 +1,3 @@
+[template]
+description = "A CLAP/VST3 plugin skeleton (nice-plug) around a real-time-safe tpt-dsp effect. Swap the placeholder gain stage for your own."
+ignore = ["target"]

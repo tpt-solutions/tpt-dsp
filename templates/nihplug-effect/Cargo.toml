@@ -1,0 +1,26 @@
+[package]
+name = "{{crate_name}}"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+description = "A CLAP/VST3 audio effect built on tpt-dsp."
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+nice-plug = "0.4.2"
+# The framework core. Intentionally unused by the placeholder effect: it is here
+# so your effect can start importing `tpt_dsp_core` immediately. cargo-machete
+# is told to skip it.
+tpt-dsp-core = { version = "0.2", path = "../../tpt-dsp-core" }
+
+[package.metadata.cargo-machete]
+ignored = ["tpt-dsp-core"]
+
+# The VST3/CLAP SDK bindings pulled in by nice-plug carry licences that are not
+# in the framework's `deny.toml` allow-list, so audit this crate on its own.
+[package.metadata.docs.rs]
+all-features = true
