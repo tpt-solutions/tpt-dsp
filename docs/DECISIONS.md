@@ -83,3 +83,26 @@ comparison (relative to DC) require. For an even order, that puts DC at the
 ripple peak (0 dB), while scipy puts DC at the ripple trough (−ripple dB). The
 shape is identical, so the golden tests agree. The designer page states the
 difference.
+
+## Release workflow: checks and a GitHub Release, not crates.io
+
+`.github/workflows/release.yml` runs on a `v*` tag. It runs the gate, checks
+that the tag matches the workspace version, and creates a GitHub Release from
+the matching `CHANGELOG.md` section. It does not publish to crates.io.
+Publishing is one-way (a version cannot be overwritten), so it stays a manual
+step, recorded in `PUBLISHING.md`.
+
+## Action pinning: SHA plus an explicit input
+
+Actions are pinned to a commit SHA with the ref as a comment. `dtolnay/rust-toolchain`
+and `taiki-e/install-action` read the toolchain or tool name from the ref, so the
+name is passed as an input (`toolchain:` or `tool:`) instead. The SHA can then
+be bumped without changing what is installed.
+
+## Carrier recovery: QPSK decision-directed loop only
+
+`Detector::DecisionDirectedQpsk` covers QPSK on the `(±1, ±1)` grid. FSK is
+not a Costas case at all: it needs a frequency discriminator, not a phase
+tracker, so it is out of scope for `Pll`. 16-QAM and other multi-level grids
+need a multi-level decision inside the loop. That is a separate design, and no
+consumer needs it yet.
