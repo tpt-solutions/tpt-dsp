@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - `tpt-dsp-io` audio is fully in-tree: the `audio` feature links no system ALSA library, so CI no longer installs `libasound2-dev`.
 - `tpt-dsp-viz` is on eframe 0.37 (the bump was not recorded here before).
+- CI pins `dtolnay/rust-toolchain` and `taiki-e/install-action` by commit SHA, with the toolchain or tool name as an explicit input.
 
 ### Fixed
 - Oscillator, wavetable, FM and envelope phase wrap no longer hangs on huge or non-finite frequencies; parameters are validated.
@@ -28,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fallible constructors: `Pid::try_new`, `TrapezoidalProfile::try_new`, `InputShaper::try_new_zvd`, `BiquadCoeffs::try_design`, `Fir::try_new`, `FirDesign::try_design`, `Eq::try_new`.
 - `set_sample_rate` on `Adsr`, `SubtractiveVoice` and `Eq`.
 - `Eq::with_max_block` and `IirFilter::with_max_block`.
+- `tpt-dsp-io`: `RtlTcpCommand` and `TcpIqSource::{send_command, set_center_frequency, set_sample_rate, set_tuner_gain_tenth_db, set_auto_gain, set_frequency_correction_ppm}`, which tune an `rtl_tcp` server on the sample connection.
+- `tpt-dsp-audio`: `StereoFreeverb`, Freeverb with its stereo spread (the right channel's delays are lengthened by 23 samples at 44.1 kHz).
+- `tpt-dsp-analysis`: `detect_onsets` and `pick_onsets` with `OnsetConfig` (spectral-flux peak picking), and `pitch_shift` (phase vocoder, then cubic resampling).
+- `tpt-dsp-core`: `least_squares_fir`, a weighted least-squares linear-phase FIR design.
+- `tpt-dsp-core`: `Detector::DecisionDirectedQpsk`, a decision-directed Costas loop for QPSK for `Pll`.
+- `tpt-dsp-cli`: `pipeline` accepts TOML (`[[effects]]` tables) as well as JSON, chosen by the `.toml` extension.
+- `.github/workflows/release.yml`: on a `v*` tag, runs the gate, checks the tag against the workspace version, and creates the GitHub Release from the CHANGELOG section. It does not publish to crates.io.
 
 ### Removed
 - `tpt-dsp-core/tests/debug_biquad.rs`, a print-only test. Its coverage is in `allpass_preserves_magnitude`.
