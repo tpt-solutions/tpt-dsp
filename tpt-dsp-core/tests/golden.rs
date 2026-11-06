@@ -426,3 +426,42 @@ fn chebyshev2_band_magnitudes_match_scipy() {
     println!("cheby2 band-pass/band-stop: {rows} points, worst |diff| {worst:.6} dB");
     assert!(rows == 60, "expected 60 reference points, read {rows}");
 }
+
+#[test]
+fn chebyshev_highpass_magnitudes_match_scipy() {
+    use tpt_dsp_core::{cascade_magnitude_response, chebyshev1_highpass, chebyshev2_highpass};
+
+    // Reference: tests/golden/generate_cheby_highpass.py (scipy.signal.cheby1
+    // and cheby2, high-pass at 3 kHz, 48 kHz, orders 1–4). Gains are relative
+    // to Nyquist, where the passband sits. The largest error (0.0008 dB) is at
+    // 200 Hz, 46 dB down, where rounding the coefficients to f32 shows most.
+    let mut worst = 0.0f64;
+    let mut rows = 0usize;
+    for line in golden("cheby_highpass.csv").lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        let kind = f[0];
+        let order: usize = f[1].parse().unwrap();
+        let fs: f32 = f[2].parse().unwrap();
+        let fc: f32 = f[3].parse().unwrap();
+        let param: f32 = f[4].parse().unwrap();
+        let freq: f32 = f[5].parse().unwrap();
+        let want: f64 = f[6].parse().unwrap();
+
+        let sections = match kind {
+            "cheby1" => chebyshev1_highpass(order, fs, fc, param).unwrap(),
+            "cheby2" => chebyshev2_highpass(order, fs, fc, param).unwrap(),
+            other => panic!("unknown kind `{other}`"),
+        };
+        let db = |x: f32| 20.0 * f64::from(cascade_magnitude_response(&sections, fs, x)).log10();
+        let got = db(freq) - db(fs / 2.0);
+        let err = (got - want).abs();
+        assert!(
+            err < 0.001,
+            "{kind} high-pass order {order} at {freq} Hz: got {got:.4} dB, scipy {want:.4} dB"
+        );
+        worst = worst.max(err);
+        rows += 1;
+    }
+    println!("cheby1/cheby2 high-pass: {rows} points, worst |diff| {worst:.6} dB");
+    assert!(rows == 80, "expected 80 reference points, read {rows}");
+}

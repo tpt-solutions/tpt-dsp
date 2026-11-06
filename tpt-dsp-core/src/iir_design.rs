@@ -1786,7 +1786,7 @@ mod degenerate_tests {
                         if f2 <= f1 {
                             continue;
                         }
-                        let designs: [(&str, Design); 5] = [
+                        let designs: [(&str, Design); 7] = [
                             (
                                 "butterworth_bandpass",
                                 butterworth_bandpass(order, fs, f1, f2),
@@ -1806,6 +1806,14 @@ mod degenerate_tests {
                             (
                                 "chebyshev2_bandstop",
                                 chebyshev2_bandstop(order, fs, f1, f2, 40.0),
+                            ),
+                            (
+                                "chebyshev1_highpass",
+                                chebyshev1_highpass(order, fs, f1, 1.0),
+                            ),
+                            (
+                                "chebyshev2_highpass",
+                                chebyshev2_highpass(order, fs, f1, 40.0),
                             ),
                         ];
                         for (name, result) in designs {
@@ -1852,4 +1860,115 @@ mod degenerate_tests {
             assert_stable(&s, "order-1 band-pass near Nyquist");
         }
     }
+}
+
+/// Map a low-pass prototype (edge at 1 rad/s) to a high-pass cascade.
+///
+/// The substitution is `s → ωc/s`, so the order is unchanged. A prototype pole
+/// `p` becomes `q = ωc/p`. A complex pair gives one second-order section with
+/// denominator `s² − 2·Re(q)·s + |q|²`. A real pole gives the first-order
+/// section `s/(s − q)`. A finite prototype zero pair `±jy` maps to `±j·ωc/y`,
+/// and a zero at infinity maps to the origin. Zeros are paired with complex
+/// poles in order, as in [`bandpass_sections`].
+#[cfg(feature = "alloc")]
+fn highpass_sections(
+    poles: &[(f64, f64)],
+    zero_mags: &[f64],
+    wc: f64,
+    fs: f64,
+) -> alloc::vec::Vec<BiquadCoeffs<f32>> {
+    let mut sections = alloc::vec::Vec::with_capacity(poles.len());
+    let mut zero_iter = zero_mags.iter();
+    for &(re, im) in poles {
+        if im == 0.0 {
+            let q = wc / re;
+            sections.push(bilinear_biquad([0.0, 1.0, 0.0], [-q, 1.0, 0.0], fs));
+        } else {
+            // 1/p = (re, −im)/|p|², so Re(q) = wc·re/|p|² and |q|² = wc²/|p|².
+            let mag2 = re * re + im * im;
+            let q_re = wc * re / mag2;
+            let q_abs2 = wc * wc / mag2;
+            let numerator = match zero_iter.next() {
+                Some(&y) => {
+                    let z = wc / y;
+                    [z * z, 0.0, 1.0]
+                }
+                None => [0.0, 0.0, 1.0],
+            };
+            sections.push(bilinear_biquad(numerator, [q_abs2, -2.0 * q_re, 1.0], fs));
+        }
+    }
+    sections
+}
+
+/// Normalise a cascade to unit gain at Nyquist, where a high-pass passband sits.
+#[cfg(feature = "alloc")]
+fn normalise_nyquist(sections: &mut [BiquadCoeffs<f32>], fs: f32) {
+    let g = cascade_magnitude_response(sections, fs, fs / 2.0);
+    if g.is_finite() && g > 1e-12 {
+        let first = &mut sections[0];
+        first.b0 /= g;
+        first.b1 /= g;
+        first.b2 /= g;
+    }
+}
+
+/// Chebyshev type I high-pass filter as a biquad cascade of order `order`.
+///
+/// `fc` is the passband edge, where the response is `−ripple_db` dB. Matches
+/// `scipy.signal.cheby1` with `btype="highpass"`. Gain is normalised to unity at
+/// Nyquist, the high-pass counterpart of the unity-DC low-pass convention.
+///
+/// # Errors
+/// Returns an error for a zero order, a non-positive ripple, or an invalid `fs`
+/// or `fc`.
+#[cfg(feature = "alloc")]
+pub fn chebyshev1_highpass(
+    order: usize,
+    fs: f32,
+    fc: f32,
+    ripple_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    if order == 0 {
+        return Err(FilterDesignError::InvalidOrder);
+    }
+    check_cutoff(fs, fc)?;
+    if !(ripple_db.is_finite() && ripple_db > 0.0) {
+        return Err(FilterDesignError::Gain);
+    }
+    let fs64 = f64::from(fs);
+    let wc = 2.0 * fs64 * (core::f64::consts::PI * f64::from(fc) / fs64).tan();
+    let poles = chebyshev1_prototype_poles(order, f64::from(ripple_db));
+    let mut sections = highpass_sections(&poles, &[], wc, fs64);
+    normalise_nyquist(&mut sections, fs);
+    checked_design(sections)
+}
+
+/// Chebyshev type II high-pass filter as a biquad cascade of order `order`.
+///
+/// `fstop` is where the response is `−atten_db` dB, and the stopband lies below
+/// it. Matches `scipy.signal.cheby2` with `btype="highpass"`. Gain is normalised
+/// to unity at Nyquist.
+///
+/// # Errors
+/// Returns an error for a zero order, a non-positive attenuation, or an invalid
+/// `fs` or `fstop`.
+#[cfg(feature = "alloc")]
+pub fn chebyshev2_highpass(
+    order: usize,
+    fs: f32,
+    fstop: f32,
+    atten_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    if order == 0 {
+        return Err(FilterDesignError::InvalidOrder);
+    }
+    check_cutoff(fs, fstop)?;
+    let atten = check_atten(atten_db)?;
+    let fs64 = f64::from(fs);
+    let wc = 2.0 * fs64 * (core::f64::consts::PI * f64::from(fstop) / fs64).tan();
+    let (zeros, poles) = chebyshev2_prototype(order, atten);
+    let mut sections = highpass_sections(&poles, &zeros, wc, fs64);
+    normalise_nyquist(&mut sections, fs);
+    checked_design(sections)
 }
