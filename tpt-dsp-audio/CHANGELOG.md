@@ -9,6 +9,39 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+### Added
+- `dynamics`: `Compressor` (with makeup gain and gain-reduction metering), `Limiter`
+  (ceiling and release) and `Gate`. Each has a per-sample `tick` and a buffer
+  `process`.
+- `modulation`: `Lfo` (selectable waveform, unipolar mode), and the effects built on
+  it: `Tremolo`, `Chorus`, `Flanger` (with feedback) and `Phaser`.
+- `synthesis`: `PolyBlepOscillator` with `BlepShape`, a band-limited oscillator using
+  the `poly_blep` correction; `NoiseSource`, `PinkNoise`, and `TpdfDither` for
+  quantising to a given bit depth.
+- `oversampling::Oversampler`: runs a nonlinear closure at a higher rate and decimates
+  the result, with a reported `latency`. Use it around waveshapers and other
+  distortion that would otherwise alias.
+- `freeverb`: `Freeverb`, the Schroeder–Moorer algorithmic reverb, and
+  `StereoFreeverb`, its stereo form with a 23-sample right-channel spread at 44.1 kHz
+  (`process_interleaved` for interleaved buffers).
+- `Delay::set_delay_fractional`, for fractional delay times.
+- `Eq::try_new`, `Eq::with_max_block` and `Eq::try_with_shelves`, for fallible
+  construction and for reserving scratch for a chosen block size.
+- `set_sample_rate` on `Adsr`, `SubtractiveVoice` and `Eq`, so they can follow a
+  host sample-rate change without being rebuilt.
+
+### Fixed
+- Oscillator, wavetable, FM and envelope phase wrap no longer hangs on huge or
+  non-finite frequencies; parameters are validated.
+- `ConvolutionReverb` no longer shifts the stream after a short final block. Output
+  now has a fixed one-block latency, and the dry signal is delayed to match.
+- `SubtractiveVoice` redesigns its filter every 32 samples instead of every sample.
+- `Eq` reserves its scratch at construction, so `process` no longer allocates on the
+  first block.
+- `Delay` supports fractional, glided delay times and flushes denormal and NaN
+  feedback.
+- `synth_eq` example: fixed the band order.
+
 ## [0.2.0] - 2026-11-01
 
 ### Fixed

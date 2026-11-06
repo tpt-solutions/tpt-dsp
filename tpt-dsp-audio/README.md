@@ -21,15 +21,44 @@ never allocates, so it is safe to call from an audio callback.
 - [`FmSynth`] — 2-operator FM synthesis voice.
 - [`SubtractiveVoice`] — a subtractive-synthesis voice (oscillator → filter → amp).
 - [`Adsr`] and [`EnvelopeState`] — an attack/decay/sustain/release envelope generator.
+- [`PolyBlepOscillator`] — a band-limited oscillator (with [`BlepShape`]) that uses the
+  `poly_blep` correction to suppress aliasing on saw and square waves.
+- [`NoiseSource`], [`PinkNoise`] and [`TpdfDither`] — white and pink noise, and
+  triangular-PDF dither for quantising to a chosen bit depth.
 
 ### Effects
 
 - [`Waveshaper`] — waveshaping distortion with a configurable [`Curve`]
-  (`Tanh`, `HardClip`, `Cubic`, `Polynomial`).
-- [`Delay`] — a delay line with feedback and wet/dry mix.
+  (`Tanh`, `HardClip`, `Cubic`, `Polynomial`). Run it inside an [`Oversampler`] to
+  reduce aliasing.
+- [`Delay`] — a delay line with feedback and wet/dry mix, and fractional, glided
+  delay times (`set_delay_fractional`).
 - [`ConvolutionReverb`] — FFT convolution reverb for an impulse response of any
   length; build one with the `generate_decay_ir` helper.
-- [`Eq`] — a multi-band peaking equaliser.
+- [`Freeverb`] and [`StereoFreeverb`] — algorithmic reverb with room size, damping and
+  wet level. The stereo version spreads its right channel for width.
+- [`Eq`] — a multi-band peaking equaliser (`try_new` for fallible construction).
+- [`Oversampler`] — runs a nonlinear closure at a higher rate and decimates back, with
+  a reported latency.
+
+### Dynamics
+
+- [`Compressor`] — feed-forward compressor (threshold, ratio, attack, release) with
+  makeup gain and gain-reduction metering.
+- [`Limiter`] — a ceiling and release time. It has no lookahead, so a fast transient
+  can cause an audible gain step.
+- [`Gate`] — noise gate (threshold, ratio, attack, release) that reports its current
+  gain with `gain_db`.
+
+All three share one envelope-follower structure and allocate nothing in `tick` or
+`process`.
+
+### Modulation
+
+- [`Lfo`] — low-frequency oscillator with a selectable [`Waveform`], unipolar mode and
+  rate changes.
+- [`Tremolo`] — amplitude modulation by an `Lfo`-controlled gain.
+- [`Chorus`], [`Flanger`] and [`Phaser`] — modulation effects with a mix control.
 
 ### Graph & engine
 
