@@ -193,12 +193,15 @@ jobs:
           tool: cargo-fuzz
       # A short run per target, to catch a regression that a unit test misses.
       # The corpus is not kept between runs, so each run starts from scratch.
+      # --target is pinned to the GNU host triple: cargo-fuzz defaults to musl
+      # on Linux, which is not installed here and cannot be sanitized (ASan
+      # needs dynamic libc).
       - name: Fuzz the IIR designs (tpt-dsp-core)
         working-directory: tpt-dsp-core/fuzz
-        run: cargo fuzz run iir_designs -- -max_total_time=60
+        run: cargo fuzz run --target x86_64-unknown-linux-gnu iir_designs -- -max_total_time=60
       - name: Fuzz the WAV reader (tpt-dsp-io)
         working-directory: tpt-dsp-io/fuzz
-        run: cargo fuzz run wav_reader -- -max_total_time=60
+        run: cargo fuzz run --target x86_64-unknown-linux-gnu wav_reader -- -max_total_time=60
 
   coverage:
     name: Line coverage (cargo-llvm-cov)
@@ -273,8 +276,9 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: Install system libraries (libudev)
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
-      - name: cargo check (workspace, all features)
-        run: cargo check --workspace --all-features
+      # tpt-dsp-viz is excluded: its egui/eframe dependency needs Rust 1.95.
+      - name: cargo check (workspace minus viz, all features)
+        run: cargo check --workspace --exclude tpt-dsp-viz --all-features
 
   windows:
     name: Test (Windows)
