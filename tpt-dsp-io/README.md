@@ -20,8 +20,8 @@ source.
 | ---------- | ------------ | ------------------------------------------------------------------------------------------------- |
 | `iq`       | always       | Parse raw interleaved I/Q byte streams into [`Complex32`] samples. Allocation-free.               |
 | `source`   | always       | The [`IqSource`] trait plus [`SyntheticIqSource`], an in-memory generator for tests/examples.     |
-| `tcp`      | always (client) / `tcp` (server) | [`TcpIqSource`] (blocking source over any reader) and the async `serve_iq` server.      |
-| `rtlsdr`   | always       | [`RtlSdrSource`] + [`RtlSdrConfig`]; a documented stub unless a driver is wired in behind `rtl-sdr`. |
+| `tcp`      | always (client) / `tcp` (server) | [`TcpIqSource`] (blocking source over any reader), `TcpIqSource::connect_rtl_tcp`, `RtlTcpCommand` for tuning a remote `rtl_tcp` server, and the async `serve_iq` server. |
+| `rtlsdr`   | always       | [`RtlSdrSource`] + [`RtlSdrConfig`]; a documented stub unless a driver is wired in behind `rtl-sdr`. Use `rtl_tcp` for real hardware. |
 | `wav`      | always       | RIFF/WAVE reader and writer, normalised to `f32`: `read_wav_f32_path`, `write_wav_f32_path`.     |
 | `audio`    | `audio`      | Built-in real-time audio I/O: `run_output`, `run_input`, `list_output_devices`, `list_input_devices`. |
 | `serial`   | `serial`     | `SerialReader` — a serial-port byte reader.                                                        |
@@ -69,6 +69,25 @@ while !chunk.is_empty() {
     chunk = &chunk[r.consumed..]; // offer the rest again after draining `out`
 }
 ```
+
+### Tune a remote `rtl_tcp` server
+
+`rtl_tcp` (from librtlsdr) serves unsigned 8-bit I/Q over TCP and accepts tuning
+commands on the same connection. `TcpIqSource::connect_rtl_tcp` reads the server's
+greeting (returned as `RtlTcpInfo`), and the setters send commands to it:
+
+```rust
+use tpt_dsp_io::TcpIqSource;
+
+let (mut src, info) = TcpIqSource::connect_rtl_tcp("127.0.0.1:1234")?;
+println!("tuner {} with {} gain steps", info.tuner, info.gain_count);
+src.set_sample_rate(2_400_000)?;
+src.set_center_frequency(100_000_000)?; // 100 MHz
+src.set_auto_gain()?;
+```
+
+Start the server with `rtl_tcp -a 127.0.0.1 -p 1234`. See `docs/RTL_SDR.md` for the
+full setup. The `rtl-sdr` feature is still a stub.
 
 ### Swap the source, keep the pipeline
 

@@ -9,6 +9,31 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+### Added
+- `rtl_tcp` control: `RtlTcpCommand` (five-byte wire encoding), and `TcpIqSource`
+  methods `send_command`, `set_center_frequency`, `set_sample_rate`,
+  `set_tuner_gain_tenth_db`, `set_auto_gain` and `set_frequency_correction_ppm`. They
+  tune a remote `rtl_tcp` server over the sample connection.
+- `read_rtl_tcp_greeting` and `RtlTcpInfo` (tuner type and gain count), read from the
+  server's greeting. `TcpIqSource::connect_rtl_tcp` opens a connection, reads the
+  greeting, and returns the source with the `RtlTcpInfo`.
+- A `cargo-fuzz` target for the WAV reader, and property-based round-trip tests for
+  the WAV reader and writer.
+- `io_bench` benchmark: IQ parsing throughput for each sample format, and a WAV
+  write/read round trip.
+
+### Changed
+- `rtl_tcp` is the supported RTL-SDR path. `docs/RTL_SDR.md` describes the setup. The
+  `rtl-sdr` feature remains a stub.
+- `sdr_pipeline` example: `--out` writes a real WAV file for names ending in `.wav`,
+  and the `--tcp` path works.
+
+### Fixed
+- The WAV reader bounds its chunk reads, consumes the RIFF pad byte, and drops a
+  partial trailing frame instead of returning it as a sample.
+- The WAV writer checks its size arithmetic and rejects a buffer that does not hold
+  whole frames.
+
 ## [0.2.0] - 2026-11-01
 
 ### Changed
