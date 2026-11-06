@@ -31,4 +31,13 @@ cargo build --release        # produces target/release/*.clap and *.vst3 bundles
 With the optional `nice-plug-xtask` tooling you can produce native plugin
 bundles; see the nice-plug documentation for details.
 
+## Starting a new plugin
+
+`templates/nihplug-effect` at the repository root is a `cargo-generate` template for
+a new CLAP/VST3 effect built on `tpt-dsp-audio`, a starting point modelled on this crate:
+
+```sh
+cargo generate --path templates/nihplug-effect
+```
+
 Dual licensed under MIT / Apache-2.0. Copyright TPT Solutions.

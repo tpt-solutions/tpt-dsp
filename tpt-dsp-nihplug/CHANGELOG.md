@@ -17,3 +17,8 @@ independently of it (see [`README.md`](README.md#standalone-build)).
 - Host-automatable parameters for waveshaper drive/mix, delay time/feedback,
   reverb wet, and low-shelf/peak/high-shelf EQ gains.
 - CLAP and VST3 export via the `nice-plug` (nih-plug-compatible) framework.
+- `templates/nihplug-effect` at the repository root: a `cargo-generate` template for
+  starting a new nice-plug CLAP/VST3 effect on `tpt-dsp-audio`.
+
+### Changed
+- `tpt-dsp-core` and `tpt-dsp-audio` dependencies point at version 0.2.0.
