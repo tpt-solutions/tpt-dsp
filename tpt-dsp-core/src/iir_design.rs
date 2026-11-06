@@ -1136,3 +1136,138 @@ mod elliptic_highpass_tests {
         assert!(elliptic_highpass(3, FS, 1000.0, 1.0, 0.5).is_err());
     }
 }
+
+/// Principal square root of a complex number `(re, im)`.
+#[cfg(feature = "alloc")]
+fn complex_sqrt(re: f64, im: f64) -> (f64, f64) {
+    let mag = (re * re + im * im).sqrt();
+    let sr = ((mag + re) / 2.0).max(0.0).sqrt();
+    let si = ((mag - re) / 2.0).max(0.0).sqrt();
+    (sr, if im < 0.0 { -si } else { si })
+}
+
+/// Elliptic (Cauer) band-pass filter as a biquad cascade.
+///
+/// `order` is the prototype (low-pass) order, so the band-pass has `2·order`
+/// poles. The prototype is the same as [`elliptic_lowpass`]. It is mapped by
+/// `s → (s² + ω₀²)/(B·s)`, with `ω₀ = √(ωl·ωh)` and `B = ωh − ωl`, where the
+/// band edges are pre-warped. The cascade is normalised to unit gain at the
+/// digital centre frequency `fs/π · atan(ω₀ / 2fs)`.
+///
+/// # Errors
+/// Returns an error for a zero order, non-positive ripples, a stopband
+/// attenuation not above the passband ripple, or an invalid `fs` or band edges
+/// (`0 < fl < fh < fs/2`).
+#[cfg(feature = "alloc")]
+pub fn elliptic_bandpass(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+    rp_db: f32,
+    rs_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    if order == 0 {
+        return Err(FilterDesignError::InvalidOrder);
+    }
+    check_cutoff(fs, f_low)?;
+    check_cutoff(fs, f_high)?;
+    if f_low >= f_high {
+        return Err(FilterDesignError::FrequencyOutOfRange);
+    }
+    if !(rp_db.is_finite() && rp_db > 0.0 && rs_db.is_finite() && rs_db > rp_db) {
+        return Err(FilterDesignError::Gain);
+    }
+    let (zeros, poles) = elliptic_prototype(order, f64::from(rp_db), f64::from(rs_db));
+    let fs64 = f64::from(fs);
+    let warp = |f: f32| 2.0 * fs64 * (core::f64::consts::PI * f64::from(f) / fs64).tan();
+    let wl = warp(f_low);
+    let wh = warp(f_high);
+    let w0sq = wl * wh;
+    let w0 = w0sq.sqrt();
+    let bw = wh - wl;
+
+    let mut sections = alloc::vec::Vec::with_capacity(2 * order.div_ceil(2) + 1);
+    let mut zero_iter = zeros.iter();
+    for &(re, im) in &poles {
+        if im == 0.0 {
+            // A real LP pole p gives s² − p·B·s + ω₀² = 0. The LP zero at
+            // infinity becomes a zero at the origin, used by one of the sections.
+            let b = re * bw;
+            let disc = b * b - 4.0 * w0sq;
+            if disc >= 0.0 {
+                let s = disc.sqrt();
+                let (r1, r2) = ((b + s) / 2.0, (b - s) / 2.0);
+                sections.push(bilinear_biquad([0.0, 1.0, 0.0], [-r1, 1.0, 0.0], fs64));
+                sections.push(bilinear_biquad([-r2, 0.0, 0.0], [-r2, 1.0, 0.0], fs64));
+            } else {
+                let (rr, ri) = (b / 2.0, (-disc).sqrt() / 2.0);
+                sections.push(bilinear_biquad(
+                    [0.0, 1.0, 0.0],
+                    [rr * rr + ri * ri, -2.0 * rr, 1.0],
+                    fs64,
+                ));
+            }
+        } else {
+            // A complex LP pole pair p, p̄ with its zero pair ±jy. Each root r of
+            // s² − p·B·s + ω₀² = 0 is a BP pole (with its conjugate partner from
+            // p̄). The zero ±jy maps to the two zero pairs ±j·a₁ and ±j·a₂.
+            let y = zero_iter.next().copied().unwrap_or(0.0);
+            let yb = y * bw;
+            let root_mag = (yb * yb + 4.0 * w0sq).sqrt();
+            let (a1, a2) = ((yb + root_mag) / 2.0, (root_mag - yb) / 2.0);
+            // Discriminant (p·B)² − 4ω₀², then its square root.
+            let (pbr, pbi) = (re * bw, im * bw);
+            let disc_re = pbr * pbr - pbi * pbi - 4.0 * w0sq;
+            let disc_im = 2.0 * pbr * pbi;
+            let (sr, si) = complex_sqrt(disc_re, disc_im);
+            let r1 = ((pbr + sr) / 2.0, (pbi + si) / 2.0);
+            let r2 = ((pbr - sr) / 2.0, (pbi - si) / 2.0);
+            for (r, a) in [(r1, a1), (r2, a2)] {
+                sections.push(bilinear_biquad(
+                    [a * a, 0.0, 1.0],
+                    [r.0 * r.0 + r.1 * r.1, -2.0 * r.0, 1.0],
+                    fs64,
+                ));
+            }
+        }
+    }
+
+    // Unit gain at the digital centre frequency.
+    let centre = fs64 / core::f64::consts::PI * (w0 / (2.0 * fs64)).atan();
+    let g = cascade_magnitude_response(&sections, fs, centre as f32);
+    if g.is_finite() && g > 1e-12 {
+        let first = &mut sections[0];
+        first.b0 /= g;
+        first.b1 /= g;
+        first.b2 /= g;
+    }
+    Ok(sections)
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod elliptic_bandpass_tests {
+    use super::*;
+
+    const FS: f32 = 48_000.0;
+
+    #[test]
+    fn passes_the_band_and_rejects_outside_it() {
+        let s = elliptic_bandpass(2, FS, 1000.0, 3000.0, 1.0, 40.0).unwrap();
+        let db = |f: f32| 20.0 * f64::from(cascade_magnitude_response(&s, FS, f)).log10();
+        // Inside the band: within the ripple of the centre.
+        let centre = db(1737.0);
+        assert!(centre.abs() < 0.2, "centre {centre}");
+        assert!(db(1200.0) > -1.5 && db(2800.0) > -1.5, "band edges");
+        // Well outside the band.
+        assert!(db(200.0) < -30.0, "200 Hz: {}", db(200.0));
+        assert!(db(10_000.0) < -30.0, "10 kHz: {}", db(10_000.0));
+    }
+
+    #[test]
+    fn rejects_bad_arguments() {
+        assert!(elliptic_bandpass(0, FS, 1000.0, 3000.0, 1.0, 40.0).is_err());
+        assert!(elliptic_bandpass(2, FS, 3000.0, 1000.0, 1.0, 40.0).is_err());
+        assert!(elliptic_bandpass(2, FS, 1000.0, 30_000.0, 1.0, 40.0).is_err());
+    }
+}
