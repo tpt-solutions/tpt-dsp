@@ -21,4 +21,4 @@ independently of it (see [`README.md`](README.md#standalone-build)).
   starting a new nice-plug CLAP/VST3 effect on `tpt-dsp-audio`.
 
 ### Changed
-- `tpt-dsp-core` and `tpt-dsp-audio` dependencies point at version 0.2.0.
+- `tpt-dsp-core` and `tpt-dsp-audio` dependencies point at version 0.3.0.

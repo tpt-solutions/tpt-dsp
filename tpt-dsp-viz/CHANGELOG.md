@@ -26,6 +26,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 - `examples/snapshot.rs` renders one frame to a PNG without a display.
 - A built-in 5x7 bitmap font covering the UI labels.
 
+## [0.3.0] - 2026-11-07
+
 ### Changed
 - `eframe` and `egui` are upgraded from 0.36 to 0.37.
 - The crate sets its own `rust-version = "1.95"`, not the workspace's 1.85, because
@@ -62,6 +64,7 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
   (`lock().unwrap_or_else(|e| e.into_inner())`) instead of unwrapping, so a panic
   on another thread no longer crashes every subsequent callback.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

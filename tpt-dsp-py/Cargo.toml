@@ -20,10 +20,10 @@ crate-type = ["cdylib"]
 # `extension-module` links the Python C-API at load time instead of embedding
 # libpython, so the module cannot be run as a normal binary or test.
 [dependencies]
-tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
-tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.2.0" }
-tpt-dsp-control = { path = "../tpt-dsp-control", version = "0.2.0" }
-tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.2.0" }
+tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.3.0" }
+tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.3.0" }
+tpt-dsp-control = { path = "../tpt-dsp-control", version = "0.3.0" }
+tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.3.0" }
 pyo3 = { version = "0.30", features = ["extension-module"] }
 
 [features]

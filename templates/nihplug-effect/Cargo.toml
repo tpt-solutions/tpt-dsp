@@ -15,7 +15,7 @@ nice-plug = "0.4.2"
 # The framework core. Intentionally unused by the placeholder effect: it is here
 # so your effect can start importing `tpt_dsp_core` immediately. cargo-machete
 # is told to skip it.
-tpt-dsp-core = { version = "0.2", path = "../../tpt-dsp-core" }
+tpt-dsp-core = { version = "0.3", path = "../../tpt-dsp-core" }
 
 [package.metadata.cargo-machete]
 ignored = ["tpt-dsp-core"]

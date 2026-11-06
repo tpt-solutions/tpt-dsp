@@ -9,6 +9,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Added
 - `rtl_tcp` control: `RtlTcpCommand` (five-byte wire encoding), and `TcpIqSource`
   methods `send_command`, `set_center_frequency`, `set_sample_rate`,
@@ -95,6 +97,7 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
   per-arity signatures (`call_vt`). Verified with repeated release runs of live
   capture on Windows hardware.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

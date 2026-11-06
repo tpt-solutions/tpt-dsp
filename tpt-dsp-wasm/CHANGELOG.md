@@ -9,6 +9,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Added
 - Browser filter designer, `www/designer.html`, backed by `FilterSpec`. It plots the
   magnitude response and returns the biquad coefficients for the tpt-dsp IIR designs:
@@ -45,6 +47,7 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 - Optional `async` feature adding `open_microphone()`, an `async` `getUserMedia`
   wrapper with echo cancellation, noise suppression and AGC disabled.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

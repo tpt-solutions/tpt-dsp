@@ -9,6 +9,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Added
 - `PidBuilder`, from `Pid::builder(sample_time)`: set `kp`, `ki`, `kd`, `setpoint`,
   `output_limits`, `anti_windup` and `derivative_filter` in one chain, then `build`.
@@ -45,6 +47,7 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 - `JerkLimiter`: further bounds jerk (derivative of acceleration) for smooth
   starts/stops that minimise mechanical stress.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

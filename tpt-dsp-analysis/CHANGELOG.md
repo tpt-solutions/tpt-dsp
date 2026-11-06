@@ -9,6 +9,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Added
 - Spectral descriptors in `features`: `spectral_flatness`, `spectral_rolloff` and
   `spectral_flux`.
@@ -59,6 +61,7 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 - `peak_bin` now uses a total order over `f32`, so a NaN/Inf value in the magnitude
   spectrum can no longer panic the real-time analysis path.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

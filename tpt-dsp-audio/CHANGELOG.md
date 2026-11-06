@@ -9,6 +9,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Added
 - `dynamics`: `Compressor` (with makeup gain and gain-reduction metering), `Limiter`
   (ceiling and release) and `Gate`. Each has a per-sample `tick` and a buffer
@@ -64,6 +66,7 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
   `Source` / `Sink` / `AudioNode` traits, and the fixed-block, allocation-free
   `RealtimeEngine` (exposing the `BLOCK_128` / `BLOCK_256` block-size constants).
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

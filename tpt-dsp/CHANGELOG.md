@@ -9,6 +9,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Added
 - Facade crate that re-exports the workspace crates behind feature flags: `core` always,
   and `audio`, `analysis`, `control` and `io` as features. `audio`, `analysis` and
@@ -16,3 +18,6 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 - `prelude` module with the types most programs use, from every enabled crate.
 - `walkthrough` module: a compiled example that reads a WAV file, filters it, analyses
   it and writes the result.
+
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.3.0

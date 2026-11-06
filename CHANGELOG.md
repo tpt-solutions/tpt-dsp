@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- `tpt-dsp-viz` drops `egui`/`eframe` for an in-tree software renderer over `minifb`
+  (MIT OR Apache-2.0). This removes Apache-2.0-only transitive crates and the Rust 1.95 requirement
+  from the build. The crate now uses the workspace MSRV (1.85), and the MSRV CI job checks the whole workspace.
+  Breaking API change in `tpt-dsp-viz`: see its changelog.
+
+## [0.3.0] - 2026-11-07
+
+### Changed
 - `tpt-dsp-control` no longer declares a dependency on `tpt-dsp-core`; it had never used it.
 - `tpt-dsp-core` IIR designs reject non-finite and degenerate parameters with `FilterDesignError` instead of returning a misbehaving filter. First-order sections are exact.
 - `tpt-dsp-core` Chebyshev I design applies frequency pre-warping; the flat-top window uses full-precision coefficients.
@@ -214,6 +222,7 @@ unpublished (see [PUBLISHING.md](PUBLISHING.md)).
 ### Fixed
 - Regression test covering `peak_bin` behaviour with NaN-containing input.
 
-[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/TPT-Solutions/tpt-dsp/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.3.0
 [0.2.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.2.0
 [0.1.0]: https://github.com/TPT-Solutions/tpt-dsp/releases/tag/v0.1.0

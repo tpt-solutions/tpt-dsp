@@ -30,7 +30,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 # Minimum supported Rust for every crate, including `tpt-dsp-viz` (its GUI is
 # the in-tree renderer over `minifb`, so it no longer needs a newer toolchain).
