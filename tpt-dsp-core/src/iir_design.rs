@@ -649,3 +649,124 @@ mod chebyshev2_tests {
         ));
     }
 }
+
+/// Complex value of a biquad's numerator and denominator at `e^{jω}`,
+/// with `ω = 2π·f/fs`. Returns `(num, den)` as `(re, im)` pairs.
+fn biquad_terms(c: &BiquadCoeffs<f32>, w: f64) -> ((f64, f64), (f64, f64)) {
+    let (c1, s1) = (w.cos(), -w.sin());
+    let (c2, s2) = ((2.0 * w).cos(), -(2.0 * w).sin());
+    let (b0, b1, b2) = (f64::from(c.b0), f64::from(c.b1), f64::from(c.b2));
+    let (a1, a2) = (f64::from(c.a1), f64::from(c.a2));
+    let num = (b0 + b1 * c1 + b2 * c2, b1 * s1 + b2 * s2);
+    let den = (1.0 + a1 * c1 + a2 * c2, a1 * s1 + a2 * s2);
+    (num, den)
+}
+
+/// Complex transfer function of a cascade at `f` Hz, as `(re, im)`.
+fn cascade_h(sections: &[BiquadCoeffs<f32>], w: f64) -> (f64, f64) {
+    sections.iter().fold((1.0, 0.0), |(hr, hi), c| {
+        let (n, d) = biquad_terms(c, w);
+        let dd = d.0 * d.0 + d.1 * d.1;
+        // H_stage = n / d = n · conj(d) / |d|².
+        let (sr, si) = ((n.0 * d.0 + n.1 * d.1) / dd, (n.1 * d.0 - n.0 * d.1) / dd);
+        (hr * sr - hi * si, hr * si + hi * sr)
+    })
+}
+
+/// Group delay of a biquad cascade at `f` Hz, in samples.
+///
+/// Computed from the phase difference across a small frequency step, so the
+/// result is not affected by phase wrapping. Positive values are a delay.
+pub fn cascade_group_delay(sections: &[BiquadCoeffs<f32>], fs: f32, f: f32) -> f64 {
+    let fs = f64::from(fs);
+    let w = core::f64::consts::TAU * f64::from(f) / fs;
+    let h = 1e-5;
+    let plus = cascade_h(sections, w + h);
+    let minus = cascade_h(sections, w - h);
+    // arg(H⁺ / H⁻) = arg(H⁺ · conj(H⁻)).
+    let re = plus.0 * minus.0 + plus.1 * minus.1;
+    let im = plus.1 * minus.0 - plus.0 * minus.1;
+    -im.atan2(re) / (2.0 * h)
+}
+
+/// Poles and zeros of a biquad cascade in the z-plane, as `(re, im)` pairs.
+#[cfg(feature = "alloc")]
+#[derive(Debug, Clone, PartialEq)]
+pub struct PolesZeros {
+    /// Poles, two per second-order section.
+    pub poles: alloc::vec::Vec<(f64, f64)>,
+    /// Finite zeros.
+    pub zeros: alloc::vec::Vec<(f64, f64)>,
+}
+
+/// Poles and zeros (in the z-plane) of a biquad cascade.
+///
+/// A section whose leading numerator coefficient is zero contributes only its
+/// finite zeros; the missing zero sits at infinity and is not listed.
+#[cfg(feature = "alloc")]
+pub fn cascade_poles_zeros(sections: &[BiquadCoeffs<f32>]) -> PolesZeros {
+    fn quadratic_roots(a: f64, b: f64, c: f64) -> alloc::vec::Vec<(f64, f64)> {
+        // Roots of a·z² + b·z + c = 0.
+        if a == 0.0 {
+            return if b == 0.0 {
+                alloc::vec::Vec::new()
+            } else {
+                alloc::vec![(-c / b, 0.0)]
+            };
+        }
+        let disc = b * b - 4.0 * a * c;
+        if disc >= 0.0 {
+            let s = disc.sqrt();
+            alloc::vec![((-b + s) / (2.0 * a), 0.0), ((-b - s) / (2.0 * a), 0.0)]
+        } else {
+            let s = (-disc).sqrt();
+            alloc::vec![
+                (-b / (2.0 * a), s / (2.0 * a)),
+                (-b / (2.0 * a), -s / (2.0 * a)),
+            ]
+        }
+    }
+    let mut poles = alloc::vec::Vec::new();
+    let mut zeros = alloc::vec::Vec::new();
+    for c in sections {
+        poles.extend(quadratic_roots(1.0, f64::from(c.a1), f64::from(c.a2)));
+        zeros.extend(quadratic_roots(
+            f64::from(c.b0),
+            f64::from(c.b1),
+            f64::from(c.b2),
+        ));
+    }
+    PolesZeros { poles, zeros }
+}
+
+#[cfg(test)]
+mod response_tests {
+    use super::*;
+
+    const FS: f32 = 48_000.0;
+
+    #[test]
+    fn lowpass_zeros_sit_at_nyquist_and_poles_are_inside_the_circle() {
+        let sections = butterworth(Response::LowPass, 4, FS, 1000.0).unwrap();
+        let PolesZeros { poles, zeros } = cascade_poles_zeros(&sections);
+        assert_eq!(poles.len(), 4);
+        for (re, im) in &poles {
+            assert!((re * re + im * im).sqrt() < 1.0, "pole {re},{im} outside");
+        }
+        // Butterworth low-pass zeros are all at z = −1.
+        for (re, im) in &zeros {
+            assert!((re + 1.0).abs() < 1e-3 && im.abs() < 1e-3, "zero {re},{im}");
+        }
+    }
+
+    #[test]
+    fn group_delay_matches_scipy() {
+        // Reference: scipy.signal.group_delay summed over the sections of
+        // butter(4, 1000, fs=48000, output="sos").
+        let sections = butterworth(Response::LowPass, 4, FS, 1000.0).unwrap();
+        for (f, want) in [(100.0f32, 20.0184), (500.0, 22.7538), (900.0, 29.9086)] {
+            let got = cascade_group_delay(&sections, FS, f);
+            assert!((got - want).abs() < 0.01, "{f} Hz: got {got}, scipy {want}");
+        }
+    }
+}

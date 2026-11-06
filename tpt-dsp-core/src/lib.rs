@@ -114,8 +114,11 @@ pub use hilbert::hilbert;
 #[cfg(feature = "alloc")]
 pub use iir_design::{butterworth, chebyshev1_lowpass, chebyshev2_lowpass, Response};
 pub use iir_design::{
-    cascade_magnitude_response, magnitude_response, DcBlocker, OnePole, Svf, SvfOutput,
+    cascade_group_delay, cascade_magnitude_response, magnitude_response, DcBlocker, OnePole, Svf,
+    SvfOutput,
 };
+#[cfg(feature = "alloc")]
+pub use iir_design::{cascade_poles_zeros, PolesZeros};
 pub use lpc::{autocorrelation, levinson_durbin, predict, residual, synthesize};
 pub use mdct::{imdct, mdct, sine_window as mdct_sine_window, MdctPlan};
 pub use noise_shaping::{noise_shape_step, noise_shaper_is_stable};
