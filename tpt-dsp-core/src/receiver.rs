@@ -32,6 +32,15 @@ pub enum Detector {
     /// Costas loop for suppressed-carrier BPSK: `I·Q`, which is insensitive to
     /// the data sign.
     CostasBpsk,
+    /// Decision-directed Costas loop for QPSK on the unit-amplitude grid
+    /// `(±1, ±1)`. The error is `sign(I)·Q − sign(Q)·I`, which is zero when
+    /// the symbols sit on the decision axes and insensitive to the data.
+    ///
+    /// The QPSK grid repeats every 90°, so the loop can lock at any of the
+    /// four rotations. Resolving which one is correct is the job of the
+    /// framing, not the loop. The error also scales with the sample amplitude,
+    /// so the loop gain assumes that constellation.
+    DecisionDirectedQpsk,
 }
 
 /// Second-order PLL tracking the carrier phase and frequency of a complex
@@ -123,6 +132,10 @@ impl Pll {
         let err = match self.detector {
             Detector::Complex => y.im.atan2(y.re),
             Detector::CostasBpsk => y.re * y.im,
+            Detector::DecisionDirectedQpsk => {
+                let sign = |v: f32| if v >= 0.0 { 1.0 } else { -1.0 };
+                sign(y.re) * y.im - sign(y.im) * y.re
+            }
         };
         self.last_error = err;
         self.omega += self.ki * err;
@@ -391,6 +404,49 @@ mod tests {
             pll.frequency_hz()
         );
         assert!(q_sum < 0.1 * i_sum, "quadrature leakage {q_sum} vs {i_sum}");
+    }
+
+    #[test]
+    fn decision_directed_qpsk_loop_locks_with_noise() {
+        // One sample per symbol at 10 kbaud, a 150 Hz carrier offset, a 0.3 rad
+        // phase and uniform noise. The grid is (±1, ±1), so the EVM is measured
+        // against it. The grid repeats every 90°, so the loop may lock at any
+        // rotation, and the EVM does not depend on which one it picks.
+        let fs = 10_000.0f32;
+        let mut pll = Pll::new(fs, 0.0, 50.0, 0.707, Detector::DecisionDirectedQpsk);
+        let w = core::f32::consts::TAU * 150.0 / fs;
+        let mut seed = 0x2545_F491u32;
+        let mut uniform = || {
+            seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            ((seed >> 8) as f32 / 8_388_608.0) - 1.0
+        };
+        let n = 20_000;
+        let mut evm_sq = 0.0f32;
+        let mut count = 0usize;
+        for i in 0..n {
+            let bi = if uniform() >= 0.0 { 1.0 } else { -1.0 };
+            let bq = if uniform() >= 0.0 { 1.0 } else { -1.0 };
+            let phase = w * i as f32 + 0.3;
+            let (s, c) = phase.sin_cos();
+            let (si, sq) = (bi * c - bq * s, bi * s + bq * c);
+            let noise = 0.15;
+            let x = C32::new(si + noise * uniform(), sq + noise * uniform());
+            let y = pll.tick(x);
+            if i >= n - 2000 {
+                // Nearest point of the (±1, ±1) grid.
+                let gi = if y.re >= 0.0 { 1.0 } else { -1.0 };
+                let gq = if y.im >= 0.0 { 1.0 } else { -1.0 };
+                evm_sq += (y.re - gi).powi(2) + (y.im - gq).powi(2);
+                count += 1;
+            }
+        }
+        assert!(
+            (pll.frequency_hz() - 150.0).abs() < 1.0,
+            "frequency {}",
+            pll.frequency_hz()
+        );
+        let evm_rms = (evm_sq / (2 * count) as f32).sqrt();
+        assert!(evm_rms < 0.25, "EVM {evm_rms}");
     }
 
     #[test]
