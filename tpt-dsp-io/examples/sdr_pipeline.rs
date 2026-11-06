@@ -17,13 +17,16 @@
 //! cargo run -p tpt-dsp-io --example sdr_pipeline -- --tcp 127.0.0.1:1234
 //! ```
 //!
-//! The raw output file is mono 32-bit float, little endian, 48 kHz:
+//! `--out audio.wav` writes a mono 32-bit float WAV at the audio rate. Any
+//! other name gets raw little-endian f32, which plays with:
 //! `ffplay -f f32le -ar 48000 -ch_layout mono audio.f32`.
 
 use std::io::{BufWriter, Write};
 
 use tpt_dsp_core::{Complex32, FIRDecimator, FmDemodulator};
-use tpt_dsp_io::{IqSource, SyntheticIqSource, TcpIqSource};
+use tpt_dsp_io::{
+    write_wav_f32_path, IqSource, SampleFormat, SyntheticIqSource, TcpIqSource, WavSpec,
+};
 
 const IQ_RATE_HZ: f64 = 2_400_000.0;
 const IQ_DECIM: usize = 10;
@@ -190,13 +193,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("audio[mid..mid+8]: {}", preview.join(" "));
 
     if let Some(path) = out_path {
-        let file = std::fs::File::create(&path)?;
-        let mut writer = BufWriter::new(file);
-        for sample in &audio {
-            writer.write_all(&sample.to_le_bytes())?;
+        if path.to_ascii_lowercase().ends_with(".wav") {
+            // A .wav path gets a proper 32-bit float WAV header.
+            let spec = WavSpec {
+                channels: 1,
+                sample_rate: audio_rate.round() as u32,
+                bits_per_sample: 32,
+                sample_format: SampleFormat::Float,
+            };
+            write_wav_f32_path(std::path::Path::new(&path), &spec, &audio)?;
+            println!(
+                "wrote {} samples as a 32-bit float WAV to {path}",
+                audio.len()
+            );
+        } else {
+            // Any other name gets raw little-endian f32, as the header describes.
+            let file = std::fs::File::create(&path)?;
+            let mut writer = BufWriter::new(file);
+            for sample in &audio {
+                writer.write_all(&sample.to_le_bytes())?;
+            }
+            writer.flush()?;
+            println!("wrote {} raw f32le samples to {path}", audio.len());
         }
-        writer.flush()?;
-        println!("wrote {} f32le samples to {path}", audio.len());
     }
 
     Ok(())
