@@ -13,7 +13,12 @@ yanked = "deny"
 # async-std is discontinued upstream (RUSTSEC-2025-0052). It is only pulled
 # in by the opt-in `async-std` feature of tpt-dsp-analysis, never by the
 # default feature set, and is kept for users already on that runtime.
-ignore = ["RUSTSEC-2025-0052"]
+ignore = [
+    "RUSTSEC-2025-0052",
+    # pin-utils (via async-std, same opt-in feature): archived upstream, no safe
+    # upgrade exists. Removed together with the async-std feature.
+    "RUSTSEC-2026-0441",
+]
 
 [bans]
 multiple-versions = "warn"
