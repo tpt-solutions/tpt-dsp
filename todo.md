@@ -250,7 +250,7 @@ _Status (2026-11-06, this pass): sections A and B and the housekeeping item are 
 - [x] `README.md` says 0.2.0 now; badges added (crates.io, docs.rs, CI, license, MSRV 1.85)
 - [x] `ARCHITECTURE.md`: wasm/Pages status corrected, fast DCT/MDCT noted, Linux/macOS backends noted, "eight crates" instead of "five"; zero-alloc note updated for reserved scratch
 - [ ] Tidy this file: stale items at "Phase 1 MVP released"/"v0.1.0 on crates.io"/"Phase 3 complete"; merge "Known Gaps" duplicates; remove mid-file "(End of file)" — _partly done: the v0.1.0 publish is superseded by 0.2.0 (see `PUBLISHING.md`); the remaining clean-up of the Phase 1–3 bullets and the "Known Gaps" section is not done_
-- [ ] Track: GitHub Release for v0.2.0 (manual, `gh` not installed), PyPI release for `tpt-dsp-py`, real RTL-SDR driver (or document `rtl_tcp` as the supported path)
+- [~] RTL-SDR: **decided** on `rtl_tcp` as the supported path (`docs/RTL_SDR.md`). `TcpIqSource::connect_rtl_tcp` reads and checks the `RTL0` greeting, which the plain TCP constructor did not skip, so `sdr_pipeline --tcp` was decoding the greeting as samples. Fixed, with tests, and checked end to end against a fake `rtl_tcp` server. _Not done: tuning and gain commands, and a USB driver (not planned). Still open: GitHub Release for v0.2.0 and PyPI for `tpt-dsp-py` (publishing, out of scope)._
 - [x] `ci.yml`: cpal comments removed and `libasound2-dev` dropped (the audio backend has no system library; **not yet confirmed by a CI run**); `CHANGELOG [Unreleased]` records the eframe 0.37 bump; `nihplug`/`py` manifests now pin core 0.2.0
 
 ### C. Missing DSP features
@@ -277,7 +277,7 @@ _Status (2026-11-06, this pass): sections A and B and the housekeeping item are 
 - [~] pin actions by SHA — **done for six actions** (`actions/checkout`, `Swatinem/rust-cache`, `actions/setup-python`, `jetli/wasm-pack-action`, `actions/upload-pages-artifact`, `actions/deploy-pages`), each with its tag as a comment. _Not pinned, on purpose: `dtolnay/rust-toolchain` and `taiki-e/install-action` read the toolchain or tool name from the ref, so a SHA would break them. Their refs are kept; pin them with an explicit `toolchain:` / `tool:` input if you want them pinned too._
 - [x] Per-package `[package.metadata.docs.rs]` (all-features) on every member crate; `SECURITY.md` and `CODE_OF_CONDUCT.md` added.
 - [x] `Cargo.lock`: kept gitignored for now. The library crates are what is published; revisit if the binaries (`tpt-dsp-cli`, `tpt-dsp-viz`) are distributed.
-- [~] Benches for `analysis`, `control`, `io` — **added** (`analysis_bench`, `control_bench`, `io_bench`; criterion), and CI compiles all benches. _Not done: regression tracking (storing baselines and failing on a slowdown)._
+- [~] Benches for `analysis`, `control`, `io` — **added** (`analysis_bench`, `control_bench`, `io_bench`; criterion), and CI compiles all benches. Regression tracking is decided (`docs/DECISIONS.md`): the weekly `bench` job keeps the criterion results as an artifact, and nothing fails on a slowdown, because shared runners are too noisy for a timing gate._
 
 ### F. Adoption
 - [x] `tpt-dsp` facade crate with prelude + feature flags (`audio`, `analysis`, `control`, `io`), default audio/analysis/control.
