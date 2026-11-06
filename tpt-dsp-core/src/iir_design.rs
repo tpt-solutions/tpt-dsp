@@ -1038,3 +1038,101 @@ mod elliptic_tests {
         assert!(elliptic_lowpass(4, FS, 30_000.0, 1.0, 40.0).is_err());
     }
 }
+
+/// Elliptic (Cauer) high-pass filter as a biquad cascade.
+///
+/// The same prototype as [`elliptic_lowpass`], with the low-pass-to-high-pass
+/// substitution `s → ωp/s` applied to its poles and zeros. The passband edge
+/// `fp`, ripples and order mean the same as for the low-pass. The cascade is
+/// normalised to unit gain at the Nyquist frequency, where the high-pass
+/// passband sits (its DC gain is zero, so DC cannot be the reference).
+///
+/// # Errors
+/// As [`elliptic_lowpass`].
+#[cfg(feature = "alloc")]
+pub fn elliptic_highpass(
+    order: usize,
+    fs: f32,
+    fp: f32,
+    rp_db: f32,
+    rs_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    if order == 0 {
+        return Err(FilterDesignError::InvalidOrder);
+    }
+    check_cutoff(fs, fp)?;
+    if !(rp_db.is_finite() && rp_db > 0.0 && rs_db.is_finite() && rs_db > rp_db) {
+        return Err(FilterDesignError::Gain);
+    }
+    let (zeros, poles) = elliptic_prototype(order, f64::from(rp_db), f64::from(rs_db));
+    let fs64 = f64::from(fs);
+    let wa = 2.0 * fs64 * (core::f64::consts::PI * f64::from(fp) / fs64).tan();
+
+    let mut sections = alloc::vec::Vec::with_capacity(order.div_ceil(2));
+    let mut zero_iter = zeros.iter();
+    for &(re, im) in &poles {
+        if im == 0.0 {
+            // Real pole p → wa/p: first-order section with a zero at s = 0.
+            let p = wa / re;
+            sections.push(bilinear_biquad([0.0, 1.0, 0.0], [-p, 1.0, 0.0], fs64));
+        } else {
+            // Zero pair ±jy → ±j·wa/y, which is again a pure-imaginary pair.
+            let y = zero_iter.next().copied().unwrap_or(0.0);
+            let w = if y > 0.0 { wa / y } else { 0.0 };
+            // Pole p → wa/p = wa·conj(p)/|p|².
+            let mag2 = re * re + im * im;
+            let (pr, pi) = (wa * re / mag2, wa * im / mag2);
+            sections.push(bilinear_biquad(
+                [w * w, 0.0, 1.0],
+                [pr * pr + pi * pi, -2.0 * pr, 1.0],
+                fs64,
+            ));
+        }
+    }
+
+    // Unit gain at Nyquist.
+    let g = cascade_magnitude_response(&sections, fs, fs / 2.0);
+    if g.is_finite() && g > 1e-12 {
+        let first = &mut sections[0];
+        first.b0 /= g;
+        first.b1 /= g;
+        first.b2 /= g;
+    }
+    Ok(sections)
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod elliptic_highpass_tests {
+    use super::*;
+
+    const FS: f32 = 48_000.0;
+
+    #[test]
+    fn passband_is_near_nyquist_and_the_stopband_is_below_dc_region() {
+        for order in 2..=5 {
+            let s = elliptic_highpass(order, FS, 1000.0, 1.0, 50.0).unwrap();
+            let db = |f: f32| 20.0 * f64::from(cascade_magnitude_response(&s, FS, f)).log10();
+            // Passband: within the ±rp band (relative to Nyquist) from fp upward.
+            for k in 0..=20 {
+                let f = 2000.0 + (FS / 2.0 - 2000.0) * k as f32 / 20.0;
+                assert!(
+                    db(f).abs() <= 1.0 + 0.05,
+                    "order {order} at {f} Hz: {}",
+                    db(f)
+                );
+            }
+            // Stopband: well below the passband at low frequencies.
+            assert!(
+                db(100.0) < -40.0,
+                "order {order}: 100 Hz at {} dB",
+                db(100.0)
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_bad_arguments() {
+        assert!(elliptic_highpass(0, FS, 1000.0, 1.0, 40.0).is_err());
+        assert!(elliptic_highpass(3, FS, 1000.0, 1.0, 0.5).is_err());
+    }
+}

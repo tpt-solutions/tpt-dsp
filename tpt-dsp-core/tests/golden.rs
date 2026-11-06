@@ -216,3 +216,36 @@ fn elliptic_magnitude_matches_scipy() {
     println!("elliptic: {rows} points, worst |diff| {worst:.6} dB");
     assert!(rows == 45, "expected 45 reference points, read {rows}");
 }
+
+#[test]
+fn elliptic_highpass_magnitude_matches_scipy() {
+    use tpt_dsp_core::{cascade_magnitude_response, elliptic_highpass};
+
+    // Reference: tests/golden/generate_ellip.py (scipy.signal.ellip, high-pass),
+    // relative to the gain at Nyquist − 1 Hz, as the generator computes it.
+    let mut worst = 0.0f64;
+    let mut rows = 0usize;
+    for line in golden("ellip_high.csv").lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        let order: usize = f[0].parse().unwrap();
+        let fs: f32 = f[1].parse().unwrap();
+        let fc: f32 = f[2].parse().unwrap();
+        let rp: f32 = f[3].parse().unwrap();
+        let rs: f32 = f[4].parse().unwrap();
+        let freq: f32 = f[5].parse().unwrap();
+        let want: f64 = f[6].parse().unwrap();
+
+        let sections = elliptic_highpass(order, fs, fc, rp, rs).unwrap();
+        let db = |x: f32| 20.0 * f64::from(cascade_magnitude_response(&sections, fs, x)).log10();
+        let got = db(freq) - db(fs / 2.0 - 1.0);
+        let err = (got - want).abs();
+        assert!(
+            err < 0.01,
+            "high-pass order {order} at {freq} Hz: got {got:.4} dB, scipy {want:.4} dB"
+        );
+        worst = worst.max(err);
+        rows += 1;
+    }
+    println!("elliptic high-pass: {rows} points, worst |diff| {worst:.6} dB");
+    assert!(rows == 36, "expected 36 reference points, read {rows}");
+}
