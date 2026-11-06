@@ -376,3 +376,167 @@ mod tests {
         assert!(at(8000.0) < -20.0, "stopband {}", at(8000.0));
     }
 }
+
+/// Parse a JSON pipeline description into effects.
+///
+/// The document is `{"effects": [ … ]}`. Each entry has a `kind`:
+///
+/// - `{"kind":"biquad","type":"lowpass","freq":1000,"q":0.707,"gain_db":0}`
+/// - `{"kind":"waveshaper","curve":"tanh","drive":2,"mix":1}`
+/// - `{"kind":"delay","seconds":0.25,"feedback":0.3,"mix":0.4}`
+/// - `{"kind":"reverb","seconds":1.5,"wet":0.3}`
+/// - `{"kind":"eq","bands":[[200,3,1],[3000,-2,1.2]]}`
+///
+/// Optional fields take the same defaults as the compact `--effect` syntax.
+/// Each entry is turned into that syntax and parsed by [`Effect::parse`], so
+/// the two forms cannot drift apart.
+///
+/// # Errors
+/// Returns an error for malformed JSON, an unknown `kind`, or a missing or
+/// mistyped field.
+pub fn parse_pipeline_json(text: &str) -> Result<Vec<Effect>> {
+    use anyhow::Context;
+    let doc: serde_json::Value =
+        serde_json::from_str(text).context("pipeline is not valid JSON")?;
+    let entries = doc
+        .get("effects")
+        .and_then(|e| e.as_array())
+        .ok_or_else(|| anyhow::anyhow!("pipeline needs an `effects` array"))?;
+    entries
+        .iter()
+        .enumerate()
+        .map(|(i, entry)| {
+            let spec = effect_spec(entry).with_context(|| format!("effect {i}"))?;
+            Effect::parse(&spec).with_context(|| format!("effect {i} (`{spec}`)"))
+        })
+        .collect()
+}
+
+/// Build the compact spec string for one JSON effect object.
+fn effect_spec(entry: &serde_json::Value) -> Result<String> {
+    use anyhow::{anyhow, bail};
+    let text = |key: &str| -> Result<String> {
+        entry
+            .get(key)
+            .and_then(|v| v.as_str())
+            .map(str::to_string)
+            .ok_or_else(|| anyhow!("missing string field `{key}`"))
+    };
+    let number = |key: &str| -> Result<f64> {
+        entry
+            .get(key)
+            .and_then(|v| v.as_f64())
+            .ok_or_else(|| anyhow!("missing number field `{key}`"))
+    };
+    let optional = |key: &str| entry.get(key).and_then(|v| v.as_f64());
+
+    let kind = text("kind")?;
+    Ok(match kind.as_str() {
+        "biquad" => {
+            let kind_name = text("type")?;
+            let freq = number("freq")?;
+            let mut spec = format!("biquad:{kind_name}:{freq}");
+            if let Some(q) = optional("q") {
+                spec.push_str(&format!(":{q}"));
+                if let Some(g) = optional("gain_db") {
+                    spec.push_str(&format!(":{g}"));
+                }
+            }
+            spec
+        }
+        "waveshaper" => {
+            let curve = text("curve")?;
+            let drive = number("drive")?;
+            let mut spec = format!("waveshaper:{curve}:{drive}");
+            if let Some(mix) = optional("mix") {
+                spec.push_str(&format!(":{mix}"));
+            }
+            spec
+        }
+        "delay" => {
+            let seconds = number("seconds")?;
+            let mut spec = format!("delay:{seconds}");
+            if let Some(fb) = optional("feedback") {
+                spec.push_str(&format!(":{fb}"));
+                if let Some(mix) = optional("mix") {
+                    spec.push_str(&format!(":{mix}"));
+                }
+            }
+            spec
+        }
+        "reverb" => {
+            let seconds = number("seconds")?;
+            let mut spec = format!("reverb:{seconds}");
+            if let Some(wet) = optional("wet") {
+                spec.push_str(&format!(":{wet}"));
+            }
+            spec
+        }
+        "eq" => {
+            let bands = entry
+                .get("bands")
+                .and_then(|b| b.as_array())
+                .ok_or_else(|| anyhow!("eq needs a `bands` array"))?;
+            let mut parts = Vec::with_capacity(bands.len());
+            for band in bands {
+                let triple: Vec<f64> = band
+                    .as_array()
+                    .ok_or_else(|| anyhow!("each eq band is `[freq, gain_db, q]`"))?
+                    .iter()
+                    .map(|v| {
+                        v.as_f64()
+                            .ok_or_else(|| anyhow!("eq band values must be numbers"))
+                    })
+                    .collect::<Result<_>>()?;
+                if triple.len() != 3 {
+                    bail!("each eq band needs exactly 3 values");
+                }
+                parts.push(format!("{},{},{}", triple[0], triple[1], triple[2]));
+            }
+            if parts.is_empty() {
+                bail!("eq needs at least one band");
+            }
+            format!("eq:{}", parts.join(";"))
+        }
+        other => bail!("unknown effect kind `{other}`"),
+    })
+}
+
+#[cfg(test)]
+mod pipeline_tests {
+    use super::*;
+
+    #[test]
+    fn parses_every_effect_kind_in_order() {
+        let json = r#"{"effects":[
+            {"kind":"biquad","type":"lowpass","freq":1000,"q":0.707},
+            {"kind":"waveshaper","curve":"tanh","drive":2,"mix":0.5},
+            {"kind":"delay","seconds":0.25,"feedback":0.3,"mix":0.4},
+            {"kind":"reverb","seconds":1.5,"wet":0.2},
+            {"kind":"eq","bands":[[200,3,1],[3000,-2,1.2]]}
+        ]}"#;
+        let effects = parse_pipeline_json(json).unwrap();
+        assert_eq!(effects.len(), 5);
+        assert!(matches!(effects[0], Effect::Biquad { .. }));
+        assert!(matches!(effects[4], Effect::Eq { .. }));
+    }
+
+    #[test]
+    fn json_and_compact_syntax_agree() {
+        let from_json =
+            parse_pipeline_json(r#"{"effects":[{"kind":"biquad","type":"highpass","freq":200}]}"#)
+                .unwrap();
+        let compact = Effect::parse("biquad:highpass:200").unwrap();
+        assert_eq!(format!("{:?}", from_json[0]), format!("{compact:?}"));
+    }
+
+    #[test]
+    fn rejects_bad_pipelines_with_a_useful_message() {
+        assert!(parse_pipeline_json("not json").is_err());
+        assert!(parse_pipeline_json(r#"{"nope":[]}"#).is_err());
+        let unknown = parse_pipeline_json(r#"{"effects":[{"kind":"wobble"}]}"#).unwrap_err();
+        assert!(format!("{unknown:#}").contains("wobble"));
+        let missing = parse_pipeline_json(r#"{"effects":[{"kind":"delay"}]}"#).unwrap_err();
+        assert!(format!("{missing:#}").contains("seconds"));
+    }
+}

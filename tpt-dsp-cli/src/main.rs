@@ -15,11 +15,12 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use anyhow::Context;
 use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use tpt_dsp_cli::tools::{
-    design_response, effect_response, generate, resample, DesignKind, DesignSpec, GenSpec,
-    GenWaveform,
+    design_response, effect_response, generate, parse_pipeline_json, resample, DesignKind,
+    DesignSpec, GenSpec, GenWaveform,
 };
 use tpt_dsp_cli::{
     analyze_complex, analyze_real, demod_file, filter_wav, read_iq, write_spectrum_csv, write_wav,
@@ -309,6 +310,18 @@ enum Command {
         #[arg(long, default_value_t = 2_400_000.0)]
         iq_rate: f64,
     },
+    /// Apply a JSON pipeline (an ordered list of effects) to a WAV file.
+    Pipeline {
+        /// JSON pipeline file: `{"effects": [ … ]}`.
+        #[arg(long)]
+        spec: PathBuf,
+        /// Input WAV file.
+        #[arg(long)]
+        input: PathBuf,
+        /// Output WAV file.
+        #[arg(long)]
+        output: PathBuf,
+    },
     /// Print a shell completion script to standard output.
     Completions {
         /// Target shell.
@@ -479,6 +492,21 @@ fn main() -> Result<()> {
                     frames as f64 / data.sample_rate as f64
                 );
             }
+        }
+        Command::Pipeline {
+            spec,
+            input,
+            output,
+        } => {
+            let text = std::fs::read_to_string(&spec)
+                .with_context(|| format!("read pipeline `{}`", spec.display()))?;
+            let effects = parse_pipeline_json(&text)?;
+            filter_wav(&input, &output, &effects)?;
+            println!(
+                "applied {} effect(s); wrote `{}`",
+                effects.len(),
+                output.display()
+            );
         }
         Command::Completions { shell } => {
             let mut cmd = Cli::command();
