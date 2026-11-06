@@ -22,9 +22,12 @@ processing functions. Build with `--no-default-features` to drop `std` entirely
 and target bare-metal platforms such as `thumbv7em-none-eabihf` (ARM Cortex-M).
 
 Owning convenience structs (`Fir`, `IirFilter`, `HilbertTransformer`,
-`FftConvolver`, `FIRDecimator`, `ConvolvePlan`, `LpcAnalyzer`, `NoiseShaper`,
-`VqCodebook`) are available with the `alloc` feature. They allocate **once at
-construction**; all subsequent processing remains allocation-free.
+`FftConvolver`, `FIRDecimator`, `RationalResampler`, `CicDecimator`, `Cascade`,
+`ConvolvePlan`, `LpcAnalyzer`, `NoiseShaper`, `VqCodebook`) are available with the
+`alloc` feature. They allocate **once at construction**; all subsequent processing
+remains allocation-free. `IirFilter::with_max_block` takes the largest block size up
+front, so its `process` does not allocate for blocks up to that size. `RationalResampler`
+appends to a caller-owned `Vec`, so the caller decides when that vector grows.
 
 ## Features
 
@@ -49,12 +52,35 @@ construction**; all subsequent processing remains allocation-free.
 - **Hilbert transform** — `hilbert` (free function) and the owning
   [`HilbertTransformer`].
 - **Demodulation** — `FmDemodulator`, `phase_delta`, `phase_to_audio`.
-- **Windows** — `windowed` with `WindowType` (Hann, Hamming, Blackman).
+- **Windows** — `windowed` with `WindowType`: Rectangular, Hann, Hamming, Blackman,
+  FlatTop, and the parameterised Kaiser (`beta`), Tukey (`alpha`) and Gaussian (`sigma`).
 - **Filters** — the single-stage allocation-free [`Biquad`] (`design`/`process`),
-  plus owning [`Fir`], [`IirCoeffs`]/[`IirStage`]/[`IirFilter`] when `alloc` is on.
+  and its named-parameter [`BiquadBuilder`]. Plus owning [`Fir`],
+  [`IirCoeffs`]/[`IirStage`]/[`IirFilter`] when `alloc` is on, and the one-pole
+  [`OnePole`], [`DcBlocker`] and state-variable [`Svf`] building blocks.
+- **IIR design** (feature `alloc`) — Butterworth (`butterworth`), Chebyshev I and II
+  (`chebyshev1_*`, `chebyshev2_*`) and elliptic / Cauer (`elliptic_*`) designs, each
+  for low-pass, high-pass, band-pass and band-stop. They return cascades of
+  `BiquadCoeffs`, are checked against SciPy golden vectors, and report bad parameters
+  as `FilterDesignError`. Response analysis: `magnitude_response`,
+  `cascade_magnitude_response` and `cascade_group_delay` work without `alloc`;
+  `cascade_poles_zeros` needs it.
+- **FIR design** — windowed design (`FirDesign`, `halfband_fir`), equiripple
+  Parks–McClellan `remez_fir`, and weighted least-squares `least_squares_fir`
+  (feature `alloc`). Window generators are in `windowed`, `windowed_symmetric` and
+  `f64` variants.
+- **Processing building blocks** — the [`Processor`] trait, the static [`Chain`]
+  combinator, the [`Cascade`] dynamic chain (feature `alloc`), and [`Smoothed`], a
+  click-free parameter glide.
 - **Convolution** — `convolve`, [`FftConvolver`] (exact for impulse responses of any
   length), [`ConvolvePlan`].
-- **Resampling** — [`FIRDecimator`] (feature `alloc`).
+- **Resampling** — [`FIRDecimator`] and the polyphase [`RationalResampler`]
+  (feature `alloc`), and the fractional-delay [`FarrowDelay`].
+- **Receiver blocks** — [`Pll`] with selectable [`Detector`]s (including a
+  decision-directed QPSK Costas loop), [`Agc`], [`Squelch`], [`AmDemodulator`] and
+  [`SsbDemodulator`].
+- **RF helpers** — [`Goertzel`] (single-frequency power), [`Nco`] (oscillator and
+  mixer), and [`CicDecimator`] (feature `alloc`).
 - **Linear prediction** — `autocorrelation`, `levinson_durbin`, `predict`,
   `residual`, `synthesize`, and the owning [`LpcAnalyzer`]. Line spectral
   pairs/frequencies are in `lpc_to_lsp`, `lsp_to_lpc`, `lsp_quantize_uniform` and
@@ -81,6 +107,17 @@ use tpt_dsp_core::{Biquad, BiquadType};
 let mut lp = Biquad::<f32>::design(BiquadType::LowPass, 48_000.0, 1_000.0, 0.707, 0.0);
 let mut out = [0.0f32; 128];
 lp.process(&input_block, &mut out); // no allocation
+```
+
+### Design a Butterworth low-pass cascade and check its gain (feature `alloc`)
+
+```rust
+use tpt_dsp_core::{butterworth, cascade_magnitude_response, Response};
+
+// 4th-order Butterworth low-pass at 1 kHz, designed for 48 kHz.
+let sections = butterworth(Response::LowPass, 4, 48_000.0, 1_000.0).expect("valid design");
+let gain_at_cutoff = cascade_magnitude_response(&sections, 48_000.0, 1_000.0);
+// about 0.707 (-3 dB) at the cutoff
 ```
 
 ### FFT with a reusable plan

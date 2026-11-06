@@ -13,10 +13,62 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 - `lsp_to_lpc_with_scratch`: the LSP-to-LPC conversion with caller-owned scratch
   (`2·(p+2)` values). It performs no heap allocation, so it can run on a real-time
   path. Its output is bit-identical to `lsp_to_lpc`, which is now a wrapper around it.
+- IIR design families, each returning a cascade of `BiquadCoeffs`: Butterworth
+  (`butterworth` with a `Response`), Chebyshev I and II (`chebyshev1_*`,
+  `chebyshev2_*`) and elliptic / Cauer (`elliptic_*`), for low-pass, high-pass,
+  band-pass and band-stop. Every family is checked against SciPy golden vectors in
+  `tests/golden`.
+- Fallible design: `FilterDesignError`, `BiquadCoeffs::try_design`,
+  `FirDesign::try_design` (and `try_design_windowed`), `Fir::try_new`, and
+  `halfband_fir`, a half-band low-pass FIR.
+- `BiquadBuilder`, named-parameter construction of a single-stage `Biquad` with
+  `Biquad::<f32>::builder(kind)`, then `sample_rate`, `frequency`, `q`, `gain_db`
+  and `build`.
+- Single-pole and state-variable building blocks: `OnePole` (low-pass and high-pass),
+  `DcBlocker`, and the multi-output `Svf` with `SvfOutput`.
+- Response analysis for designed cascades: `magnitude_response`,
+  `cascade_magnitude_response`, `cascade_group_delay`, and `cascade_poles_zeros`
+  returning `PolesZeros`.
+- `windowed_symmetric`, `windowed_f64` and `windowed_symmetric_f64` window
+  generators, for both the periodic and symmetric forms and for `f64`.
+- `WindowType` gained `Rectangular`, `FlatTop`, `Kaiser(beta)`, `Tukey(alpha)` and
+  `Gaussian(sigma)`, alongside Hann, Hamming and Blackman.
+- `Processor` trait, `Chain` static combinator, and `Smoothed` click-free parameter
+  glide (`set_target`, `advance`, `snap`, `is_settled`).
+- `Cascade` (feature `alloc`): a dynamic chain of `Processor` stages.
+- `RationalResampler` (feature `alloc`): polyphase rational-ratio resampling, with
+  `resample` for one-shot use and `process` for streaming. `FarrowDelay` gives
+  fractional delay with a cubic Farrow structure.
+- Receiver blocks in `receiver`: `Pll` with selectable `Detector`s (including
+  `Detector::DecisionDirectedQpsk`, a decision-directed Costas loop for QPSK), `Agc`,
+  `Squelch`, `AmDemodulator` and `SsbDemodulator`.
+- Equiripple and least-squares FIR design (feature `alloc`): `remez_fir` (Parks–McClellan)
+  and `least_squares_fir` (weighted least-squares, linear phase), both taking
+  `RemezBand`s and checked against SciPy.
+- RF helpers: `Goertzel` (single-frequency power), `Nco` (numerically controlled
+  oscillator with `mix`), and `CicDecimator` (feature `alloc`).
 
 ### Changed
 - `lsp_to_lpc` no longer collects the even and odd LSP indices into vectors; they are
   read lazily. Its result is unchanged. It still allocates one scratch buffer per call.
+- `IirFilter::with_max_block` reserves scratch for blocks of up to `max_block`
+  samples at construction (`DEFAULT_MAX_BLOCK` is 1024), so `process` does not
+  allocate for them.
+- Designs that would produce non-finite or degenerate coefficients are rejected
+  with `FilterDesignError` instead of returning a filter that misbehaves. First-order
+  sections are now exact.
+- The Chebyshev I design applies frequency pre-warping, and the flat-top window uses
+  full-precision coefficients.
+
+### Fixed
+- Biquad state is scrubbed of NaN and subnormal values once per block, so a
+  transient NaN cannot persist in the state and subnormal values cannot slow the
+  next block.
+- Degenerate IIR designs found by the new `iir_designs` fuzz target are rejected
+  rather than producing an unstable or NaN filter.
+
+### Removed
+- `tests/debug_biquad.rs`, a print-only test. Its coverage is in `allpass_preserves_magnitude`.
 
 ## [0.2.0] - 2026-11-01
 
