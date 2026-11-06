@@ -770,3 +770,271 @@ mod response_tests {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Elliptic (Cauer) low-pass design.
+//
+// The analog prototype follows Orfanidis, "Lecture Notes on Elliptic Filter
+// Design" (the construction scipy's `ellipap` uses). Every Jacobi function is
+// evaluated at a real argument, so no complex elliptic functions are needed.
+// The stopband edge is not an input: it follows from the order and the two
+// ripple specifications, as in scipy's `ellip`.
+// ---------------------------------------------------------------------------
+
+/// Arithmetic–geometric mean.
+#[cfg(feature = "alloc")]
+fn agm(mut a: f64, mut b: f64) -> f64 {
+    for _ in 0..64 {
+        let next_a = 0.5 * (a + b);
+        let next_b = (a * b).sqrt();
+        if (next_a - next_b).abs() <= 1e-16 * next_a {
+            return next_a;
+        }
+        a = next_a;
+        b = next_b;
+    }
+    a
+}
+
+/// Complete elliptic integral of the first kind, `K(m)` (parameter `m`).
+#[cfg(feature = "alloc")]
+fn ellip_k(m: f64) -> f64 {
+    core::f64::consts::FRAC_PI_2 / agm(1.0, (1.0 - m).sqrt())
+}
+
+/// Incomplete elliptic integral of the first kind, `F(φ | m)`, by composite
+/// Simpson quadrature.
+#[cfg(feature = "alloc")]
+fn ellip_f(phi: f64, m: f64) -> f64 {
+    const N: usize = 4096;
+    let h = phi / N as f64;
+    let f = |t: f64| 1.0 / (1.0 - m * t.sin() * t.sin()).sqrt();
+    let mut sum = f(0.0) + f(phi);
+    for i in 1..N {
+        let w = if i % 2 == 1 { 4.0 } else { 2.0 };
+        sum += w * f(i as f64 * h);
+    }
+    sum * h / 3.0
+}
+
+/// Jacobi elliptic functions `(sn, cn, dn)` of a real argument `u` and
+/// parameter `m`, by the descending Landen (AGM) recurrence of
+/// Abramowitz & Stegun 16.4.
+#[cfg(feature = "alloc")]
+fn jacobi_sn_cn_dn(u: f64, m: f64) -> (f64, f64, f64) {
+    if m <= 0.0 {
+        return (u.sin(), u.cos(), 1.0);
+    }
+    if m >= 1.0 {
+        let s = u.tanh();
+        let c = 1.0 / u.cosh();
+        return (s, c, c);
+    }
+    let mut a = [0.0f64; 40];
+    let mut c = [0.0f64; 40];
+    a[0] = 1.0;
+    c[0] = m.sqrt();
+    let mut b = (1.0 - m).sqrt();
+    let mut n = 0usize;
+    while c[n].abs() > 1e-16 && n < 36 {
+        c[n + 1] = 0.5 * (a[n] - b);
+        a[n + 1] = 0.5 * (a[n] + b);
+        b = (a[n] * b).sqrt();
+        n += 1;
+    }
+    let mut phi = 2.0f64.powi(n as i32) * a[n] * u;
+    for i in (1..=n).rev() {
+        phi = 0.5 * (phi + (c[i] / a[i] * phi.sin()).asin());
+    }
+    let sn = phi.sin();
+    let cn = phi.cos();
+    let dn = (1.0 - m * sn * sn).max(0.0).sqrt();
+    (sn, cn, dn)
+}
+
+/// Solve the degree equation `K(m)/K′(m) = N · K(m₁)/K′(m₁)` for `m` by
+/// bisection. The left-hand side increases with `m`, so the root is unique.
+#[cfg(feature = "alloc")]
+fn elliptic_degree(order: f64, m1: f64) -> f64 {
+    let target = order * ellip_k(m1) / ellip_k(1.0 - m1);
+    let (mut lo, mut hi) = (1e-15, 1.0 - 1e-15);
+    for _ in 0..200 {
+        let mid = 0.5 * (lo + hi);
+        if ellip_k(mid) / ellip_k(1.0 - mid) < target {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Analog elliptic low-pass prototype with passband edge at 1 rad/s.
+///
+/// Returns `(zeros, poles)` as `(re, im)` pairs. Zeros are purely imaginary and
+/// listed once per conjugate pair (positive imaginary part). Poles are in the
+/// left half-plane; complex ones are listed once per pair, and an odd order's
+/// real pole appears once.
+#[cfg(feature = "alloc")]
+fn elliptic_prototype(
+    order: usize,
+    rp_db: f64,
+    rs_db: f64,
+) -> (alloc::vec::Vec<f64>, alloc::vec::Vec<(f64, f64)>) {
+    let eps_sq = 10f64.powf(0.1 * rp_db) - 1.0;
+    let eps = eps_sq.sqrt();
+    let ck1_sq = eps_sq / (10f64.powf(0.1 * rs_db) - 1.0);
+    let n = order as f64;
+    let m = elliptic_degree(n, ck1_sq);
+    let cap_k = ellip_k(m);
+    let k1 = ellip_k(ck1_sq);
+
+    // The indices j = 1-N%2, 3-N%2, … < N from Orfanidis's construction.
+    let js: alloc::vec::Vec<f64> = (0..order)
+        .filter(|j| (*j % 2) == (order + 1) % 2)
+        .map(|j| j as f64)
+        .collect();
+
+    // Zeros: z = j / (√m · sn(jK/N)); the j = 0 term (sn = 0) is a zero at
+    // infinity and is dropped.
+    let mut zeros = alloc::vec::Vec::new();
+    for &j in &js {
+        let (s, _, _) = jacobi_sn_cn_dn(j * cap_k / n, m);
+        if s.abs() > 1e-12 {
+            zeros.push(1.0 / (m.sqrt() * s).abs());
+        }
+    }
+
+    // Poles: shift v₀ along the imaginary axis of the dual function.
+    let u = ellip_f((1.0 / eps).atan(), 1.0 - ck1_sq);
+    let v0 = cap_k * u / (n * k1);
+    let (sv, cv, dv) = jacobi_sn_cn_dn(v0, 1.0 - m);
+    let mut poles = alloc::vec::Vec::new();
+    for &j in &js {
+        let (s, c, d) = jacobi_sn_cn_dn(j * cap_k / n, m);
+        let den = 1.0 - (d * sv) * (d * sv);
+        let re = -(c * d * sv * cv) / den;
+        let im = -(s * dv) / den;
+        if im.abs() < 1e-12 {
+            poles.push((re, 0.0));
+        } else {
+            // Keep one member of each conjugate pair: the one with Im > 0.
+            poles.push((re, im.abs()));
+        }
+    }
+    (zeros, poles)
+}
+
+/// Elliptic (Cauer) low-pass filter as a biquad cascade.
+///
+/// `fp` is the passband edge (the −`rp_db` point), `rp_db` the passband ripple,
+/// and `rs_db` the minimum stopband attenuation. The stopband edge is set by
+/// the order and the two ripples, not by the caller. The cascade is normalised
+/// to unity DC gain. This matches `scipy.signal.ellip` with `btype="low"`.
+///
+/// # Errors
+/// Returns an error for a zero order, non-positive ripples, a stopband
+/// attenuation not above the passband ripple, or an invalid `fs`/`fp`.
+#[cfg(feature = "alloc")]
+pub fn elliptic_lowpass(
+    order: usize,
+    fs: f32,
+    fp: f32,
+    rp_db: f32,
+    rs_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    if order == 0 {
+        return Err(FilterDesignError::InvalidOrder);
+    }
+    check_cutoff(fs, fp)?;
+    if !(rp_db.is_finite() && rp_db > 0.0 && rs_db.is_finite() && rs_db > rp_db) {
+        return Err(FilterDesignError::Gain);
+    }
+    let (zeros, poles) = elliptic_prototype(order, f64::from(rp_db), f64::from(rs_db));
+    let fs64 = f64::from(fs);
+    // Pre-warp the passband edge, as the other designs do.
+    let wa = 2.0 * fs64 * (core::f64::consts::PI * f64::from(fp) / fs64).tan();
+
+    let mut sections = alloc::vec::Vec::with_capacity(order.div_ceil(2));
+    let mut zero_iter = zeros.iter();
+    for &(re, im) in &poles {
+        if im == 0.0 {
+            // Odd order: the real pole is a first-order section.
+            let p = re * wa;
+            sections.push(bilinear_biquad([-p, 0.0, 0.0], [-p, 1.0, 0.0], fs64));
+        } else {
+            let z = zero_iter.next().copied().unwrap_or(0.0) * wa;
+            let (pr, pi) = (re * wa, im * wa);
+            // Denominator s² − 2·Re(p)·s + |p|²; numerator s² + z² (the zeros
+            // are on the imaginary axis).
+            sections.push(bilinear_biquad(
+                [z * z, 0.0, 1.0],
+                [pr * pr + pi * pi, -2.0 * pr, 1.0],
+                fs64,
+            ));
+        }
+    }
+
+    let dc: f32 = sections
+        .iter()
+        .map(|c| (c.b0 + c.b1 + c.b2) / (1.0 + c.a1 + c.a2))
+        .product();
+    if dc.is_finite() && dc.abs() > 1e-12 {
+        let g = 1.0 / dc;
+        let first = &mut sections[0];
+        first.b0 *= g;
+        first.b1 *= g;
+        first.b2 *= g;
+    }
+    Ok(sections)
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod elliptic_tests {
+    use super::*;
+
+    const FS: f32 = 48_000.0;
+
+    #[test]
+    fn passband_ripple_and_stopband_attenuation_meet_the_spec() {
+        for order in 2..=6 {
+            let s = elliptic_lowpass(order, FS, 1000.0, 1.0, 50.0).unwrap();
+            // Passband: relative to DC the ripple band is ±rp. For even orders DC
+            // is the ripple minimum, so the band lies above 0 dB, and for odd
+            // orders below it; the symmetric bound covers both.
+            let floor = -1.0 - 1e-3;
+            for k in 1..=40 {
+                let f = 1000.0 * k as f32 / 40.0;
+                let db = 20.0 * f64::from(cascade_magnitude_response(&s, FS, f)).log10();
+                assert!(
+                    db >= floor && db <= 1.0 + 1e-3,
+                    "order {order} at {f} Hz: {db} dB"
+                );
+            }
+            // Stopband: after the bilinear transform the ripple sits about 1 dB
+            // shy of rs near Nyquist (scipy.signal.ellip gives the same floor).
+            // Beyond the stopband edge the
+            // gain is at least rs below DC. Check the far stopband.
+            let far = 20.0 * f64::from(cascade_magnitude_response(&s, FS, 0.45 * FS)).log10();
+            assert!(far < -48.5, "order {order}: far stopband {far} dB");
+        }
+    }
+
+    #[test]
+    fn rejects_bad_arguments() {
+        assert!(matches!(
+            elliptic_lowpass(0, FS, 1000.0, 1.0, 40.0),
+            Err(FilterDesignError::InvalidOrder)
+        ));
+        assert!(matches!(
+            elliptic_lowpass(4, FS, 1000.0, 0.0, 40.0),
+            Err(FilterDesignError::Gain)
+        ));
+        // Stopband attenuation must exceed the passband ripple.
+        assert!(matches!(
+            elliptic_lowpass(4, FS, 1000.0, 3.0, 2.0),
+            Err(FilterDesignError::Gain)
+        ));
+        assert!(elliptic_lowpass(4, FS, 30_000.0, 1.0, 40.0).is_err());
+    }
+}

@@ -184,3 +184,35 @@ fn remez_taps_match_scipy() {
         assert!(worst < 1e-3, "{name}: worst tap error {worst:e}");
     }
 }
+
+#[test]
+fn elliptic_magnitude_matches_scipy() {
+    use tpt_dsp_core::{cascade_magnitude_response, elliptic_lowpass};
+
+    // Reference: tests/golden/generate_ellip.py (scipy.signal.ellip, low-pass,
+    // fs 48 kHz, passband edge 1 kHz, rp 1 dB, rs 40 dB).
+    let mut worst = 0.0f64;
+    let mut rows = 0usize;
+    for line in golden("ellip.csv").lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        let order: usize = f[0].parse().unwrap();
+        let fs: f32 = f[1].parse().unwrap();
+        let fc: f32 = f[2].parse().unwrap();
+        let rp: f32 = f[3].parse().unwrap();
+        let rs: f32 = f[4].parse().unwrap();
+        let freq: f32 = f[5].parse().unwrap();
+        let want: f64 = f[6].parse().unwrap();
+
+        let sections = elliptic_lowpass(order, fs, fc, rp, rs).unwrap();
+        let got = 20.0 * f64::from(cascade_magnitude_response(&sections, fs, freq)).log10();
+        let err = (got - want).abs();
+        assert!(
+            err < 0.01,
+            "order {order} at {freq} Hz: got {got:.4} dB, scipy {want:.4} dB"
+        );
+        worst = worst.max(err);
+        rows += 1;
+    }
+    println!("elliptic: {rows} points, worst |diff| {worst:.6} dB");
+    assert!(rows == 45, "expected 45 reference points, read {rows}");
+}

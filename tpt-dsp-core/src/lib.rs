@@ -112,7 +112,9 @@ pub use fft::{
 pub use filters::{process_biquad, Biquad, BiquadCoeffs, BiquadType, FilterDesignError};
 pub use hilbert::hilbert;
 #[cfg(feature = "alloc")]
-pub use iir_design::{butterworth, chebyshev1_lowpass, chebyshev2_lowpass, Response};
+pub use iir_design::{
+    butterworth, chebyshev1_lowpass, chebyshev2_lowpass, elliptic_lowpass, Response,
+};
 pub use iir_design::{
     cascade_group_delay, cascade_magnitude_response, magnitude_response, DcBlocker, OnePole, Svf,
     SvfOutput,
