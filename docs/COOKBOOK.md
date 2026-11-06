@@ -102,8 +102,10 @@ if let Some(lufs) = meter.integrated() {
 }
 ```
 
-The K-weighting is approximate (see `loudness.rs`). Verify against the
-reference before a compliance use.
+The meter follows ITU-R BS.1770 (see `loudness.rs`). On the test signals it agrees
+with pyloudnorm's `"DeMan"` class to about 0.01 LU. It does not use pyloudnorm's
+default `"K-weighting"` class, which is an older design. Check against a reference
+meter before any compliance use.
 
 ## 8. A smooth motion profile for a stepper
 

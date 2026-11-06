@@ -1,7 +1,7 @@
 # AGENTS.md
 
 `tpt-dsp` — pure-Rust, real-time-safe DSP framework (audio, RF/SDR, control).
-One Cargo workspace, 8 member crates (+ 2 excluded standalone crates), dual MIT/Apache-2.0.
+One Cargo workspace, 10 member crates (+ 2 excluded standalone crates), dual MIT/Apache-2.0.
 
 ## Commands
 
@@ -51,9 +51,10 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
 
 - **`tpt-dsp-core`** — the only leaf crate, the only `no_std` crate, and
   `#![forbid(unsafe_code)]`. Every other crate depends on it.
-- **`tpt-dsp-audio` / `tpt-dsp-analysis` / `tpt-dsp-io` / `tpt-dsp-control`** — depend on
-  `core` only, never on each other. `control` *declares* the `core` dependency but its
-  PID/shaping/kinematics code does not call into it.
+- **`tpt-dsp-audio` / `tpt-dsp-analysis` / `tpt-dsp-io`** — depend on `core` only, never on
+  each other. **`tpt-dsp-control`** has no workspace dependencies at all.
+- **`tpt-dsp-testkit`** is a dev-dependency only (of `tpt-dsp-wasm`). **`tpt-dsp`** is the
+  facade crate that re-exports core, audio, analysis, control and io behind features.
 - **`tpt-dsp-wasm`** — core + audio; the Web Audio pedalboard
   (`Waveshaper → Delay → ConvolutionReverb → Eq`) driven from `www/` via an `AudioWorklet`.
 - **`tpt-dsp-viz` is implemented**: `app.rs` (`VizApp`, an `eframe::App`) renders a
@@ -62,12 +63,13 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
   `SpectrumFrame`s from a producer thread over a `crossbeam-channel`: `run_synthetic`
   (deterministic multi-tone + noise, no hardware needed) or, under the `audio` feature,
   `run_audio_input` (default input device via the built-in backend, any format converted to f32, mono downmix). It still
-  drags `egui`/`eframe` (0.36) into every `--workspace` build, which forces the
-  workspace `rust-version` up to 1.85; `viz` inherits that via `rust-version.workspace = true`.
+  drags `egui`/`eframe` (0.37) into every `--workspace` build. Those now require Rust 1.95,
+  so `viz` sets its own `rust-version = "1.95"` and the workspace MSRV (1.85) check runs with
+  `--exclude tpt-dsp-viz`.
   A live (on-screen) render check still needs a machine with a display — not verified in
   this headless environment, though it builds, tests, and clips clean.
 - **`tpt-dsp-cli`** — a command-line WAV/IQ DSP pipeline (`src/main.rs` + `src/lib.rs`)
-  built on the framework; depends on `core`/`io`/`audio` and is a normal workspace member.
+  built on the framework; depends on `core`/`audio`/`analysis`/`io` and is a normal workspace member.
 - **`tpt-dsp-nihplug`** and **`tpt-dsp-py`** are **excluded** from the default workspace
   build (see root `Cargo.toml` `exclude`): `nihplug` is a standalone CLAP/VST3 wrapper
   around `tpt-dsp-audio` (its transitive licenses aren't in the main `deny.toml`
@@ -111,7 +113,7 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
   `default-features = false` in `[workspace.dependencies]` on purpose: cargo silently
   ignores a member-level `default-features = false` when the workspace entry lacks it.
   Add new deps there, and run `cargo deny` — licensing is strictly MIT/Apache-2.0.
-- Every crate except the `viz` stub sets `#![warn(missing_docs)]`, and clippy runs with
+- Every library crate sets `#![warn(missing_docs)]`, and clippy runs with
   `-D warnings`, so a new public item without a doc comment fails CI. Doctests run as
   part of `cargo test`.
 - `cargo fmt` is the source of truth. Commit subjects: imperative, under 72 chars.
@@ -131,21 +133,13 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
 ## Which docs to trust
 
 Executable sources (`Cargo.toml`, `.github/workflows/`) > `ARCHITECTURE.md` > the READMEs.
-Known stale spots, verified against the code:
+Known stale spots, verified against the code (2026-11-07):
 
-- `ARCHITECTURE.md` is the best deep reference (dependency direction, zero-alloc caveats,
-  MVP data flows) but predates `viz`/`wasm`/`cli` — it still says "five crates" while the
-  workspace actually has 8 members (+ `nihplug`/`py` excluded).
-- `BENCHMARKS.md` lists a `window/kaiser_f32` benchmark, but there is no Kaiser window
-  (`WindowType` is Hann/Hamming/Blackman only). Treat its figures as indicative, not as
-  a baseline to compare against.
-- `tpt-dsp-wasm/README.md` is stale on the web layout: it says to build with
-  `wasm-pack build --target web` from the crate dir, that `www/main.js` imports `../pkg/`
-  so you must serve the crate root, and that a `worklet-polyfill.js` exists. None of that
-  holds. `main.js` resolves `./pkg/tpt_dsp_wasm_bg.wasm` and `pedal-processor.js` imports
-  `./pkg/tpt_dsp_wasm.js`, both relative to `www/` — which is what `www/README.md` and
-  `.github/workflows/pages.yml` (`--out-dir ../www/pkg`, artifact = `www`) assume.
-  Only the worklet touches the wasm-bindgen JS glue; `main.js` compiles the `.wasm`
-  itself and hands the `WebAssembly.Module` to the worklet via `processorOptions`.
+- `ARCHITECTURE.md` (revised 2026-11-07) is the deep reference: dependency direction,
+  zero-alloc caveats, application data flows and known limitations. §10–11 are dated
+  2026-09-07 and are the only sections not rechecked in that revision.
+- `BENCHMARKS.md` figures are indicative. `WindowType` now includes `Kaiser`, `Tukey`,
+  `Gaussian`, `FlatTop` and `Rectangular`, but the `window/kaiser_f32` row has not been
+  measured yet.
 - `todo.md` is the live status log (see its "Last synced" date). `docs/archive/history/todo 1260804.md`
   and `docs/archive/spec.txt` are the original snapshots — historical, not current state.

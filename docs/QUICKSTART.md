@@ -1,7 +1,9 @@
 # tpt-dsp Quickstart
 
 A single runnable path from a fresh clone to seeing and hearing the framework
-work. All commands run from the repository root on stable Rust 1.85+.
+work. All commands run from the repository root on stable Rust. The workspace
+builds on Rust 1.85+ except `tpt-dsp-viz`, which needs Rust 1.95+ for its
+`egui`/`eframe` dependency, so a full `--workspace` build needs 1.95+.
 
 ```sh
 git clone <repository-url> tpt-dsp
@@ -33,12 +35,13 @@ full recipe list (`just ci` runs the complete gate CI runs).
 
 ## 3. Use it as a library
 
-Add the crates you need (all depend on `tpt-dsp-core`, never on each other):
+Add the crates you need. Most depend on `tpt-dsp-core` and never on each other;
+`tpt-dsp-control` has no workspace dependencies:
 
 ```toml
 [dependencies]
-tpt-dsp-core = "0.1"
-tpt-dsp-audio = "0.1"
+tpt-dsp-core = "0.2"
+tpt-dsp-audio = "0.2"
 ```
 
 Then process blocks through an allocation-free filter:

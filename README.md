@@ -42,14 +42,16 @@ Dual licensed under **MIT** and **Apache-2.0**. © TPT Solutions.
 
 | Crate                | Purpose                                                              |
 | -------------------- | -------------------------------------------------------------------- |
-| `tpt-dsp-core`       | Complex math, FFT/DCT/Hilbert/MDCT, windows, biquad/FIR/IIR, convolution, resampling, ring buffers, SPSC queues. `no_std`, `#![forbid(unsafe_code)]`. |
-| `tpt-dsp-audio`      | Oscillators, wavetable/FM/subtractive synthesis, waveshaping, delay, reverb, EQ, audio graph, real-time engine. |
-| `tpt-dsp-analysis`   | Spectrum analysis, peak detection, spectrograms, moving averages, EMA, outlier detection, RMS, spectral centroid, async (tokio/futures) adapters. |
+| `tpt-dsp-core`       | Complex math, FFT/DCT/Hilbert/MDCT, windows, biquad/FIR/IIR, least-squares and windowed-sinc FIR design, convolution, resampling, pitch estimation, LPC/LSP, vector quantisation, QPSK Costas-loop PLL, ring buffers, SPSC queues. `no_std`, `#![forbid(unsafe_code)]`. |
+| `tpt-dsp-audio`      | Oscillators, wavetable/FM/subtractive synthesis, waveshaping, delay, Freeverb and stereo Freeverb, EQ, audio graph, real-time engine. |
+| `tpt-dsp-analysis`   | Spectrum analysis, peak detection, spectrograms, onset detection, phase-vocoder pitch shifting, moving averages, EMA, outlier detection, RMS, spectral centroid, async (tokio/futures) adapters. |
 | `tpt-dsp-control`    | PID with anti-windup, input shaping (ZVD), trapezoidal & jerk-limited trajectory planning. |
-| `tpt-dsp-io`         | IQ byte-stream parsing, built-in audio I/O — shared-mode WASAPI on Windows, raw ALSA UAPI on Linux, CoreAudio AudioUnits on macOS — plus RIFF/WAVE read/write, serial reader and async TCP IQ server. |
+| `tpt-dsp-io`         | IQ byte-stream parsing, built-in audio I/O — shared-mode WASAPI on Windows, raw ALSA UAPI on Linux, CoreAudio AudioUnits on macOS — plus RIFF/WAVE read/write, serial reader, and a TCP IQ source that can tune an `rtl_tcp` server (frequency, sample rate, gain, PPM). |
 | `tpt-dsp-wasm`       | WebAssembly pedalboard (Waveshaper → Delay → ConvolutionReverb → EQ) for a Web Audio `AudioWorklet`. |
-| `tpt-dsp-viz`        | Desktop viewer: scrolling waterfall, live dB spectrum line and peak readout (`egui`/`eframe`). |
-| `tpt-dsp-cli`        | Command-line WAV/IQ pipeline: `filter`, `demod`, `spectrum` and `info` subcommands. |
+| `tpt-dsp-viz`        | Desktop viewer: scrolling waterfall, live dB spectrum line and peak readout (`egui`/`eframe`). Synthetic or live audio input. |
+| `tpt-dsp-cli`        | Command-line WAV/IQ pipeline: `gen`, `resample`, `design`, `response`, `filter`, `demod`, `spectrum`, `info`, `pipeline` (JSON or TOML) and `completions` subcommands. |
+| `tpt-dsp-testkit`    | Test helpers that prove a path is allocation-free: a counting global allocator, `allocations_in` and `assert_no_alloc`. |
+| `tpt-dsp`            | Facade crate: one dependency, feature-gated re-exports of the crates above, and a `prelude`. |
 
 `tpt-dsp-nihplug` (a CLAP/VST3 wrapper) and `tpt-dsp-py` (Python bindings)
 live in the repository but are excluded from the default workspace build;
@@ -67,22 +69,23 @@ see their own READMEs.
  ┌─────────────┐ ┌──────────────┐      ┌────────────────┐
  │tpt-dsp-core │ │tpt-dsp-audio │      │tpt-dsp-analysis│
  │ FFT/filters │ │ synth/effects│      │ spectrum/stats │
- │ convolution │ └──────────────┘      └───────┬────────┘
- └──────┬──────┘                              │
-        │                                     │
-        └──────────────► tpt-dsp-control ◄────┘
-                    (PID / shaping / planning)
+ │ convolution │ └──────────────┘      └────────────────┘
+ └─────────────┘
+
+ tpt-dsp-control  (standalone: PID / shaping / planning, no workspace dependencies)
 ```
 
 `tpt-dsp-core` is the leaf crate that everything else builds on. The
-`audio`, `analysis`, `io` and `control` crates depend on `core` only and
-never on each other. The applications sit on top: `tpt-dsp-wasm` (core +
-audio), `tpt-dsp-viz` (analysis + io) and `tpt-dsp-cli` (core, audio,
-analysis, io). The dependency graph is acyclic.
+`audio`, `analysis` and `io` crates depend on `core` only, `control` has no
+workspace dependencies, and none of them depend on each other. The
+applications sit on top: `tpt-dsp-wasm` (core + audio), `tpt-dsp-viz`
+(analysis + io) and `tpt-dsp-cli` (core, audio, analysis, io). The dependency
+graph is acyclic.
 
 ## Getting started
 
-Every crate is published on [crates.io](https://crates.io) at 0.2.0:
+The publishable crates are on [crates.io](https://crates.io) at 0.2.0
+(see [`PUBLISHING.md`](PUBLISHING.md) for the list and the release process):
 
 ```toml
 [dependencies]
@@ -245,13 +248,16 @@ cargo build --workspace --all-features
 cargo test  --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo deny  check
+cargo deny --all-features check bans licenses advisories sources
 cargo doc   --workspace --all-features --no-deps
 ```
 
 CI also builds `tpt-dsp-core` for `thumbv7em-none-eabihf` and
-`tpt-dsp-wasm` for `wasm32-unknown-unknown`, and runs `cargo deny` with
-`--all-features`. The full job list is in
+`tpt-dsp-wasm` for `wasm32-unknown-unknown`. The full job list is in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+The workspace MSRV is Rust 1.85. `tpt-dsp-viz` needs Rust 1.95 because
+its `egui`/`eframe` dependency does, so the MSRV check excludes it.
 
 Contributor setup, conventions and the release process are in
 [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`PUBLISHING.md`](PUBLISHING.md).

@@ -1,10 +1,9 @@
 # tpt-dsp — Architecture & Design Guide
 
-> Scope note: this document describes the framework **as it currently exists in
-> the source tree** (snapshot: 2026-08-07). The project is mid-development — the
-> two headline MVPs (a web guitar pedal and an SDR spectrum analyzer) are **not
-> yet complete applications**, but the DSP building blocks they need are largely
-> present in the crates. Anything not yet implemented is marked **(planned)**.
+> Scope note: this document describes the framework **as it is in the source
+> tree** (last revised 2026-11-07, covering the 0.2.0 release and the unreleased
+> work after it). Every workspace member is implemented. Where a feature is only
+> partly built, §7 says so.
 >
 > The crate is dual-licensed MIT / Apache-2.0 © TPT Solutions.
 
@@ -12,7 +11,19 @@
 
 ## 1. Overview & design principles
 
-`tpt-dsp` is a pure-Rust, real-time-safe DSP framework split into eight workspace crates, plus two excluded standalone wrappers (`tpt-dsp-nihplug`, `tpt-dsp-py`).
+`tpt-dsp` is a pure-Rust, real-time-safe DSP framework. The workspace has ten
+members:
+
+- the libraries `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`,
+  `tpt-dsp-control` and `tpt-dsp-io`;
+- the test helper `tpt-dsp-testkit` and the `tpt-dsp` facade crate;
+- the applications `tpt-dsp-wasm` (browser pedalboard), `tpt-dsp-viz` (desktop
+  viewer) and `tpt-dsp-cli` (command line).
+
+Two more crates, `tpt-dsp-nihplug` (CLAP/VST3 plugin) and `tpt-dsp-py` (Python
+bindings), are excluded from the workspace because of their licences and
+toolchain needs.
+
 The guiding contract is:
 
 - **Hot paths never allocate.** Processing functions take caller-supplied or
@@ -20,47 +31,55 @@ The guiding contract is:
   those buffers are allocated **once at construction**; every `process` / `tick`
   call is allocation-free in steady state.
 - **`no_std` where it counts.** `tpt-dsp-core` builds for bare metal with
-  `--no-default-features` (verified on `thumbv7em-none-eabihf`). Higher crates
-  currently target `std` (see §6).
-- **Pure, no `unsafe` in core.** `tpt-dsp-core` is `#![forbid(unsafe_code)]`.
+  `--no-default-features` and links for `thumbv7em-none-eabihf`. The other
+  library crates use `std` (see §6).
+- **No `unsafe` in core.** `tpt-dsp-core` is `#![forbid(unsafe_code)]`.
 - **Composable primitives.** Small, single-purpose types (filters, oscillators,
-  analyzers) combine into graphs and pipelines.
+  analyzers, processors) combine into graphs and pipelines.
 
 ---
 
 ## 2. Workspace layout & dependency direction
 
 ```
-tpt-dsp-core      ← foundation, no_std, depends on nothing in this workspace
-   ▲      ▲      ▲
-   │      │      │
-tpt-dsp- │ tpt-dsp-  tpt-dsp-
-audio    │ analysis   io
-   ▲      │      ▲
-   │      │      │
-   └── tpt-dsp-control (depends on core only; see §7 caveat)
+                  tpt-dsp-core                 (leaf, no_std)
+                 ▲     ▲      ▲
+      ┌──────────┘     │      └──────────┐
+ tpt-dsp-audio   tpt-dsp-analysis   tpt-dsp-io
+      ▲                ▲                 ▲
+      │                └──── tpt-dsp-viz ┘  (analysis, io)
+      ├──── tpt-dsp-wasm   (core, audio)
+      └──── tpt-dsp-cli    (core, audio, analysis, io)
 
-        tpt-dsp-control
+ tpt-dsp-control    no workspace dependencies
+ tpt-dsp-testkit    no workspace dependencies; dev-dependency of tpt-dsp-wasm
+ tpt-dsp            facade: re-exports core, audio, analysis, control, io
 ```
 
-- `tpt-dsp-core` is a **leaf**: it depends only on external crates
-  (`num-complex`, `num-traits`, and — under `std` — `rustfft`, `crossbeam-channel`).
-- `audio`, `analysis`, `io` each depend **only on `core`**. They do **not**
-  depend on each other (no audio↔analysis coupling in code today).
-- `tpt-dsp-control` declares a dependency on `tpt-dsp-core` but (as of this
-  snapshot) does not use it in its implementation — its math (PID, input
-  shaper, kinematics) is self-contained `f32` code. See §7.
-- The dependency graph is acyclic. `core` is the base of every path.
+- `tpt-dsp-core` is a **leaf**. It depends only on external crates
+  (`num-complex`, `num-traits`, and under `std` `rustfft` and `crossbeam-channel`).
+- `audio`, `analysis` and `io` each depend **only on `core`**. They do not depend
+  on each other.
+- `tpt-dsp-control` has no workspace dependencies. Its PID, input-shaping and
+  kinematics code is self-contained `f32` code.
+- `tpt-dsp-testkit` is used only as a dev-dependency, so it never ships in a
+  library's dependency tree.
+- The applications sit on top of the libraries. The dependency graph is acyclic.
 
 ### Crate responsibilities
 
 | Crate | Purpose | `no_std`? |
 | --- | --- | --- |
-| `tpt-dsp-core` | Math engine: complex helpers, FFT/DCT/Hilbert, windows, biquad/FIR/IIR, convolution, ring buffers, SPSC queues, FM demod, FIR decimation. | **Yes** (`--no-default-features`) |
-| `tpt-dsp-audio` | Oscillators & synthesis, effects, audio graph, real-time engine. | No (uses `std::vec`) |
-| `tpt-dsp-analysis` | Spectrum analysis, time-series stats, features, spectrogram/waterfall, async stream adapters. | No (uses `std`; `async` feature pulls `tokio`/`futures`) |
-| `tpt-dsp-control` | PID, input shaping (ZVD), trajectory kinematics. | No |
-| `tpt-dsp-io` | IQ byte-stream parsing (always available), built-in audio I/O, serial reader, async TCP IQ server (feature-gated). | No |
+| `tpt-dsp-core` | Math engine: complex helpers, FFT/DCT/MDCT/Hilbert, windows, biquad/FIR/IIR design (Butterworth, Chebyshev I/II, elliptic), equiripple and least-squares FIR, convolution, polyphase and decimating resamplers, pitch, LPC/LSP, vector quantisation, receiver blocks (PLL, AGC, squelch, AM/SSB), RF helpers (NCO, Goertzel, CIC), processor combinators, ring buffers, SPSC queues. | **Yes** (`--no-default-features`) |
+| `tpt-dsp-audio` | Oscillators and synthesis (including PolyBLEP), effects (waveshaper, delay, convolution and algorithmic reverb, EQ), dynamics, modulation, oversampling, audio graph, real-time engine. | No (uses `std`) |
+| `tpt-dsp-analysis` | Spectrum analysis, spectrograms, time-series statistics, features, loudness, MFCC, STFT and phase vocoder, onset detection, YIN pitch, async stream adapters. | No (`std`; async features are opt-in) |
+| `tpt-dsp-control` | PID (with builder and anti-windup), ZVD input shaping, jerk-limited and trapezoidal trajectories. | No |
+| `tpt-dsp-io` | IQ byte-stream parsing, WAV read/write, `rtl_tcp` source with tuning commands, optional built-in audio I/O, serial reader, async TCP IQ server (feature-gated). | No |
+| `tpt-dsp-testkit` | Counting global allocator and `assert_no_alloc` for allocation-free tests. | No |
+| `tpt-dsp` | Facade: feature-gated re-exports, a `prelude`, and a compiled walkthrough. | No |
+| `tpt-dsp-wasm` | WebAssembly pedalboard and filter designer for the Web Audio `AudioWorklet`. | n/a (wasm) |
+| `tpt-dsp-viz` | Desktop waterfall and spectrum viewer (`egui`/`eframe`). | No |
+| `tpt-dsp-cli` | Command-line WAV/IQ pipeline and design tools. | No |
 
 ---
 
@@ -83,10 +102,10 @@ Two idioms are used throughout:
 The crate docs and `README.md` claim "never allocates". That is **true in steady
 state for most paths**, but the following caveats are real:
 
-- **`IirFilter` / `Eq` scratch buffers**: re-allocated only when the block
-  length *grows* beyond the previously seen size (`if self.scratch.len() < n {
-  self.scratch = vec![...] }`). Within a fixed-block-size real-time loop this
-  never triggers, so it is allocation-free in practice.
+- **`IirFilter` / `Eq` scratch buffers**: reserved at construction
+  (`IirFilter::with_max_block`, `Eq::with_max_block`; the default block limit is
+  `DEFAULT_MAX_BLOCK` = 1024). `process` does not allocate for blocks up to that
+  size. A longer block grows the scratch buffer once, then reuses it.
 - **`OutlierDetector::push`** still performs an in-place `sort` of the window per
   sample → **O(n log n) per sample**, not O(1). It is allocation-free (single
   reusable scratch) but not constant-time.
@@ -122,9 +141,9 @@ safe std APIs.
 
 ---
 
-## 4. MVP pipeline data flows
+## 4. Application data flows
 
-### 4.1 MVP 1 — Web guitar pedal  **(planned application; blocks exist)**
+### 4.1 MVP 1 — Web guitar pedal  **(implemented)**
 
 Target: a browser/WASM audio engine driving a pedalboard chain.
 
@@ -133,74 +152,83 @@ Source (Oscillator / mic) ─▶ Distortion (Waveshaper)
         ─▶ Delay ─▶ Reverb (ConvolutionReverb) ─▶ EQ (Eq) ─▶ Sink (built-in audio / Web Audio)
 ```
 
-Building blocks already available in `tpt-dsp-audio` (all mono, in-place
-`&mut [f32]` effects):
+Building blocks in `tpt-dsp-audio` (all mono, in-place `&mut [f32]` effects):
 
-- `Waveshaper` (curve: `Tanh`/`HardClip`/`Cubic`/`Polynomial`) — distortion.
-  No oversampling.
-- `Delay` — feedback delay line, **integer delay only** (sample granularity).
-- `ConvolutionReverb` — wraps `core::FftConvolver`; long IRs are truncated to
-  the FFT length (no partitioned convolution).
-- `Eq` — cascaded RBJ biquads (peaking + optional low/high shelves).
-- `Oscillator`, `Wavetable`, `FmSynth`, `SubtractiveVoice` — sources/voices.
-- `AudioGraph` — bundles one `Source`, a `Vec` of `AudioNode`s, and one `Sink`,
-  driven block-by-block over two scratch buffers. **Linear mono chain only**: no
-  DAG, fan-in/fan-out, or multi-channel support today.
+- `Waveshaper` (curve: `Tanh`/`HardClip`/`Cubic`/`Polynomial`) — distortion. It
+  does not oversample itself; wrap it in an `Oversampler` where aliasing matters.
+- `Delay` — feedback delay line with fractional, glided delay times
+  (`set_delay_fractional`).
+- `ConvolutionReverb` — partitioned FFT convolution (`core::FftConvolver`), exact
+  for an impulse response of any length. The pedalboard uses a short ambience
+  impulse response of one block, which gives an early-reflection character.
+- `Eq` — cascaded RBJ biquads (peaking and shelves).
+- `Oscillator`, `PolyBlepOscillator`, `Wavetable`, `FmSynth`, `SubtractiveVoice`
+  — sources and voices.
+- `AudioGraph` — one `Source`, a `Vec` of `AudioNode`s, and one `Sink`, driven
+  block by block over two scratch buffers. **Linear mono chain only**: no DAG,
+  fan-in, fan-out or multi-channel routing.
 - `RealtimeEngine` — drives a `FnMut(&[f32], &mut [f32])` per fixed block
   (constants `BLOCK_128`, `BLOCK_256`).
 
 **Implemented** (see `tpt-dsp-wasm` and `www/`): the `wasm32`/`wasm-bindgen`
-build, Web Audio `AudioWorklet` integration, the pedalboard UI, and the GitHub
-Pages deploy (`.github/workflows/pages.yml`). The pedalboard is a fixed chain,
-not a general graph. The `wasm32-unknown-unknown` target is exercised only as a `cargo check` in CI,
-not a working audio app.
+build, the Web Audio `AudioWorklet` integration, the pedalboard UI, a filter
+designer page (`www/designer.html`), and the GitHub Pages deploy
+(`.github/workflows/pages.yml`). CI builds the wasm target but does not run the
+browser demo. The pedalboard is a fixed chain, not a general graph.
 
 > Note: effects expose `process(&mut [f32])` (in-place) whereas `AudioGraph`
 > nodes use `AudioNode::process(&[f32], &mut [f32])`. Effects are wired into a
 > graph via `ClosureNode` adapters, not by directly implementing `AudioNode`.
 
-### 4.2 MVP 2 — SDR spectrum analyzer & FM demodulator  **(blocks mostly landed; app planned)**
+### 4.2 MVP 2 — SDR spectrum analyzer & FM demodulator  **(implemented, RTL-SDR via `rtl_tcp`)**
 
-Target: ingest RTL-SDR IQ, decimate, FFT, optionally FM-demod, render a
+Target: ingest RTL-SDR IQ, decimate, FFT, optionally FM-demodulate, render a
 waterfall.
 
 ```
-IQ bytes ─▶ parse_iq / IqStream ─▶ FIRDecimator (channel select)
+IQ bytes ─▶ parse_iq / IqStream / IqReassembler ─▶ FIRDecimator or CicDecimator
    ─▶ FftPlan / RealtimeSpectrumAnalyzer ─▶ Spectrogram (waterfall)
    ─▶ (optional) FmDemodulator ─▶ audio out / analysis
 ```
 
 Building blocks now present:
 
-- **Ingestion (I/O):** `parse_iq(format, bytes, &mut [Complex32])` and the
-  buffered `IqStream` (handles mid-sample splits across reads) in `tpt-dsp-io`.
-  Formats: `U8`, `I16Le`, `I16Be`, `F32Le`. `serve_iq` provides an async TCP
-  server (`tcp` feature).
-- **Decimation:** `FIRDecimator` (`core::resample`) — integer-factor anti-alias
-  decimation; state carries across arbitrarily-sized blocks.
-- **Transform:** `RealtimeSpectrumAnalyzer` (`analysis`) windows a block, runs
-  `FftPlan` (RustFFT, `core::plan`), folds to a one-sided magnitude spectrum,
-  time-averages, and converts to dB; `peak()` returns sub-bin frequency via
-  parabolic interpolation. `Spectrogram` stores the most recent `rows` frames as
-  a pre-allocated ring for waterfall rendering.
-- **FM demod:** `FmDemodulator` / `phase_delta` / `phase_to_audio`
-  (`core::demod`) — phase-delta discriminator, `no_std`, `Copy`, allocation-free.
+- **Ingestion (`tpt-dsp-io`):** `parse_iq(format, bytes, &mut [Complex32])`, the
+  buffered `IqStream`, and the bounded `IqReassembler`, which keeps a sample that
+  is split across reads. Formats: `U8`, `I16Le`, `I16Be`, `F32Le`.
+  `TcpIqSource::connect_rtl_tcp` reads an `rtl_tcp` greeting and tunes the server
+  (frequency, sample rate, gain, PPM). `serve_iq` provides an async TCP server
+  (`tcp` feature).
+- **Decimation and resampling (`tpt-dsp-core`):** `FIRDecimator` (integer-factor
+  windowed-sinc), `CicDecimator` (multiplier-free, for large factors), and the
+  polyphase `RationalResampler` for arbitrary ratios. State carries across
+  blocks of any size.
+- **Mixing and tracking:** `Nco` (oscillator and mixer), `Goertzel` (single-tone
+  power), `Pll` with selectable detectors, `Agc`, `Squelch`, and AM and SSB
+  demodulators.
+- **Transform (`tpt-dsp-analysis`):** `RealtimeSpectrumAnalyzer` windows a block,
+  runs `FftPlan` (RustFFT), folds to a one-sided magnitude spectrum, time-averages,
+  and converts to dB. `peak()` returns a sub-bin frequency by parabolic
+  interpolation. `Spectrogram` keeps the most recent `rows` frames in a
+  pre-allocated ring for waterfall rendering.
+- **FM demod (`tpt-dsp-core`):** `FmDemodulator` / `phase_delta` /
+  `phase_to_audio` — a phase-delta discriminator, `no_std`, `Copy`, and
+  allocation-free.
 - **Desktop waterfall UI (`tpt-dsp-viz`):** implemented. A producer thread
-  (`pipeline::run_synthetic` / `pipeline::run_audio_input`) streams
-  [`SpectrumFrame`]s (one-sided dB spectrum + metadata) to the egui UI over a
-  `crossbeam-channel`. `analyze_block` windows/transforms/averages one block via
-  `RealtimeSpectrumAnalyzer`. `VizApp` (`app.rs`, an `eframe::App`) renders the
-  `Spectrogram` as a scrolling `egui` texture (colour-mapped by `colormap` —
-  black → blue → cyan → yellow → red) and the latest frame as a live spectrum
-  line, with peak-frequency/dB readout and a pause toggle. `run_audio_input`
-  (under the `audio` feature) captures the default input device via the built-in WASAPI backend,
-  downmixing F32/I16/U16 streams to mono. The only per-frame allocation is the
-  `Vec<f32>` of dB values sent over the channel.
+  (`pipeline::run_synthetic` or, with the `audio` feature, `run_audio_input`)
+  streams `SpectrumFrame`s to the egui UI over a `crossbeam-channel`.
+  `analyze_block` windows, transforms and averages one block with
+  `RealtimeSpectrumAnalyzer`. `VizApp` (`app.rs`, an `eframe::App`) draws the
+  `Spectrogram` as a scrolling texture, colour-mapped by `colormap`
+  (black → blue → cyan → yellow → red), with the latest frame as a live spectrum
+  line, a peak-frequency and dB readout, and a pause toggle. `run_audio_input`
+  captures the default input device through the built-in backend, downmixing
+  F32/I16/U16 to mono. The only per-frame allocation is the `Vec<f32>` of dB values
+  sent over the channel.
 
-**Not yet implemented** (from `todo.md`): the actual RTL-SDR USB driver/binding
-and a fully wired end-to-end SDR app (the `io` `rtl-sdr` feature is a stubbed
-backend). Continuous frame-drop-free streaming verification and the desktop
-waterfall UI are now implemented.
+**Not yet implemented:** a native RTL-SDR USB driver. The `io` `rtl-sdr` feature
+is a stub that only changes the error `RtlSdrSource` reports. The supported
+hardware path is `rtl_tcp` (see `docs/RTL_SDR.md`).
 
 ---
 
@@ -213,31 +241,46 @@ waterfall UI are now implemented.
 | `complex` | `Complex32`/`Complex64`, aliases `C32`/`C64`; `magnitude`, `magnitude_squared`, `phase`, `exp_i`, `rotate` |
 | `fft` | `fft`, `ifft`, `fft_inplace`, `ifft_inplace`, `twiddles`, `is_power_of_two`, `next_power_of_two` — hand-rolled radix-2, power-of-two only, `no_std` |
 | `plan` (`std`) | `FftPlan` — RustFFT-backed, arbitrary length, buffers allocated once |
-| `dct` | `dct_ii`, `dct_iii`, `dct_iv` — direct O(N²), allocation-free |
+| `dct` | `dct_ii`, `dct_iii`, `dct_iv`, `dct_2d`, `idct_2d` — direct O(N²), allocation-free. FFT-backed fixed-size plans: `FastDct2Plan`, `FastDct2dPlan`, `FastDctIvPlan`, `FastMdctPlan` |
+| `mdct` | `mdct`, `imdct`, `MdctPlan`, `FastMdctPlan`, `mdct_sine_window` |
 | `hilbert` | `hilbert` (free) + `HilbertTransformer` (`alloc`) — analytic-signal transform |
-| `windows` | `windowed`, `WindowType` (`Hann`/`Hamming`/`Blackman`) — f32 only |
-| `filters` | `Biquad`, `BiquadCoeffs`, `BiquadType`, `process_biquad`; `alloc`: `Fir`, `FirDesign`, `IirFilter`/`IirCoeffs`/`IirStage` |
-| `convolution` | `convolve` (direct); `alloc`: `ConvolvePlan`, `FftConvolver` (overlap-add) |
+| `windows` | `windowed`, `windowed_symmetric`, `windowed_f64`, `windowed_symmetric_f64`; `WindowType`: `Rectangular`, `Hann`, `Hamming`, `Blackman`, `FlatTop`, `Kaiser(beta)`, `Tukey(alpha)`, `Gaussian(sigma)` |
+| `filters` | `Biquad`, `BiquadCoeffs`, `BiquadBuilder`, `BiquadType`, `process_biquad`; `alloc`: `Fir`, `FirDesign`, `IirFilter`/`IirCoeffs`/`IirStage`, `halfband_fir`; `FilterDesignError` |
+| `iir_design` | `OnePole`, `DcBlocker`, `Svf` (allocation-free building blocks); Butterworth (`butterworth`), Chebyshev I/II (`chebyshev1_*`, `chebyshev2_*`), elliptic (`elliptic_*`) for low-pass, high-pass, band-pass and band-stop (`alloc`); `magnitude_response`, `cascade_magnitude_response`, `cascade_group_delay`; `cascade_poles_zeros` (`alloc`) |
+| `remez` (`alloc`) | `remez_fir` (Parks–McClellan), `least_squares_fir`, `RemezBand` |
+| `convolution` | `convolve` (direct); `alloc`: `ConvolvePlan`, `FftConvolver` (partitioned overlap-add, exact for any impulse-response length) |
+| `polyphase` | `RationalResampler` (`alloc`), `FarrowDelay` |
+| `resample` (`alloc`) | `FIRDecimator` — integer decimation with windowed-sinc anti-alias |
+| `rf` | `Nco`, `Goertzel`, `CicDecimator` (`alloc`) |
+| `receiver` | `Pll` with `Detector` (including `DecisionDirectedQpsk`), `Agc`, `Squelch`, `AmDemodulator`, `SsbDemodulator` |
+| `process` | `Processor` trait, `Chain`, `Smoothed`, `Cascade` (`alloc`) |
+| `demod` | `FmDemodulator`, `phase_delta`, `phase_to_audio` |
+| `lpc`, `lsp` (`alloc`), `pitch`, `psychoacoustic`, `bark` | LPC analysis, line spectral pairs, pitch estimation, Bark/ERB scales, masking model |
+| `vq`, `noise_shaping` | vector quantisation (`VqCodebook`), error-feedback noise shaping (`NoiseShaper`) |
 | `ring` | `RingBuffer`, traits `RingRead`/`RingWrite` |
 | `spsc` (`std`) | `SpscQueue`, `Producer`, `Consumer` (crossbeam) |
-| `demod` | `FmDemodulator`, `phase_delta`, `phase_to_audio` |
-| `resample` (`alloc`) | `FIRDecimator` — integer decimation with windowed-sinc anti-alias |
+| `simd` | `complex_add_simd`, `complex_mul_simd`, `magnitude_simd` (nightly `simd` feature, or a scalar fallback) |
 
 Feature flags: `std` (default) = `alloc` + `rustfft` + `crossbeam-channel`;
-`alloc` enables owning structs.
+`alloc` enables the owning structs and the design functions above.
 
 ### 5.2 `tpt-dsp-audio` (`src/lib.rs`)
 
 | Module | Key types |
 | --- | --- |
-| `oscillator` | `Oscillator`, `Waveform` (Sine/Sawtooth/Square/Triangle) — phase accumulator, **naive (aliasing) waveforms, no PolyBLEP** |
-| `wavetable` | `Wavetable` — single-period lookup, **no band-limited mipmaps/morphing** |
-| `fm` | `FmSynth` — **2-operator only, no feedback/algorithms** |
-| `subtractive` | `SubtractiveVoice` — osc → LP biquad → ADSR gain |
-| `waveshaper` | `Waveshaper`, `Curve` — distortion, **no oversampling** |
-| `delay` | `Delay` — feedback delay, **integer delay only** |
+| `oscillator` | `Oscillator`, `Waveform` (Sine/Sawtooth/Square/Triangle) — phase accumulator, **naive (aliasing) waveforms** |
+| `synthesis` | `PolyBlepOscillator`, `BlepShape`, `poly_blep`, `NoiseSource`, `PinkNoise`, `TpdfDither` — band-limited oscillator and noise sources |
+| `wavetable` | `Wavetable` — single-period lookup with linear interpolation, **no mipmaps or morphing** |
+| `fm` | `FmSynth` — 2-operator FM |
+| `subtractive` | `SubtractiveVoice` — osc → low-pass biquad → ADSR gain |
+| `waveshaper` | `Waveshaper`, `Curve` — distortion (no internal oversampling) |
+| `oversampling` | `Oversampler` — runs a nonlinear closure at a higher rate, with reported latency |
+| `delay` | `Delay` — feedback delay with fractional, glided times |
 | `reverb` | `ConvolutionReverb`, `generate_decay_ir` — FFT convolver wrapper |
-| `eq` | `Eq` — cascaded biquad peaking/shelf |
+| `freeverb` | `Freeverb` (mono), `StereoFreeverb` (with stereo spread) |
+| `eq` | `Eq` — cascaded biquad peaking and shelf bands; `try_new`, `with_max_block` |
+| `dynamics` | `Compressor`, `Limiter` (no lookahead), `Gate` |
+| `modulation` | `Lfo`, `Tremolo`, `Chorus`, `Flanger`, `Phaser` |
 | `envelope` | `Adsr`, `EnvelopeState` |
 | `graph` | `AudioGraph`, traits `AudioNode`/`Source`/`Sink`, `ClosureNode`/`ClosureSource`/`ClosureSink`, `Passthrough` |
 | `engine` | `RealtimeEngine`, `BLOCK_128`, `BLOCK_256` |
@@ -246,88 +289,110 @@ Feature flags: `std` (default) = `alloc` + `rustfft` + `crossbeam-channel`;
 
 | Module | Key types / functions |
 | --- | --- |
-| `spectrum` | `SpectrumAnalyzer`, `RealtimeSpectrumAnalyzer`, `SpectrumConfig`, `Averaging`, `SpectralPeak`,`DEFAULT_DB_FLOOR`; `find_peaks`, `peak_bin`, `dominant_frequency`, `linear_to_db`, `db_to_linear`, `parabolic_interpolate` |
-| `features` | `rms`, `zero_crossing_rate`, `spectral_centroid`, `spectral_centroid_normalized` |
-| `timeseries` | `MovingAverage`, `RunningMean`, `Ema`, `OutlierDetector` (median/MAD, in-place sort) |
+| `spectrum` | `SpectrumAnalyzer`, `RealtimeSpectrumAnalyzer`, `SpectrumConfig`, `Averaging`, `SpectralPeak`, `DEFAULT_DB_FLOOR`; `find_peaks`, `peak_bin`, `dominant_frequency`, `linear_to_db`, `db_to_linear`, `parabolic_interpolate` |
+| `features` | `rms`, `zero_crossing_rate`, `spectral_centroid`, `spectral_centroid_normalized`, `spectral_flatness`, `spectral_rolloff`, `spectral_flux` |
+| `timeseries` | `MovingAverage`, `RunningMean`, `Ema`, `OutlierDetector` (median/MAD, sorted window) |
+| `loudness` | `LoudnessMeter` — ITU-R BS.1770 integrated loudness |
+| `mfcc` | `Mfcc`, `hz_to_mel`, `mel_to_hz` |
+| `stft` | `stft`, `istft`, `time_stretch`, `pitch_shift` (phase vocoder) |
+| `onset` | `detect_onsets`, `pick_onsets`, `OnsetConfig` |
+| `yin` | `yin_pitch` |
 | `spectrogram` | `Spectrogram` — ring of magnitude frames for waterfall |
-| `async_adapters` (`async`) | `process_channel`, `process_stream` (tokio); runtime-agnostic `process_stream_into_sink`/`process_stream_in_place`; `tokio` and `async_std` submodules gated by features |
+| `async_adapters` (`async-tokio` / `async-std`) | `process_channel`, `process_stream` (tokio); runtime-agnostic `process_stream_into_sink` and `process_stream_in_place`; the `tokio` and `async_std` submodules |
 
-`async` (default) pulls in `tokio` + `futures`. The tokio runtime channel adapter
-and an async-std adapter submodule exist; verify `Cargo.toml` feature wiring
-(`async-tokio`, `async-std`) before relying on them.
+The default build has no async runtime. `async` is a shorthand for `async-tokio`.
+`async-std` is an alternative. Both pull in `futures`.
 
 ### 5.4 `tpt-dsp-control` (`src/lib.rs`)
 
 | Module | Key types |
 | --- | --- |
-| `pid` | `Pid`, `AntiWindup` (clamping / back-calculation) — derivative-on-error, fixed `dt`, `f32` |
-| `input_shaping` | `InputShaper` — **ZVD only** (no ZV/ZVDD/EI/multi-mode) |
-| `kinematics` | `TrapezoidalProfile` (complete), `JerkLimiter` (first-order velocity loop, **not a true S-curve**) |
+| `pid` | `Pid`, `PidBuilder`, `AntiWindup` (clamping / back-calculation), `PidError` — derivative on the measurement, optional derivative filter, `update_with_dt`, fixed-`dt` `update` |
+| `input_shaping` | `InputShaper`, `ShaperError` — **ZVD only** (no ZV, ZVDD, EI or multi-mode shapers) |
+| `kinematics` | `TrapezoidalProfile`, `ProfileError`, `JerkLimiter` — a jerk-limited S-curve velocity smoother |
 
 ### 5.5 `tpt-dsp-io` (`src/lib.rs`)
 
 | Module | Key types | Feature |
 | --- | --- | --- |
-| `iq` | `parse_iq`, `IqFormat`, `IqStream` | always |
-| `audio` | `run_output`, `run_input`, `run_output_on_device`, `run_input_on_device`, `list_output_devices`, `list_input_devices` | `audio` (built-in native backends: WASAPI on Windows, raw ALSA UAPI on Linux) — **mono f32 output, capture input, device selection; no duplex** |
-| `serial` | `SerialReader` | `serial` — **open/read only, no write/enumeration/timeout/framing** |
-| `tcp` | `serve_iq` | `tcp` — **single-connection** async IQ server |
+| `iq` | `parse_iq`, `IqFormat`, `IqStream`, `IqReassembler` | always |
+| `source` | `IqSource`, `SyntheticIqSource` | always |
+| `tcp` | `TcpIqSource`, `RtlTcpCommand`, `RtlTcpInfo`, `read_rtl_tcp_greeting`, `serve_iq` | client always; `serve_iq` needs `tcp` — a **single-connection** async server |
+| `rtlsdr` | `RtlSdrSource`, `RtlSdrConfig` — stub | always (`rtl-sdr` changes only the error) |
+| `wav` | `read_wav_f32_path`, `write_wav_f32_path` and reader/writer variants | always |
+| `audio` | `run_output`, `run_input`, `run_output_on_device`, `run_input_on_device`, `list_output_devices`, `list_input_devices` — mono f32 output, capture input, device selection | `audio` (built-in backends: WASAPI on Windows, raw ALSA on Linux, CoreAudio on macOS) |
+| `serial` | `SerialReader` — read-only | `serial` |
+
+### 5.6 Applications
+
+| Crate | Key types |
+| --- | --- |
+| `tpt-dsp-wasm` | `Pedalboard`, `FilterSpec` (designer), `open_microphone` (feature `async`); the wasm-bindgen exports in `web.rs` |
+| `tpt-dsp-viz` | `VizApp`, `run`, `Source`, `SpectrumFrame`, `run_synthetic`, `run_audio_input` (feature `audio`), `Spectrogram`-backed waterfall |
+| `tpt-dsp-cli` | `read_wav`/`write_wav`, `Effect`/`EffectChain`, `read_iq`/`demod_iq`, `analyze_real`/`analyze_complex`; `tools` (`generate`, `resample`, `design_response`, `effect_response`, `parse_pipeline_json`/`_toml`) |
+| `tpt-dsp-testkit` | `CountingAllocator`, `allocations_in`, `assert_no_alloc` |
+| `tpt-dsp` | Re-exports, `prelude`, `walkthrough` |
 
 ---
 
 ## 6. `no_std` / embedded story & CI
 
 - **`tpt-dsp-core`** is the only `no_std` crate. `cargo build -p tpt-dsp-core
-  --no-default-features` succeeds; it is also checked on
-  `thumbv7em-none-eabihf --no-default-features`. `alloc`-gated types
-  (`Fir`, `IirFilter`, `HilbertTransformer`, `FftConvolver`, `FIRDecimator`) and
-  `std`-gated types (`FftPlan`, `SpscQueue`) are excluded in `no_std`.
-- **`audio` / `analysis` / `control` / `io`** are `std`-only today (they use
-  `std::vec`, platform crates, or async runtimes). No `embedded-hal` port yet.
-- **CI targets** (`Runs on` GitHub Actions): native `cargo build/test/clippy`,
-  `wasm32-unknown-unknown` (`cargo check` of core+audio),
-  `thumbv7em-none-eabihf` (`cargo check` of core, `no_std`), `cargo deny`, and
-  `cargo doc`. Lint gate: `clippy --all-targets --all-features -D warnings`.
+  --no-default-features` succeeds, and it links for `thumbv7em-none-eabihf
+  --no-default-features`. Types that need `alloc` are excluded without it. These
+  include `Fir`, `IirFilter`, the IIR and FIR design functions, `RationalResampler`,
+  `CicDecimator`, `Cascade`, `HilbertTransformer`, `FftConvolver` and
+  `FIRDecimator`. Types that need `std` are excluded too: `FftPlan` and
+  `SpscQueue`.
+- **The other library crates** need `std`: they use `std::vec`, platform audio
+  APIs, or async runtimes. No `embedded-hal` port exists yet.
+- **CI** (`.github/workflows/ci.yml`): native build, test, clippy, benchmark
+  compile, and `no_std` checks for core on its own and with `alloc`; the
+  `wasm32-unknown-unknown` job builds `tpt-dsp-wasm` and checks core and audio;
+  the `thumbv7em-none-eabihf` job builds and clippy-checks core; plus `cargo deny`,
+  `cargo doc`, a feature matrix, a fuzz smoke test, a line-coverage gate, MSRV
+  (excluding `tpt-dsp-viz`), Windows and macOS builds, and a Python wheel built
+  and tested with NumPy.
 
 ---
 
-## 7. Known limitations (concise, accurate as of 2026-08-07)
+## 7. Known limitations (accurate as of 2026-11-07)
 
-**Build/test health** — per `todo.md`, deadlock/clippy/`no_std`/io-test issues
-are resolved; full workspace suite passes. `cargo deny` passes on the modern
-schema.
+**Build and test health.** The full workspace suite passes on the native gate.
+Golden-vector tests check the filter designs, windows and Remez FIR against SciPy.
+Property tests cover FFT, DCT, ring buffer, WAV and LPC/LSP round trips. `cargo
+deny` passes on the modern schema.
 
-**Zero-alloc contract** — see §3.2. Net: allocation-free in steady state for
-core math/filters/reverb/EQ/OutlierDetector, but per-frame allocation in the
-async adapters. `IirFilter`/`Eq` scratch is reserved at construction
-(`with_max_block`), so `process` is allocation-free for blocks within that size;
-a longer block grows the buffer once.
+**Zero-alloc contract** — see §3.2. Steady-state allocation-free for core math,
+filters, reverb, EQ, dynamics, modulation and `OutlierDetector`. The exceptions are
+the async adapters, which allocate one output buffer per frame, and an `IirFilter`
+or `Eq` that is given a block longer than the size it was constructed for.
 
 **Functionality gaps:**
-- Audio graph: linear mono chain only (no DAG/fan-in/fan-out/multichannel).
-- Oscillators: naive/aliasing waveforms (no PolyBLEP); wavetable/FM are minimal
-  (no mipmaps, 2-operator only).
-- Waveshaper: no oversampling; ConvolutionReverb: long IRs
-  truncated (no partitioned convolution).
-- Windows: f32-only, Hann/Hamming/Blackman only (no Kaiser/Tukey/flat-top).
-- DCT/MDCT: FFT-backed fast plans exist (`FastDct2Plan`, `FastDctIvPlan`, `FastMdctPlan`); the direct O(N²) forms are the reference.
-- Hand-rolled `fft`: power-of-two only (use `FftPlan`/RustFFT for arbitrary
-  lengths).
-- I/O: built-in WASAPI (runtime-validated), raw ALSA and CoreAudio (compile-checked only); mono output (+ capture); serial read-only; `tcp` single-connection; no
-  cross-read buffering for mid-sample splits beyond `IqStream`.
-- `tpt-dsp-control` depends on `tpt-dsp-core` but does not currently use it.
-- `portable-simd` FFT/complex optimization: **implemented**, nightly-gated
-  (see §10) — CI's `native` job builds `--all-features` on *stable*, so it
-  only ever exercises the scalar fallback, never the vectorised path.
+- Audio graph: linear mono chain only (no DAG, fan-in, fan-out or multichannel).
+- Oscillator: naive waveforms. Use `PolyBlepOscillator` for band-limited saw and
+  square. `Wavetable`: no mipmaps. `FmSynth`: two operators only.
+- Waveshaper: no internal oversampling. Wrap it in `Oversampler`.
+- `tpt-dsp-control`: `InputShaper` is ZVD only. `JerkLimiter` is an S-curve velocity
+  smoother, not a full multi-axis planner.
+- Hand-rolled `fft`: power-of-two only. Use `FftPlan` (RustFFT) for other lengths.
+  It recomputes its twiddle table on each call. For repeated transforms, prefer
+  `FftPlan`.
+- Windows: `WindowType` is f32 for `windowed` and has f64 variants through
+  `windowed_f64` and `windowed_symmetric_f64`.
+- I/O: built-in WASAPI is runtime-validated on Windows. Raw ALSA and CoreAudio
+  compile on their platforms but have not been runtime-validated. Audio is mono
+  output and capture only, with no duplex. Serial is read-only. The `tcp` server
+  accepts one connection. The RTL-SDR USB driver is not implemented; use `rtl_tcp`.
+- Pedalboard: mono, and its parameter changes are stepped rather than smoothed.
+- The `simd` feature is nightly-gated (see §10). CI's native job builds on stable,
+  so it only runs the scalar fallback.
 
-**Roadmap status (marked "(planned)" above):**
-- MVP 1 (WASM guitar pedal UI + wasm-bindgen + GitHub Pages) — **done**.
-- MVP 2 (RTL-SDR USB ingestion, desktop waterfall UI, frame-drop-free streaming
-  verification, fully wired SDR app) — **waterfall UI and frame-drop-free
-  streaming verification are done**; RTL-SDR USB driver and a fully wired SDR app
-  remain.
-- `embedded-hal` Cortex-M validation; criterion benchmark reports vs JUCE /
-  libsamplerate; crates.io v1.0.0 publish.
+**Roadmap (not started):**
+- `embedded-hal` Cortex-M validation.
+- Criterion benchmark comparisons against JUCE and libsamplerate.
+- A crates.io 1.0.0 release. The 0.2.0 release is published (see
+  [`PUBLISHING.md`](PUBLISHING.md)).
 
 ---
 
@@ -343,35 +408,41 @@ a longer block grows the buffer once.
   frame path allocation-free.
 - Never introduce heap allocation, locks, or system calls on a hot path; reuse a
   pre-allocated scratch buffer instead. Keep `core` `#![forbid(unsafe_code)]`.
+- Prove a new hot path is allocation-free with `tpt-dsp-testkit`.
 
 ---
 
-## 9. CLI, plugin & Python bindings (2026-08-20)
+## 9. CLI, plugin, Python and web bindings (2026-11-07)
 
-Three crates wrap the framework for use outside Rust:
+Four crates wrap the framework for use outside Rust:
 
 - **`tpt-dsp-cli`** (workspace member) — a command-line WAV/IQ pipeline.
-  `filter` runs biquad / EQ / waveshaper / delay / convolution-reverb chains
-  (specs parse the same `tpt-dsp-audio` effects), `demod` FM-demodulates raw IQ
-  to WAV, `spectrum` averages a one-sided magnitude spectrum and reports
-  dominant frequency, peak dB, RMS, zero-crossing rate and spectral centroid,
-  and `info` prints file metadata. WAV I/O uses `tpt-dsp-io`'s built-in RIFF/WAVE module; IQ parsing uses
-  `tpt-dsp-io`.
+  Subcommands: `filter` runs biquad, EQ, waveshaper, delay and convolution-reverb
+  chains; `pipeline` runs the same effects from a JSON or TOML spec file; `gen`
+  writes test signals; `resample` converts sample rate with the polyphase
+  resampler; `design` and `response` print filter and chain responses as CSV;
+  `demod` FM-demodulates raw IQ to WAV; `spectrum` reports the averaged spectrum and
+  features; `info` prints file metadata; `completions` prints shell completions.
+  WAV I/O uses `tpt-dsp-io`'s built-in RIFF/WAVE module.
 - **`tpt-dsp-nihplug`** (excluded) — a CLAP/VST3 plugin wrapping the
   `tpt-dsp-audio` pedalboard (Waveshaper → Delay → ConvolutionReverb → 3-band
-  EQ) as a host-parameterised chain. Built on `nice-plug` (the actively
-  maintained successor to `nih-plug`, which is no longer on crates.io) and
-  exported with `nice_export_clap!` / `nice_export_vst3!`.
-- **`tpt-dsp-py`** (excluded) — pyo3 bindings exposing `rms`,
-  `zero_crossing_rate`, `spectral_centroid`, `spectrum`, `fm_demod` and
-  `analyze` as the `tpt_dsp` extension module.
+  EQ) as a host-parameterised chain. It is built on `nice-plug`, the maintained
+  successor to `nih-plug`, and exported with `nice_export_clap!` /
+  `nice_export_vst3!`. `templates/nihplug-effect` is a `cargo-generate` template for
+  new plugins.
+- **`tpt-dsp-py`** (excluded) — pyo3 bindings exposed as the `tpt_dsp` package:
+  `rms`, `zero_crossing_rate`, `spectral_centroid`, `spectrum`, `fm_demod` and
+  `analyze`, plus the `Biquad`, `Pid` and `Oscillator` classes. A `zero-copy`
+  feature reads NumPy `float32` arrays in place.
+- **`tpt-dsp-wasm`** (workspace member) — the browser pedalboard and filter designer
+  described in §4.1.
 
 `nihplug` and `py` are **excluded** from the main workspace (root `Cargo.toml`
-`exclude`): the plugin pulls VST3/CLAP SDK bindings whose licences fall outside
-the main `deny.toml` allow-list, and the Python module links Python
-(`extension-module`) so it cannot be built or tested by the `cargo
-build/test --workspace` gate. Both are verified as standalone workspaces
-(`cargo build` / `cargo clippy` inside each directory).
+`exclude`). The plugin pulls VST3/CLAP SDK bindings whose licences fall outside the
+main `deny.toml` allow-list. The Python module links Python (`extension-module`),
+so it cannot be built or tested by the `cargo build/test --workspace` gate. Both
+are verified as standalone workspaces (`cargo build` or `cargo clippy` inside each
+directory).
 
 ---
 
