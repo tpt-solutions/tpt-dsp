@@ -43,7 +43,7 @@ pub use engine::{RealtimeEngine, BLOCK_128, BLOCK_256};
 pub use envelope::{Adsr, EnvelopeState};
 pub use eq::Eq;
 pub use fm::FmSynth;
-pub use freeverb::Freeverb;
+pub use freeverb::{Freeverb, StereoFreeverb};
 pub use graph::{
     AudioGraph, AudioNode, ClosureNode, ClosureSink, ClosureSource, Passthrough, Sink, Source,
 };

@@ -29,7 +29,7 @@ facade and nothing else.
   delay of a few samples.
 - **Pitch.** `yin_pitch` for a monophonic fundamental. `Goertzel` if you only
   need a few known tones.
-- **Reverb.** `Freeverb` for a quick algorithmic room (mono). `ConvolutionReverb`
+- **Reverb.** `Freeverb` for a quick algorithmic room (mono), `StereoFreeverb` for the same room with a stereo spread. `ConvolutionReverb`
   when you have a measured impulse response.
 - **Demodulation.** `FmDemodulator`, `AmDemodulator`, `SsbDemodulator`.
   `Pll` for carrier tracking, `Squelch` to mute noise.

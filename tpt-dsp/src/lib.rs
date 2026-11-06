@@ -61,7 +61,7 @@ pub mod prelude {
     #[cfg(feature = "audio")]
     pub use tpt_dsp_audio::{
         Adsr, Compressor, Delay, Eq, Freeverb, Limiter, Oscillator, Oversampler,
-        PolyBlepOscillator, RealtimeEngine, Waveform, Waveshaper,
+        PolyBlepOscillator, RealtimeEngine, StereoFreeverb, Waveform, Waveshaper,
     };
 
     #[cfg(feature = "analysis")]

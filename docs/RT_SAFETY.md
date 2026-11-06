@@ -23,7 +23,7 @@ Two idioms are used throughout:
 | Constructors (`new`, `design`, `try_*`) | yes | Off the audio thread. Build everything before starting the stream. |
 | `Eq`, `IirFilter` | no, after construction | Scratch is reserved up front (`with_max_block`). A block longer than that grows the buffer once. |
 | `ConvolutionReverb` | no | All buffers are sized in `new()`. |
-| `Freeverb`, `Chorus`, `Flanger`, `Phaser` | no | Delay lines are sized in `new()`. |
+| `Freeverb`, `StereoFreeverb`, `Chorus`, `Flanger`, `Phaser` | no | Delay lines are sized in `new()`. |
 | `Compressor`, `Limiter`, `Gate`, `Lfo`, `Tremolo` | no | State is fixed-size. |
 | `Oversampler` | no per sample | Filters are built in `new()`. |
 | `RationalResampler::process` | only into the `out` Vec you pass | Use a Vec with enough capacity reserved. |
