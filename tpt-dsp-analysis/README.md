@@ -26,6 +26,28 @@ works without naming the internal modules.
 - [`zero_crossing_rate`] — rate at which a signal crosses zero.
 - [`spectral_centroid`], [`spectral_centroid_normalized`] — "brightness" of a
   spectrum.
+- [`spectral_flatness`] (tonal versus noise-like), [`spectral_rolloff`] (the bin below
+  which a fraction of the energy lies) and [`spectral_flux`] (frame-to-frame change).
+- [`Mfcc`] — mel-frequency cepstral coefficients, with [`hz_to_mel`] and
+  [`mel_to_hz`].
+
+### Loudness
+
+- [`LoudnessMeter`] — ITU-R BS.1770 K-weighted integrated loudness. Feed it samples
+  with `push` and read `integrated`. Checked against `pyloudnorm`.
+
+### Pitch and onsets
+
+- [`yin_pitch`] — YIN fundamental-frequency estimator.
+- [`detect_onsets`] and [`pick_onsets`] (configured by [`OnsetConfig`]) — spectral-flux
+  onset detection with peak picking.
+
+### Time-frequency
+
+- [`stft`] and [`istft`] — short-time Fourier transform and its inverse.
+- [`time_stretch`] — change duration without changing pitch (phase vocoder).
+- [`pitch_shift`] — change pitch without changing duration (phase vocoder, then
+  resampling).
 
 ### Spectrum
 

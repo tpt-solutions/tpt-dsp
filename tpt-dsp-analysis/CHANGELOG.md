@@ -9,6 +9,25 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+### Added
+- Spectral descriptors in `features`: `spectral_flatness`, `spectral_rolloff` and
+  `spectral_flux`.
+- `loudness::LoudnessMeter`: ITU-R BS.1770 K-weighted integrated loudness, with
+  `push`, `integrated` and `reset`. Checked against `pyloudnorm`.
+- `mfcc::Mfcc`: mel-frequency cepstral coefficients (`compute` into a caller buffer),
+  with `hz_to_mel` and `mel_to_hz`.
+- `stft` module: `stft` and `istft`, a phase vocoder `time_stretch`, and `pitch_shift`
+  (phase vocoder followed by cubic resampling).
+- `onset` module: `detect_onsets` (spectral-flux onset detection) and `pick_onsets`
+  (peak picking with `OnsetConfig`).
+- `yin::yin_pitch`: YIN fundamental-frequency estimation.
+
+### Fixed
+- `OutlierDetector` sorts with a total order (`f32::total_cmp`), so a NaN sample in
+  the window no longer panics.
+- `Linear` spectrum averaging keeps tracking on very long runs instead of freezing.
+- `Ema` rejects `alpha = 0`, which would otherwise hold its output forever.
+
 ## [0.2.0] - 2026-11-01
 
 ### Fixed

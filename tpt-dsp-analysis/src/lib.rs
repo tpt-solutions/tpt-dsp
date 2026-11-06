@@ -14,7 +14,7 @@
 //!
 //! # Features
 //!
-//! - `async` (default): shorthand for `async-tokio`.
+//! - `async`: shorthand for `async-tokio`. Off by default.
 //! - `async-tokio`: tokio channel adapters (`async_adapters::tokio`) plus the
 //!   runtime-agnostic futures `Stream` / `Sink` adapters.
 //! - `async-std`: the same adapters for async-std channels
