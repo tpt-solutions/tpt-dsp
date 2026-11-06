@@ -10,13 +10,13 @@ fn main() {
     let fs = 48_000.0f32;
 
     let mut fm = FmSynth::new(fs, 220.0, 440.0, 2.0);
-    // (centre frequency Hz, Q, gain dB) — a low shelf, a mid dip, a high shelf.
+    // (centre frequency Hz, gain dB, Q) — a low boost, a mid dip, a high boost.
     let mut eq = Eq::new(
         fs,
         &[
-            (120.0, 0.707, 6.0),
-            (1_000.0, 1.0, -3.0),
-            (6_000.0, 0.707, 4.0),
+            (120.0, 6.0, 0.707),
+            (1_000.0, -3.0, 1.0),
+            (6_000.0, 4.0, 0.707),
         ],
     );
 
