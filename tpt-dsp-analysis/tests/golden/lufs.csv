@@ -1,0 +1,5 @@
+signal,integrated_lufs
+tone1k_quiet,-23.00359865024385
+tone1k_loud,-9.024198563523479
+tone60_low,-20.58049622156854
+gated_loud_then_quiet,-14.440592545118589

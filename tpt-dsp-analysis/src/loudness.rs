@@ -1,16 +1,85 @@
-//! Integrated loudness (ITU-R BS.1770 style, mono).
+//! Integrated loudness (ITU-R BS.1770, mono).
 //!
 //! The signal passes a two-stage K-weighting filter (a high shelf followed by
 //! a high-pass). Mean-square energy is taken over 400 ms blocks overlapping by
 //! 75%, and the integrated loudness applies the absolute (−70 LUFS) and
 //! relative (−10 LU) gates from the standard.
 //!
-//! **Calibration caveat:** the K-weighting stages are RBJ-cookbook designs at
-//! the standard's corner frequencies, not the reference coefficients from the
-//! standard. Readings are consistent with each other and suitable for
-//! comparison, but verify against the reference before a compliance use.
+//! The K-weighting uses the BS.1770 coefficient set (the bilinear form with
+//! the standard's corner frequencies and Q values). It is evaluated in `f64`.
+//! The design is checked against pyloudnorm's `"DeMan"` class in
+//! `tests/golden_lufs.rs`: steady tones agree to 0.001 LU, and a mixed-level
+//! programme agrees to about 0.01 LU, where a block sits on a gate edge.
+//! pyloudnorm's default `"K-weighting"` class is a different, older design
+//! (1500 Hz, 4 dB shelf); it is not the standard, and is not what this meter
+//! implements.
+//!
+//! This is a measurement tool, not a certified meter. Check it against the
+//! reference before any compliance use.
 
-use tpt_dsp_core::{Biquad, BiquadCoeffs, BiquadType};
+/// Direct-form-II-transposed second-order section in `f64`.
+#[derive(Debug, Clone, Copy)]
+struct Section {
+    b0: f64,
+    b1: f64,
+    b2: f64,
+    a1: f64,
+    a2: f64,
+    z1: f64,
+    z2: f64,
+}
+
+impl Section {
+    fn tick(&mut self, x: f64) -> f64 {
+        let y = self.b0 * x + self.z1;
+        self.z1 = self.b1 * x - self.a1 * y + self.z2;
+        self.z2 = self.b2 * x - self.a2 * y;
+        y
+    }
+
+    fn reset(&mut self) {
+        self.z1 = 0.0;
+        self.z2 = 0.0;
+    }
+}
+
+/// Stage 1 of the K-weighting: the high shelf (+3.99984 dB at 1681.97 Hz,
+/// Q 0.7071752). The bilinear form uses `Vb = Vh^0.4996…`.
+fn k_shelf(fs: f64) -> Section {
+    const G_DB: f64 = 3.999_843_853_973_347;
+    const Q: f64 = 0.707_175_236_955_419_3;
+    const FC: f64 = 1_681.974_450_955_533;
+    let k = (core::f64::consts::PI * FC / fs).tan();
+    let vh = 10.0f64.powf(G_DB / 20.0);
+    let vb = vh.powf(0.499_666_774_155);
+    let a0 = 1.0 + k / Q + k * k;
+    Section {
+        b0: (vh + vb * k / Q + k * k) / a0,
+        b1: 2.0 * (k * k - vh) / a0,
+        b2: (vh - vb * k / Q + k * k) / a0,
+        a1: 2.0 * (k * k - 1.0) / a0,
+        a2: (1.0 - k / Q + k * k) / a0,
+        z1: 0.0,
+        z2: 0.0,
+    }
+}
+
+/// Stage 2 of the K-weighting: the high-pass at 38.135 Hz (Q 0.5003270).
+fn k_highpass(fs: f64) -> Section {
+    const Q: f64 = 0.500_327_037_325_395_3;
+    const FC: f64 = 38.135_470_876_139_82;
+    let k = (core::f64::consts::PI * FC / fs).tan();
+    let a0 = 1.0 + k / Q + k * k;
+    Section {
+        b0: 1.0,
+        b1: -2.0,
+        b2: 1.0,
+        a1: 2.0 * (k * k - 1.0) / a0,
+        a2: (1.0 - k / Q + k * k) / a0,
+        z1: 0.0,
+        z2: 0.0,
+    }
+}
 
 const BLOCK_SECONDS: f32 = 0.4;
 const HOP_FRACTION: f32 = 0.25;
@@ -19,8 +88,8 @@ const RELATIVE_GATE_LU: f64 = -10.0;
 
 /// Mono integrated-loudness meter.
 pub struct LoudnessMeter {
-    stage_shelf: Biquad<f32>,
-    stage_hp: Biquad<f32>,
+    stage_shelf: Section,
+    stage_hp: Section,
     block_len: usize,
     hop: usize,
     /// Ring of the most recent K-weighted samples (length `block_len`).
@@ -41,20 +110,10 @@ impl LoudnessMeter {
         } else {
             48_000.0
         };
-        // Stage 1: high shelf, +4 dB at 1681.97 Hz.
-        let shelf = BiquadCoeffs::design(
-            BiquadType::HighShelf,
-            sr,
-            1681.97,
-            core::f32::consts::FRAC_1_SQRT_2,
-            4.0,
-        );
-        // Stage 2: high-pass at 38.13 Hz, Q ≈ 0.5.
-        let hp = BiquadCoeffs::design(BiquadType::HighPass, sr, 38.13, 0.5003, 0.0);
         let block_len = (BLOCK_SECONDS * sr).round() as usize;
         Self {
-            stage_shelf: Biquad::from_coeffs(shelf),
-            stage_hp: Biquad::from_coeffs(hp),
+            stage_shelf: k_shelf(f64::from(sr)),
+            stage_hp: k_highpass(f64::from(sr)),
             block_len,
             hop: ((block_len as f32) * HOP_FRACTION).round().max(1.0) as usize,
             ring: vec![0.0; block_len],
@@ -68,8 +127,8 @@ impl LoudnessMeter {
     /// Feed samples. Each completed 400 ms block contributes one power value.
     pub fn push(&mut self, samples: &[f32]) {
         for &x in samples {
-            let x = if x.is_finite() { x } else { 0.0 };
-            let k = self.stage_hp.tick(self.stage_shelf.tick(x));
+            let x = if x.is_finite() { f64::from(x) } else { 0.0 };
+            let k = self.stage_hp.tick(self.stage_shelf.tick(x)) as f32;
             self.ring[self.write] = k;
             self.write = (self.write + 1) % self.block_len;
             self.filled = (self.filled + 1).min(self.block_len);
