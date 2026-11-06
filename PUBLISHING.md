@@ -20,6 +20,11 @@ path-depends on is live at the version it requests).
 | `tpt-dsp-viz` | 0.2.0 | ☑ | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
 | `tpt-dsp-wasm` | 0.2.0 | ☑ | Depends on `tpt-dsp-audio`. |
 | `tpt-dsp-cli` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-testkit` | — | ☐ | New in 0.3.0. Dev-dependency of `tpt-dsp-wasm`, so it goes up before `wasm`. |
+| `tpt-dsp` | — | ☐ | New in 0.3.0. Facade crate; depends on `core`, `audio`, `analysis`, `control`, `io`. Publish last. |
+
+The 0.3.0 release is prepared but **not yet published**; see the next section. The
+"Latest published version" column stays at 0.2.0 until each 0.3.0 upload succeeds.
 
 ### Intentionally not published
 
@@ -28,6 +33,112 @@ path-depends on is live at the version it requests).
 | `tpt-dsp-nihplug` | Excluded from the workspace: pulls VST3/CLAP SDK bindings under licenses (e.g. MIT-0) not in the main `deny.toml` allow-list. Depends on `nice-plug`, a maintained fork/successor of nih-plug — publishing a CLAP/VST3 wrapper to crates.io ahead of a stable host ecosystem convention isn't a fit for the normal release cadence; distribute via git/binary release instead. |
 | `tpt-dsp-py` | Excluded from the workspace: builds a Python `extension-module` (links libpython at load time) and cannot be built/tested by the normal `cargo build/test --workspace` gate. Python bindings belong on PyPI (via `maturin`/`pyo3`), not crates.io — no action needed here. |
 | `templates/dsp-effect-crate` | A `cargo-generate` template, not a real crate (its `Cargo.toml` contains `{{crate_name}}` placeholders). Never published. |
+
+## Release 0.3.0 (prepared 2026-11-07, not yet published)
+
+Prepared and dry-run, not tagged, committed or uploaded. Nothing here reaches
+crates.io until the steps under "Publishing" are run.
+
+### Why 0.3.0
+
+Pre-1.0 semver: a minor bump covers additions and behaviour changes. Since 0.2.0 this
+release adds a large set of DSP modules (dynamics, modulation, synthesis, loudness,
+STFT and pitch shifting, the IIR design families, RF receiver blocks, equiripple and
+least-squares FIR design, the `rtl_tcp` control path, a browser filter designer, and
+new CLI subcommands), and it changes some behaviour: IIR designs now reject degenerate
+parameters with `FilterDesignError`, `ConvolutionReverb` has a fixed one-block latency,
+and `Pid` takes its derivative from the measurement. It is not a patch release.
+
+### Crates in this release
+
+Version 0.3.0 is inherited from the workspace, so every publishable crate goes out at
+0.3.0 together. Two crates are new.
+
+| Crate | Code changes since 0.2.0 | New? | Notes |
+|---|---|---|---|
+| `tpt-dsp-core` | Yes: IIR families, receiver blocks, RF helpers, equiripple and LS FIR, fallible design | No | Publish first; everything else depends on it. |
+| `tpt-dsp-audio` | Yes: dynamics, modulation, synthesis, oversampling, freeverb; `ConvolutionReverb` latency fix | No | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-analysis` | Yes: loudness, MFCC, STFT, onsets, pitch shift, YIN | No | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-control` | Yes: `PidBuilder`, `update_with_dt`, derivative filter; derivative-kick fix; drops its unused `core` dependency | No | No path dependencies. |
+| `tpt-dsp-io` | Yes: `rtl_tcp` control, WAV reader and writer hardening, `io_bench`, fuzz target | No | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-viz` | Dependency: eframe and egui 0.36 → 0.37; own `rust-version = "1.95"` | No | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-wasm` | Yes: browser filter designer (`FilterSpec`); allocation test uses `tpt-dsp-testkit` | No | Depends on `tpt-dsp-audio`; dev-depends on `tpt-dsp-testkit`. |
+| `tpt-dsp-cli` | Yes: `gen`, `resample`, `design`, `response`, `completions`, TOML pipelines | No | Depends on `core`, `audio`, `analysis`, `io`. |
+| `tpt-dsp-testkit` | New: `CountingAllocator`, `allocations_in`, `assert_no_alloc` | **Yes** | Dev-dependency of `wasm`. |
+| `tpt-dsp` | New: feature-gated facade, `prelude`, `walkthrough` | **Yes** | Depends on `core`, `audio`, `analysis`, `control`, `io`. |
+
+**Decision needed before publishing:** the two new crates are included in the plan
+above. A crate name cannot be deleted once uploaded, so confirm that `tpt-dsp-testkit`
+and `tpt-dsp` should be published now. If not, drop them from the release, and
+the `tpt-dsp-testkit` dev-dependency must come out of `tpt-dsp-wasm`'s manifest, because
+the `wasm` upload cannot resolve it otherwise.
+
+### Publish order
+
+Dependency order, with the same wait-for-index rule as the release procedure below:
+
+1. `tpt-dsp-core`
+2. `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-control`, `tpt-dsp-io`, `tpt-dsp-testkit`
+   (any order; each needs only `core` or nothing)
+3. `tpt-dsp-viz` (needs `analysis`, `io`)
+4. `tpt-dsp-wasm` (needs `audio`, and `testkit` as a dev-dependency)
+5. `tpt-dsp-cli` (needs `core`, `audio`, `analysis`, `io`)
+6. `tpt-dsp` (needs `core`, `audio`, `analysis`, `control`, `io`)
+
+### Dry-run results (2026-11-07)
+
+Run with `cargo publish --dry-run --allow-dirty` because the changes are not committed
+yet.
+
+| Crate | Result | Reason |
+|---|---|---|
+| `tpt-dsp-core` | Passes | Packages 63 files and verifies. |
+| `tpt-dsp-control` | Passes | Packages 12 files and verifies. |
+| `tpt-dsp-testkit` | Passes | Packages 8 files and verifies. |
+| `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-io` | Fail, expected | `tpt-dsp-core = "^0.3.0"` is not on crates.io yet. |
+| `tpt-dsp-viz`, `tpt-dsp-wasm`, `tpt-dsp-cli`, `tpt-dsp` | Fail, expected | Their 0.3.0 dependencies are not on crates.io yet. |
+
+The failing crates need re-running after their dependencies are live. Before publishing,
+the workspace was checked locally: `cargo fmt --check`, `cargo build` and
+`cargo test --workspace --all-features`, `cargo clippy ... -D warnings`,
+`cargo doc --no-deps`, and both `cargo deny` invocations all pass. `cargo package --list`
+was checked for all ten crates. `tpt-dsp-wasm` no longer ships `www/`.
+
+### Checklist
+
+Prepared:
+
+- [x] Set `workspace.package.version = "0.3.0"` in the root `Cargo.toml`.
+- [x] Change every internal path-dependency requirement to `version = "0.3.0"`. That
+      covers the publishable crates, the facade and `tpt-dsp-wasm`'s testkit
+      dev-dependency. The unpublished `tpt-dsp-nihplug` and `tpt-dsp-py` also point at
+      0.3.0, so their standalone builds still resolve, and the `nihplug-effect`
+      template uses `0.3`.
+- [x] Move `[Unreleased]` to `## [0.3.0] - 2026-11-07` in the root `CHANGELOG.md` and
+      in the ten publishable crate changelogs. Add the `[0.3.0]` compare link and point
+      `[Unreleased]` at `v0.3.0...HEAD`. The date is the preparation date, so update it
+      if the upload happens on another day.
+- [x] Run the full gate from `AGENTS.md`.
+- [x] Check each package's contents with `cargo package --list`.
+- [x] Dry runs (see the table above).
+- [ ] Confirm the two new crates (see the decision above).
+- [ ] Commit the release changes on `master` (the working tree is still uncommitted).
+
+Publishing:
+
+- [ ] Tag and push: `git tag v0.3.0`, then push `master` and the tag as separate
+      commands, checking each one succeeds.
+- [ ] Publish in the order above, waiting for each dependency to appear on crates.io
+      before publishing its dependents. Re-run the dry runs for the dependent crates once
+      their dependencies are live.
+- [ ] After each upload, check that the crates.io page renders the README and that the
+      links work.
+- [ ] Update the "Latest published version" and "Published" columns in the table above,
+      add a History row, and change the crates.io version in the root `README.md`
+      (it says 0.2.0 until this is done).
+- [ ] Create the GitHub Release from `v0.3.0`, pasting in the `CHANGELOG.md` section.
+      `.github/workflows/release.yml` creates it from the tag, but it does not publish
+      to crates.io.
 
 ## Release 0.2.0 (published 2026-11-01)
 
@@ -144,10 +255,14 @@ Publishing:
    cargo publish -p tpt-dsp-analysis
    cargo publish -p tpt-dsp-control
    cargo publish -p tpt-dsp-io
+   cargo publish -p tpt-dsp-testkit   # before wasm: its dev-dependency
    cargo publish -p tpt-dsp-viz
    cargo publish -p tpt-dsp-wasm
    cargo publish -p tpt-dsp-cli
+   cargo publish -p tpt-dsp           # facade, last
    ```
+   Add `--dry-run --allow-dirty` to any of these to check first (the dependent crates
+   fail the dry run until their dependencies are live; see the 0.3.0 section).
 5. Check off the crate in the table above and record the version once the
    upload succeeds.
 6. Cut a GitHub Release from the tag, pasting in the relevant `CHANGELOG.md`
