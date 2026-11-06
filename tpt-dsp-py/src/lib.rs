@@ -259,6 +259,48 @@ impl PyPid {
     }
 }
 
+/// A stateful oscillator producing blocks of samples.
+///
+/// `waveform` is `sine`, `sawtooth` (or `saw`), `square` or `triangle`. The
+/// phase carries over between `process` calls.
+#[pyclass(name = "Oscillator", module = "tpt_dsp._native")]
+pub struct PyOscillator {
+    inner: tpt_dsp_audio::Oscillator,
+}
+
+#[pymethods]
+impl PyOscillator {
+    #[new]
+    #[pyo3(signature = (sample_rate, freq, waveform = "sine"))]
+    fn new(sample_rate: f32, freq: f32, waveform: &str) -> PyResult<Self> {
+        let shape = match waveform.to_ascii_lowercase().as_str() {
+            "sine" => tpt_dsp_audio::Waveform::Sine,
+            "sawtooth" | "saw" => tpt_dsp_audio::Waveform::Sawtooth,
+            "square" => tpt_dsp_audio::Waveform::Square,
+            "triangle" => tpt_dsp_audio::Waveform::Triangle,
+            other => return Err(PyValueError::new_err(format!("unknown waveform `{other}`"))),
+        };
+        Ok(Self {
+            inner: tpt_dsp_audio::Oscillator::with_waveform(sample_rate, freq, shape),
+        })
+    }
+
+    /// Generate `n` samples.
+    fn process(&mut self, n: usize) -> Vec<f32> {
+        (0..n).map(|_| self.inner.tick()).collect()
+    }
+
+    /// Change the frequency in Hz (non-finite or negative values become 0).
+    fn set_frequency(&mut self, freq: f32) {
+        self.inner.set_frequency(freq);
+    }
+
+    /// Reset the phase to zero.
+    fn reset(&mut self) {
+        self.inner.reset();
+    }
+}
+
 /// The compiled extension module; `tpt_dsp` re-exports everything from here.
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -270,5 +312,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(analyze, m)?)?;
     m.add_class::<PyBiquad>()?;
     m.add_class::<PyPid>()?;
+    m.add_class::<PyOscillator>()?;
     Ok(())
 }

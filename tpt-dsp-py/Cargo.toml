@@ -25,6 +25,7 @@ crate-type = ["cdylib"]
 tpt-dsp-core = { path = "../tpt-dsp-core", version = "0.2.0" }
 tpt-dsp-analysis = { path = "../tpt-dsp-analysis", version = "0.2.0" }
 tpt-dsp-control = { path = "../tpt-dsp-control", version = "0.2.0" }
+tpt-dsp-audio = { path = "../tpt-dsp-audio", version = "0.2.0" }
 pyo3 = { version = "0.30", features = ["extension-module", "abi3-py39"] }
 
 [workspace]

@@ -6,6 +6,7 @@ re-exported here, so ``import tpt_dsp`` is all callers need.
 
 from ._native import (  # noqa: F401
     Biquad,
+    Oscillator,
     Pid,
     analyze,
     fm_demod,
@@ -17,6 +18,7 @@ from ._native import (  # noqa: F401
 
 __all__ = [
     "Biquad",
+    "Oscillator",
     "Pid",
     "analyze",
     "fm_demod",
