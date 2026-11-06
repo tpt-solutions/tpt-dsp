@@ -71,6 +71,8 @@ mod process;
 mod psychoacoustic;
 mod receiver;
 #[cfg(feature = "alloc")]
+mod remez;
+#[cfg(feature = "alloc")]
 pub mod resample;
 mod rf;
 mod ring;
@@ -124,6 +126,8 @@ pub use pitch::{
 pub use polyphase::FarrowDelay;
 #[cfg(feature = "alloc")]
 pub use polyphase::RationalResampler;
+#[cfg(feature = "alloc")]
+pub use process::Cascade;
 pub use process::{Chain, Processor, Smoothed};
 pub use psychoacoustic::{
     classify_tonal_bins, combined_threshold_db, db_to_power, is_tonal_peak,
@@ -131,6 +135,8 @@ pub use psychoacoustic::{
     spreading_function_db, threshold_in_quiet, tonal_masking_offset_db,
 };
 pub use receiver::{Agc, AmDemodulator, Detector, Pll, Squelch, SsbDemodulator};
+#[cfg(feature = "alloc")]
+pub use remez::{remez_fir, RemezBand};
 #[cfg(feature = "alloc")]
 pub use rf::CicDecimator;
 pub use rf::{Goertzel, Nco};

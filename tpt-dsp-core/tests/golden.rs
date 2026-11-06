@@ -116,3 +116,71 @@ fn iir_designs_match_scipy_magnitude() {
     }
     assert!(rows > 0, "no filter rows read");
 }
+
+#[test]
+fn remez_taps_match_scipy() {
+    use tpt_dsp_core::{remez_fir, RemezBand};
+
+    fn band(start: f32, end: f32, desired: f32, weight: f32) -> RemezBand {
+        RemezBand {
+            start,
+            end,
+            desired,
+            weight,
+        }
+    }
+
+    // Must match the specifications in tests/golden/generate_remez.py.
+    let specs: [(&str, usize, Vec<RemezBand>); 3] = [
+        (
+            "lp31",
+            31,
+            vec![band(0.0, 0.2, 1.0, 1.0), band(0.3, 0.5, 0.0, 1.0)],
+        ),
+        (
+            "lp41_weighted",
+            41,
+            vec![band(0.0, 0.2, 1.0, 1.0), band(0.3, 0.5, 0.0, 10.0)],
+        ),
+        (
+            "bp35",
+            35,
+            vec![
+                band(0.0, 0.1, 0.0, 5.0),
+                band(0.2, 0.3, 1.0, 1.0),
+                band(0.35, 0.5, 0.0, 5.0),
+            ],
+        ),
+    ];
+
+    let mut golden_taps: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for line in golden("remez.csv").lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        let i: usize = f[1].parse().unwrap();
+        let v: f64 = f[2].parse().unwrap();
+        let row = golden_taps.entry(f[0].to_string()).or_default();
+        if row.len() <= i {
+            row.resize(i + 1, 0.0);
+        }
+        row[i] = v;
+    }
+
+    for (name, taps, bands) in &specs {
+        let ours = remez_fir(*taps, bands).unwrap();
+        let want = golden_taps
+            .get(*name)
+            .unwrap_or_else(|| panic!("no golden taps for {name}"));
+        assert_eq!(ours.len(), want.len(), "{name}: tap count");
+        let worst = ours
+            .iter()
+            .zip(want.iter())
+            .map(|(a, b)| (f64::from(*a) - b).abs())
+            .fold(0.0f64, f64::max);
+        println!("{name}: worst tap error {worst:e}");
+        // Low-pass designs agree to ~5e-6. The band-pass optimum is flat, so
+        // the taps can differ by ~2e-4 while the weighted ripple agrees with
+        // scipy's to within 0.3% (both ~0.0303 in every band, measured). The
+        // tolerance is set to that flatness, not to the low-pass agreement.
+        assert!(worst < 1e-3, "{name}: worst tap error {worst:e}");
+    }
+}
