@@ -11,9 +11,10 @@
 
 use tpt_dsp_core::{
     butterworth, butterworth_bandpass, butterworth_bandstop, cascade_magnitude_response,
-    chebyshev1_bandpass, chebyshev1_bandstop, chebyshev1_lowpass, chebyshev2_bandpass,
-    chebyshev2_bandstop, chebyshev2_lowpass, elliptic_bandpass, elliptic_bandstop,
-    elliptic_highpass, elliptic_lowpass, BiquadCoeffs, Response,
+    chebyshev1_bandpass, chebyshev1_bandstop, chebyshev1_highpass, chebyshev1_lowpass,
+    chebyshev2_bandpass, chebyshev2_bandstop, chebyshev2_highpass, chebyshev2_lowpass,
+    elliptic_bandpass, elliptic_bandstop, elliptic_highpass, elliptic_lowpass, BiquadCoeffs,
+    Response,
 };
 use wasm_bindgen::prelude::*;
 
@@ -103,9 +104,11 @@ impl FilterSpec {
             ("butterworth", "bandpass") => butterworth_bandpass(n, fs, f1, f2),
             ("butterworth", "bandstop") => butterworth_bandstop(n, fs, f1, f2),
             ("chebyshev1", "lowpass") => chebyshev1_lowpass(n, fs, f1, rp),
+            ("chebyshev1", "highpass") => chebyshev1_highpass(n, fs, f1, rp),
             ("chebyshev1", "bandpass") => chebyshev1_bandpass(n, fs, f1, f2, rp),
             ("chebyshev1", "bandstop") => chebyshev1_bandstop(n, fs, f1, f2, rp),
             ("chebyshev2", "lowpass") => chebyshev2_lowpass(n, fs, f1, rs),
+            ("chebyshev2", "highpass") => chebyshev2_highpass(n, fs, f1, rs),
             ("chebyshev2", "bandpass") => chebyshev2_bandpass(n, fs, f1, f2, rs),
             ("chebyshev2", "bandstop") => chebyshev2_bandstop(n, fs, f1, f2, rs),
             ("elliptic", "lowpass") => elliptic_lowpass(n, fs, f1, rp, rs),
@@ -167,10 +170,19 @@ mod tests {
     }
 
     #[test]
-    fn unavailable_combinations_are_named() {
-        let s = spec("chebyshev1", "highpass", 3);
+    fn unknown_combinations_are_named() {
+        let s = spec("bessel", "highpass", 3);
         let err = s.design().unwrap_err();
-        assert_eq!(err, "chebyshev1 highpass is not available");
+        assert_eq!(err, "bessel highpass is not available");
+    }
+
+    #[test]
+    fn chebyshev_highpass_is_available() {
+        let mut s = spec("chebyshev1", "highpass", 3);
+        s.set_edges(1_000.0, 0.0);
+        let db = s.response_db(&[10.0, 23_000.0]).unwrap();
+        assert!(db[0] < -40.0, "DC {}", db[0]);
+        assert!(db[1].abs() < 0.1, "Nyquist {}", db[1]);
     }
 
     #[test]
