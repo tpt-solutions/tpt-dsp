@@ -32,10 +32,8 @@ exclude = [
 [workspace.package]
 version = "0.2.0"
 edition = "2021"
-# Workspace minimum for every crate except `tpt-dsp-viz`, which sets its own
-# `rust-version` (1.95): its `egui`/`eframe` dependency now requires 1.95, and
-# every egui release since 0.36 has raised the minimum. The MSRV CI job checks
-# the workspace with `--exclude tpt-dsp-viz`.
+# Minimum supported Rust for every crate, including `tpt-dsp-viz` (its GUI is
+# the in-tree renderer over `minifb`, so it no longer needs a newer toolchain).
 rust-version = "1.85"
 authors = ["TPT Solutions"]
 license = "MIT OR Apache-2.0"

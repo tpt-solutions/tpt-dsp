@@ -1,11 +1,11 @@
 //! dB → heat-map colour mapping for the waterfall display.
 //!
 //! [`colormap`] maps a clamped, normalised intensity in `[0, 1]` to an
-//! [`Color32`] using a five-stop gradient: black → blue → cyan → yellow
+//! [`Rgb`] using a five-stop gradient: black → blue → cyan → yellow
 //! → red. The stops are evenly spaced in intensity, so a flat linear dB range
 //! maps to the full rainbow.
 
-use eframe::egui::Color32;
+use crate::canvas::Rgb;
 
 /// Map a normalised level `t` in `[0, 1]` to a heat-map colour.
 ///
@@ -19,7 +19,7 @@ use eframe::egui::Color32;
 /// | `0.50`| cyan       |
 /// | `0.75`| yellow     |
 /// | `1.00`| red        |
-pub fn colormap(t: f32) -> Color32 {
+pub fn colormap(t: f32) -> Rgb {
     let t = t.clamp(0.0, 1.0);
     const STOPS: [(f32, u8, u8, u8); 5] = [
         (0.00, 0, 0, 0),
@@ -37,10 +37,10 @@ pub fn colormap(t: f32) -> Color32 {
             let r = (r0 as f32 + (r1 as f32 - r0 as f32) * f).round() as u8;
             let g = (g0 as f32 + (g1 as f32 - g0 as f32) * f).round() as u8;
             let b = (b0 as f32 + (b1 as f32 - b0 as f32) * f).round() as u8;
-            return Color32::from_rgb(r, g, b);
+            return Rgb::new(r, g, b);
         }
     }
-    Color32::from_rgb(255, 0, 0)
+    Rgb::new(255, 0, 0)
 }
 
 #[cfg(test)]
@@ -49,27 +49,27 @@ mod tests {
 
     #[test]
     fn endpoints_and_stops_are_exact() {
-        assert_eq!(colormap(0.00), Color32::from_rgb(0, 0, 0));
-        assert_eq!(colormap(0.25), Color32::from_rgb(0, 0, 255));
-        assert_eq!(colormap(0.50), Color32::from_rgb(0, 255, 255));
-        assert_eq!(colormap(0.75), Color32::from_rgb(255, 255, 0));
-        assert_eq!(colormap(1.00), Color32::from_rgb(255, 0, 0));
+        assert_eq!(colormap(0.00), Rgb::new(0, 0, 0));
+        assert_eq!(colormap(0.25), Rgb::new(0, 0, 255));
+        assert_eq!(colormap(0.50), Rgb::new(0, 255, 255));
+        assert_eq!(colormap(0.75), Rgb::new(255, 255, 0));
+        assert_eq!(colormap(1.00), Rgb::new(255, 0, 0));
     }
 
     #[test]
     fn out_of_range_clamps() {
-        assert_eq!(colormap(-1.0), Color32::from_rgb(0, 0, 0));
-        assert_eq!(colormap(2.0), Color32::from_rgb(255, 0, 0));
-        assert_eq!(colormap(f32::NEG_INFINITY), Color32::from_rgb(0, 0, 0));
-        assert_eq!(colormap(f32::INFINITY), Color32::from_rgb(255, 0, 0));
+        assert_eq!(colormap(-1.0), Rgb::new(0, 0, 0));
+        assert_eq!(colormap(2.0), Rgb::new(255, 0, 0));
+        assert_eq!(colormap(f32::NEG_INFINITY), Rgb::new(0, 0, 0));
+        assert_eq!(colormap(f32::INFINITY), Rgb::new(255, 0, 0));
     }
 
     #[test]
     fn interpolation_is_monotonic_in_green_above_midpoint() {
         // From yellow (0.75) to red (1.0) the green channel falls 255 → 0.
-        let mid = colormap(0.75).g();
-        let high = colormap(0.875).g();
-        let top = colormap(1.0).g();
+        let mid = colormap(0.75).g;
+        let high = colormap(0.875).g;
+        let top = colormap(1.0).g;
         assert!(mid > high);
         assert!(high > top);
     }

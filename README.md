@@ -48,7 +48,7 @@ Dual licensed under **MIT** and **Apache-2.0**. © TPT Solutions.
 | `tpt-dsp-control`    | PID with anti-windup, input shaping (ZVD), trapezoidal & jerk-limited trajectory planning. |
 | `tpt-dsp-io`         | IQ byte-stream parsing, built-in audio I/O — shared-mode WASAPI on Windows, raw ALSA UAPI on Linux, CoreAudio AudioUnits on macOS — plus RIFF/WAVE read/write, serial reader, and a TCP IQ source that can tune an `rtl_tcp` server (frequency, sample rate, gain, PPM). |
 | `tpt-dsp-wasm`       | WebAssembly pedalboard (Waveshaper → Delay → ConvolutionReverb → EQ) for a Web Audio `AudioWorklet`. |
-| `tpt-dsp-viz`        | Desktop viewer: scrolling waterfall, live dB spectrum line and peak readout (`egui`/`eframe`). Synthetic or live audio input. |
+| `tpt-dsp-viz`        | Desktop viewer: scrolling waterfall, live dB spectrum line and peak readout (in-tree renderer over `minifb`). Synthetic or live audio input. |
 | `tpt-dsp-cli`        | Command-line WAV/IQ pipeline: `gen`, `resample`, `design`, `response`, `filter`, `demod`, `spectrum`, `info`, `pipeline` (JSON or TOML) and `completions` subcommands. |
 | `tpt-dsp-testkit`    | Test helpers that prove a path is allocation-free: a counting global allocator, `allocations_in` and `assert_no_alloc`. |
 | `tpt-dsp`            | Facade crate: one dependency, feature-gated re-exports of the crates above, and a `prelude`. |
@@ -256,8 +256,8 @@ CI also builds `tpt-dsp-core` for `thumbv7em-none-eabihf` and
 `tpt-dsp-wasm` for `wasm32-unknown-unknown`. The full job list is in
 [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-The workspace MSRV is Rust 1.85. `tpt-dsp-viz` needs Rust 1.95 because
-its `egui`/`eframe` dependency does, so the MSRV check excludes it.
+The workspace MSRV is Rust 1.85, and every crate, including `tpt-dsp-viz`, is checked
+against it.
 
 Contributor setup, conventions and the release process are in
 [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`PUBLISHING.md`](PUBLISHING.md).

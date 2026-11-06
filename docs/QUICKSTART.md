@@ -2,8 +2,7 @@
 
 A single runnable path from a fresh clone to seeing and hearing the framework
 work. All commands run from the repository root on stable Rust. The workspace
-builds on Rust 1.85+ except `tpt-dsp-viz`, which needs Rust 1.95+ for its
-`egui`/`eframe` dependency, so a full `--workspace` build needs 1.95+.
+builds on Rust 1.85+, including `tpt-dsp-viz`.
 
 ```sh
 git clone <repository-url> tpt-dsp

@@ -16,9 +16,9 @@ use std::sync::{
 
 use crossbeam_channel::bounded;
 use tpt_dsp_analysis::SpectrumConfig;
-use tpt_dsp_viz::{run_synthetic, VizApp};
+use tpt_dsp_viz::{run_app, run_synthetic, VizApp};
 
-fn main() -> eframe::Result<()> {
+fn main() -> tpt_dsp_viz::Result {
     let config = SpectrumConfig::default();
 
     // Bounded channel: a slow UI simply drops frames instead of lagging behind.
@@ -30,24 +30,13 @@ fn main() -> eframe::Result<()> {
     let producer_stop = stop.clone();
     std::thread::spawn(move || run_synthetic(config, tx, producer_stop));
 
-    let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("custom waterfall example")
-            .with_inner_size([800.0, 560.0]),
-        ..Default::default()
-    };
-
     let app = VizApp::new(
         rx,
         &config,
         "custom synthetic source".to_string(),
         stop.clone(),
     );
-    eframe::run_native(
-        "custom-waterfall",
-        options,
-        Box::new(move |_cc| Ok(Box::new(app))),
-    )?;
+    run_app(app, "custom waterfall example", (800, 560))?;
     // Signal the producer to exit if it has not already observed closure.
     stop.store(true, Ordering::Relaxed);
     Ok(())

@@ -57,17 +57,17 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
   facade crate that re-exports core, audio, analysis, control and io behind features.
 - **`tpt-dsp-wasm`** — core + audio; the Web Audio pedalboard
   (`Waveshaper → Delay → ConvolutionReverb → Eq`) driven from `www/` via an `AudioWorklet`.
-- **`tpt-dsp-viz` is implemented**: `app.rs` (`VizApp`, an `eframe::App`) renders a
+- **`tpt-dsp-viz` is implemented**: `app.rs` (`VizApp`) renders a
   scrolling waterfall (`Spectrogram`, colour-mapped via `colormap.rs`) plus a live dB
   spectrum line, peak-frequency/dB readout, and a pause toggle. `pipeline.rs` streams
   `SpectrumFrame`s from a producer thread over a `crossbeam-channel`: `run_synthetic`
   (deterministic multi-tone + noise, no hardware needed) or, under the `audio` feature,
-  `run_audio_input` (default input device via the built-in backend, any format converted to f32, mono downmix). It still
-  drags `egui`/`eframe` (0.37) into every `--workspace` build. Those now require Rust 1.95,
-  so `viz` sets its own `rust-version = "1.95"` and the workspace MSRV (1.85) check runs with
-  `--exclude tpt-dsp-viz`.
-  A live (on-screen) render check still needs a machine with a display — not verified in
-  this headless environment, though it builds, tests, and clips clean.
+  `run_audio_input` (default input device via the built-in backend, any format converted to f32, mono downmix).
+  The GUI has no toolkit: `canvas.rs` is a software canvas over a `0x00RRGGBB` buffer, `font.rs` is a built-in
+  5x7 bitmap font, and `window.rs` (`run_app`) opens the window through `minifb` (MIT OR Apache-2.0, no Apache-only
+  transitive crates). Do not reintroduce `egui`/`eframe`: they pull Apache-2.0-only crates (`winit`, `glutin`, ...)
+  and raise the MSRV. `viz` uses the workspace MSRV (1.85) and the MSRV check covers the whole workspace.
+  A live (on-screen) window check still needs a machine with a display. `examples/snapshot.rs` renders a frame to PNG for headless checks.
 - **`tpt-dsp-cli`** — a command-line WAV/IQ DSP pipeline (`src/main.rs` + `src/lib.rs`)
   built on the framework; depends on `core`/`audio`/`analysis`/`io` and is a normal workspace member.
 - **`tpt-dsp-nihplug`** and **`tpt-dsp-py`** are **excluded** from the default workspace

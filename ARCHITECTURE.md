@@ -78,7 +78,7 @@ The guiding contract is:
 | `tpt-dsp-testkit` | Counting global allocator and `assert_no_alloc` for allocation-free tests. | No |
 | `tpt-dsp` | Facade: feature-gated re-exports, a `prelude`, and a compiled walkthrough. | No |
 | `tpt-dsp-wasm` | WebAssembly pedalboard and filter designer for the Web Audio `AudioWorklet`. | n/a (wasm) |
-| `tpt-dsp-viz` | Desktop waterfall and spectrum viewer (`egui`/`eframe`). | No |
+| `tpt-dsp-viz` | Desktop waterfall and spectrum viewer (in-tree software renderer over `minifb`). | No |
 | `tpt-dsp-cli` | Command-line WAV/IQ pipeline and design tools. | No |
 
 ---
@@ -216,10 +216,10 @@ Building blocks now present:
   allocation-free.
 - **Desktop waterfall UI (`tpt-dsp-viz`):** implemented. A producer thread
   (`pipeline::run_synthetic` or, with the `audio` feature, `run_audio_input`)
-  streams `SpectrumFrame`s to the egui UI over a `crossbeam-channel`.
+  streams `SpectrumFrame`s to the UI over a `crossbeam-channel`.
   `analyze_block` windows, transforms and averages one block with
-  `RealtimeSpectrumAnalyzer`. `VizApp` (`app.rs`, an `eframe::App`) draws the
-  `Spectrogram` as a scrolling texture, colour-mapped by `colormap`
+  `RealtimeSpectrumAnalyzer`. `VizApp` (`app.rs`) draws the `Spectrogram` into a
+  software pixel buffer (`canvas.rs`, bitmap font in `font.rs`), colour-mapped by `colormap`
   (black → blue → cyan → yellow → red), with the latest frame as a live spectrum
   line, a peak-frequency and dB readout, and a pause toggle. `run_audio_input`
   captures the default input device through the built-in backend, downmixing

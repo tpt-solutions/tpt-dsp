@@ -10,6 +10,23 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 ## [Unreleased]
 
 ### Changed
+- **Breaking:** the `eframe`/`egui` GUI is replaced by an in-tree software renderer
+  (`canvas`, `font`, `app`) over a `minifb` window. `egui`, `eframe` and their
+  Apache-2.0-only transitive crates (`winit`, `glutin`, `gethostname`, `dpi`, ...) are
+  gone from the build.
+- **Breaking:** `run` and the examples return `tpt_dsp_viz::Result` (wrapping `tpt_dsp_viz::Error`)
+  instead of `eframe::Result`. `colormap` returns `Rgb` instead of `egui::Color32`.
+- `VizApp` is no longer an `eframe::App`. Drive it with `run_app`, or with
+  `update`, `on_click` and `draw_into` from your own loop.
+- The crate uses the workspace MSRV (1.85). The `rust-version = "1.95"` override and the
+  CI exclusion are removed.
+
+### Added
+- `run_app` opens a window for a `VizApp`. Left-click on the button, `P` or Space toggle pause. Escape closes.
+- `examples/snapshot.rs` renders one frame to a PNG without a display.
+- A built-in 5x7 bitmap font covering the UI labels.
+
+### Changed
 - `eframe` and `egui` are upgraded from 0.36 to 0.37.
 - The crate sets its own `rust-version = "1.95"`, not the workspace's 1.85, because
   `egui` 0.37 requires Rust 1.95. The workspace MSRV check excludes this crate.

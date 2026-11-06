@@ -6,7 +6,7 @@
 //! (requires the `audio` feature: `cargo run -p tpt-dsp-viz --features audio
 //! -- --audio`). Without it, a deterministic synthetic signal is shown.
 
-fn main() -> eframe::Result<()> {
+fn main() -> tpt_dsp_viz::Result {
     let use_audio = std::env::args().any(|a| a == "--audio");
     let source = if use_audio {
         #[cfg(feature = "audio")]

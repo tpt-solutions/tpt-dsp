@@ -6,17 +6,22 @@
 `tpt-dsp-viz` is the desktop visualization front end of the framework. It builds
 on [`tpt-dsp-core`](https://github.com/TPT-Solutions/tpt-dsp/tree/master/tpt-dsp-core) (math + FFT) and
 [`tpt-dsp-analysis`](https://github.com/TPT-Solutions/tpt-dsp/tree/master/tpt-dsp-analysis) (spectrum estimation, peak finding,
-spectrogram) to render live signal displays with `eframe` (and its re-exported `egui`):
+spectrogram) to render live signal displays:
 
 - **Waterfall spectrogram** — a scrolling heat-map (time on one axis, frequency
   on the other, intensity as colour) produced by `tpt-dsp-analysis`'s
   [`Spectrogram`].
 - **Live spectrum line** — a real-time line plot of the current magnitude
-  spectrum with dB scaling and configurable floor, driven by
-  [`SpectrumAnalyzer`]/[`RealtimeSpectrumAnalyzer`].
+  spectrum with dB scaling, driven by [`SpectrumAnalyzer`]/[`RealtimeSpectrumAnalyzer`].
+- **Status bar** — source label, peak frequency and level, and a pause/resume button.
 
-The crate is built on `crossbeam-channel` so a capture/producer thread can stream
-blocks to the UI thread without blocking the render loop.
+The rendering is in-tree. A small software canvas draws into a `0x00RRGGBB`
+pixel buffer, using a built-in 5×7 bitmap font. The only third-party dependency
+for the window is [`minifb`](https://crates.io/crates/minifb) (MIT OR Apache-2.0),
+which opens the native window and handles input and presentation. There is no
+GUI toolkit (no `egui`/`eframe`). The crate is built on `crossbeam-channel` so a
+capture/producer thread can stream blocks to the UI thread without blocking the
+render loop.
 
 ## Features
 
@@ -34,19 +39,36 @@ With the default features the crate exposes the visualization primitives; enable
 ```rust
 use tpt_dsp_viz::{run, Source};
 
-fn main() -> eframe::Result<()> {
+fn main() -> tpt_dsp_viz::Result {
     run(Source::Synthetic)
 }
 ```
 
-For a custom window, [`VizApp`] is the `eframe::App`. Feed it [`SpectrumFrame`]s
-from your own producer thread, or use [`run_synthetic`] / [`run_audio_input`]
-(feature `audio`) to generate them. See `examples/custom_waterfall.rs`.
+For a custom producer, build a [`VizApp`] from a `crossbeam-channel` receiver of
+[`SpectrumFrame`]s and hand it to [`run_app`]. Your own producer thread can use
+[`run_synthetic`] or [`run_audio_input`] (feature `audio`), or your own loop of
+[`analyze_block`] calls. See `examples/custom_waterfall.rs`.
+
+To embed the display in another loop, call [`VizApp::update`] once per tick,
+forward clicks to [`VizApp::on_click`], and call [`VizApp::draw_into`] with your
+own pixel buffer.
+
+To render a frame to a PNG without opening a window (useful on headless
+machines):
+
+```sh
+cargo run -p tpt-dsp-viz --example snapshot -- out.png 1024 720
+```
+
+## Controls
+
+- Click **Pause** / **Resume**, or press `P` or Space, to freeze the display.
+- Press Escape or close the window to exit.
 
 ## Architecture
 
 ```text
-   producer thread                 UI thread (eframe / egui)
+   producer thread                 UI thread (minifb window)
    ───────────────                ─────────────────────────
    capture / generate
         │  crossbeam channel
@@ -54,7 +76,10 @@ from your own producer thread, or use [`run_synthetic`] / [`run_audio_input`]
    tpt-dsp-analysis (FFT, spectrogram)
         │
         ▼
-   egui widgets (waterfall texture, spectrum line)
+   VizApp::update ── software canvas (colormap, lines, bitmap font)
+                          │
+                          ▼
+                    minifb presents the pixel buffer
 ```
 
 Because all DSP runs on `tpt-dsp-core`/`tpt-dsp-analysis`, the visualization is
@@ -77,10 +102,10 @@ cargo build -p tpt-dsp-viz            # default features
 cargo build -p tpt-dsp-viz --features audio
 ```
 
-This crate needs **Rust 1.95 or later**, because `egui`/`eframe` 0.37 require it. It
-sets its own `rust-version`, so the workspace's 1.85 minimum applies to the other
-crates only. A window needs a display, so the render loop is not exercised in
-headless CI; the crate builds, tests and passes clippy there.
+The crate uses the workspace's Rust 1.85 minimum. A window needs a display, so
+the window loop is not exercised in headless CI. The rendering, layout and input
+logic are covered by unit tests, and the snapshot example checks the output
+pixels.
 
 ## License
 

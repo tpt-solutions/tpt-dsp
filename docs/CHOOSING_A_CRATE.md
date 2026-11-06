@@ -12,7 +12,7 @@ facade and nothing else.
 | Use the math only, in `no_std` firmware | `tpt-dsp-core` with `default-features = false` | Verified for `thumbv7em-none-eabihf`. |
 | Check your own code is allocation-free | `tpt-dsp-testkit` (dev-dependency) | See `docs/RT_SAFETY.md`. |
 | Process files from a terminal | `tpt-dsp-cli` (binary) | WAV and IQ filter, spectrum and analysis subcommands. |
-| Run a live spectrum viewer | `tpt-dsp-viz` | egui desktop app; needs a display. |
+| Run a live spectrum viewer | `tpt-dsp-viz` | Desktop app (in-tree renderer over `minifb`); needs a display. |
 | Run a browser pedalboard | `tpt-dsp-wasm` | Built with `wasm-pack`; see `www/`. |
 | Use from Python | `tpt-dsp-py` (standalone) | Not in the default workspace. |
 | Build a CLAP/VST3 plugin | `tpt-dsp-nihplug` (standalone) | Not in the default workspace. |
