@@ -1396,3 +1396,196 @@ pub fn chebyshev1_bandpass(
     normalise_bandpass(&mut sections, fs, wl, wh);
     Ok(sections)
 }
+
+/// Complex product `a·b` for `(re, im)` pairs.
+#[cfg(feature = "alloc")]
+fn cmul(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+    (a.0 * b.0 - a.1 * b.1, a.0 * b.1 + a.1 * b.0)
+}
+
+/// Complex quotient `a / b` for `(re, im)` pairs.
+#[cfg(feature = "alloc")]
+fn cdiv(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+    let d = b.0 * b.0 + b.1 * b.1;
+    ((a.0 * b.0 + a.1 * b.1) / d, (a.1 * b.0 - a.0 * b.1) / d)
+}
+
+/// Map a low-pass prototype (edge at 1 rad/s) to a band-stop cascade.
+///
+/// The arguments follow [`bandpass_sections`]. The substitution is
+/// `s → B·s/(s² + ω₀²)`. Each prototype pole `p` gives the two roots of
+/// `p·s² − B·s + p·ω₀² = 0`. A complex pair gives two band-stop pole pairs,
+/// and a real pole gives one second-order section, since its two roots have
+/// sum `B/p` and product `ω₀²`. A finite prototype zero pair `±jy` maps to two
+/// zero pairs `±j·m±`. A prototype zero at infinity maps to a zero pair `±jω₀`.
+#[cfg(feature = "alloc")]
+fn bandstop_sections(
+    poles: &[(f64, f64)],
+    zero_mags: &[f64],
+    wl: f64,
+    wh: f64,
+    fs: f64,
+) -> alloc::vec::Vec<BiquadCoeffs<f32>> {
+    let w0sq = wl * wh;
+    let bw = wh - wl;
+    let mut sections = alloc::vec::Vec::with_capacity(2 * poles.len() + 1);
+    let mut zero_iter = zero_mags.iter();
+    for &(re, im) in poles {
+        if im == 0.0 {
+            // Real pole: denominator s² − (B/p)·s + ω₀², with a zero pair ±jω₀
+            // from the prototype zero at infinity.
+            sections.push(bilinear_biquad([w0sq, 0.0, 1.0], [w0sq, -bw / re, 1.0], fs));
+        } else {
+            // Roots of p·s² − B·s + p·ω₀² = 0 are r = (B ± √(B² − 4p²ω₀²)) / (2p).
+            let p2 = cmul((re, im), (re, im));
+            let (sr, si) = complex_sqrt(bw * bw - 4.0 * w0sq * p2.0, -4.0 * w0sq * p2.1);
+            let two_p = (2.0 * re, 2.0 * im);
+            let roots = [cdiv((bw + sr, si), two_p), cdiv((bw - sr, -si), two_p)];
+            // A finite zero ±jy gives zero pairs ±j·m± with m± = (B ± S)/(2y),
+            // where S = √(B² + 4y²ω₀²). Without one, the zeros sit at ±jω₀.
+            let numerators: [[f64; 3]; 2] = match zero_iter.next() {
+                Some(&y) => {
+                    let s = (bw * bw + 4.0 * y * y * w0sq).sqrt();
+                    let m1 = (bw + s) / (2.0 * y);
+                    let m2 = (s - bw) / (2.0 * y);
+                    [[m1 * m1, 0.0, 1.0], [m2 * m2, 0.0, 1.0]]
+                }
+                None => [[w0sq, 0.0, 1.0], [w0sq, 0.0, 1.0]],
+            };
+            for (r, num) in roots.iter().zip(numerators.iter()) {
+                sections.push(bilinear_biquad(
+                    *num,
+                    [r.0 * r.0 + r.1 * r.1, -2.0 * r.0, 1.0],
+                    fs,
+                ));
+            }
+        }
+    }
+    sections
+}
+
+/// Normalise a cascade to unit gain at DC (the band-stop passbands sit there).
+#[cfg(feature = "alloc")]
+fn normalise_dc(sections: &mut [BiquadCoeffs<f32>], fs: f32) {
+    let g = cascade_magnitude_response(sections, fs, 0.0);
+    if g.is_finite() && g > 1e-12 {
+        let first = &mut sections[0];
+        first.b0 /= g;
+        first.b1 /= g;
+        first.b2 /= g;
+    }
+}
+
+/// Butterworth band-stop filter as a biquad cascade of order `2·order`.
+///
+/// `f_low` and `f_high` are the passband edges, which bracket the stopband.
+/// Matches `scipy.signal.butter` with `btype="bandstop"`. Gain is normalised
+/// to unity at DC.
+///
+/// # Errors
+/// Returns an error for a zero order or invalid `fs` or edges.
+#[cfg(feature = "alloc")]
+pub fn butterworth_bandstop(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    let (wl, wh) = bandpass_edges(order, fs, f_low, f_high)?;
+    let poles = butterworth_prototype_poles(order);
+    let mut sections = bandstop_sections(&poles, &[], wl, wh, f64::from(fs));
+    normalise_dc(&mut sections, fs);
+    Ok(sections)
+}
+
+/// Butterworth low-pass prototype poles (edge at 1 rad/s): one per conjugate
+/// pair with positive imaginary part, and each real pole once.
+#[cfg(feature = "alloc")]
+fn butterworth_prototype_poles(order: usize) -> alloc::vec::Vec<(f64, f64)> {
+    let n = order as f64;
+    let mut poles = alloc::vec::Vec::new();
+    for k in 0..order {
+        let theta = core::f64::consts::FRAC_PI_2
+            + core::f64::consts::PI * (2.0 * k as f64 + 1.0) / (2.0 * n);
+        let (re, im) = (theta.cos(), theta.sin());
+        if im > 1e-12 {
+            poles.push((re, im));
+        } else if im.abs() <= 1e-12 {
+            poles.push((-1.0, 0.0));
+        }
+    }
+    poles
+}
+
+/// Chebyshev type I band-stop filter as a biquad cascade of order `2·order`.
+///
+/// Matches `scipy.signal.cheby1` with `btype="bandstop"`. Gain is normalised
+/// to unity at DC.
+///
+/// # Errors
+/// Returns an error for a zero order, a non-positive ripple, or invalid `fs`
+/// or edges.
+#[cfg(feature = "alloc")]
+pub fn chebyshev1_bandstop(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+    ripple_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    let (wl, wh) = bandpass_edges(order, fs, f_low, f_high)?;
+    if !(ripple_db.is_finite() && ripple_db > 0.0) {
+        return Err(FilterDesignError::Gain);
+    }
+    let poles = chebyshev1_prototype_poles(order, f64::from(ripple_db));
+    let mut sections = bandstop_sections(&poles, &[], wl, wh, f64::from(fs));
+    normalise_dc(&mut sections, fs);
+    Ok(sections)
+}
+
+/// Chebyshev I low-pass prototype poles (edge at 1 rad/s), in the same
+/// representation as [`butterworth_prototype_poles`].
+#[cfg(feature = "alloc")]
+fn chebyshev1_prototype_poles(order: usize, ripple_db: f64) -> alloc::vec::Vec<(f64, f64)> {
+    let eps = (10f64.powf(ripple_db / 10.0) - 1.0).sqrt();
+    let n = order as f64;
+    let a = (1.0 / eps).asinh() / n;
+    let (sh, ch) = (a.sinh(), a.cosh());
+    let mut poles = alloc::vec::Vec::new();
+    for k in 0..order.div_ceil(2) {
+        let theta = core::f64::consts::PI * (2.0 * k as f64 + 1.0) / (2.0 * n);
+        if order % 2 == 1 && k == order / 2 {
+            poles.push((-sh, 0.0));
+        } else {
+            poles.push((-sh * theta.sin(), ch * theta.cos()));
+        }
+    }
+    poles
+}
+
+/// Elliptic band-stop filter as a biquad cascade of order `2·order`.
+///
+/// `f_low` and `f_high` are the passband edges. The prototype is the same as
+/// [`elliptic_lowpass`]. Matches `scipy.signal.ellip` with
+/// `btype="bandstop"`. Gain is normalised to unity at DC.
+///
+/// # Errors
+/// As [`elliptic_bandpass`].
+#[cfg(feature = "alloc")]
+pub fn elliptic_bandstop(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+    rp_db: f32,
+    rs_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    let (wl, wh) = bandpass_edges(order, fs, f_low, f_high)?;
+    if !(rp_db.is_finite() && rp_db > 0.0 && rs_db.is_finite() && rs_db > rp_db) {
+        return Err(FilterDesignError::Gain);
+    }
+    let (zeros, poles) = elliptic_prototype(order, f64::from(rp_db), f64::from(rs_db));
+    let mut sections = bandstop_sections(&poles, &zeros, wl, wh, f64::from(fs));
+    normalise_dc(&mut sections, fs);
+    Ok(sections)
+}

@@ -334,3 +334,46 @@ fn butterworth_and_chebyshev1_bandpass_match_scipy() {
     println!("butter/cheby1 band-pass: {rows} points, worst |diff| {worst:.6} dB");
     assert!(rows == 54, "expected 54 reference points, read {rows}");
 }
+
+#[test]
+fn bandstop_magnitudes_match_scipy() {
+    use tpt_dsp_core::{
+        butterworth_bandstop, cascade_magnitude_response, chebyshev1_bandstop, elliptic_bandstop,
+    };
+
+    // Reference: tests/golden/generate_bandstop.py (scipy.signal.butter,
+    // cheby1 and ellip, band-stop 1–3 kHz, 48 kHz). Gain is relative to DC,
+    // where the passband sits, so the designs are compared up to a constant.
+    let mut worst = 0.0f64;
+    let mut rows = 0usize;
+    for line in golden("bandstop.csv").lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        let kind = f[0];
+        let order: usize = f[1].parse().unwrap();
+        let fs: f32 = f[2].parse().unwrap();
+        let fl: f32 = f[3].parse().unwrap();
+        let fh: f32 = f[4].parse().unwrap();
+        let ripple: f32 = f[5].parse().unwrap();
+        let atten: f32 = f[6].parse().unwrap();
+        let freq: f32 = f[7].parse().unwrap();
+        let want: f64 = f[8].parse().unwrap();
+
+        let sections = match kind {
+            "butter" => butterworth_bandstop(order, fs, fl, fh).unwrap(),
+            "cheby1" => chebyshev1_bandstop(order, fs, fl, fh, ripple).unwrap(),
+            "ellip" => elliptic_bandstop(order, fs, fl, fh, ripple, atten).unwrap(),
+            other => panic!("unknown kind `{other}`"),
+        };
+        let db = |x: f32| 20.0 * f64::from(cascade_magnitude_response(&sections, fs, x)).log10();
+        let got = db(freq) - db(0.0);
+        let err = (got - want).abs();
+        assert!(
+            err < 0.001,
+            "{kind} band-stop order {order} at {freq} Hz: got {got:.4} dB, scipy {want:.4} dB"
+        );
+        worst = worst.max(err);
+        rows += 1;
+    }
+    println!("butter/cheby1/ellip band-stop: {rows} points, worst |diff| {worst:.6} dB");
+    assert!(rows == 81, "expected 81 reference points, read {rows}");
+}

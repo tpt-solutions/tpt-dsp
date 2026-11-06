@@ -113,8 +113,9 @@ pub use filters::{process_biquad, Biquad, BiquadCoeffs, BiquadType, FilterDesign
 pub use hilbert::hilbert;
 #[cfg(feature = "alloc")]
 pub use iir_design::{
-    butterworth, butterworth_bandpass, chebyshev1_bandpass, chebyshev1_lowpass, chebyshev2_lowpass,
-    elliptic_bandpass, elliptic_highpass, elliptic_lowpass, Response,
+    butterworth, butterworth_bandpass, butterworth_bandstop, chebyshev1_bandpass,
+    chebyshev1_bandstop, chebyshev1_lowpass, chebyshev2_lowpass, elliptic_bandpass,
+    elliptic_bandstop, elliptic_highpass, elliptic_lowpass, Response,
 };
 pub use iir_design::{
     cascade_group_delay, cascade_magnitude_response, magnitude_response, DcBlocker, OnePole, Svf,
