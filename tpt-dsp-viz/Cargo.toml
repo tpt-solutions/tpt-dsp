@@ -2,7 +2,9 @@
 name = "tpt-dsp-viz"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+# Not inherited: `egui`/`eframe` (0.37) require Rust 1.95, which is above the
+# workspace MSRV. The workspace MSRV check excludes this crate (see ci.yml `msrv`).
+rust-version = "1.95"
 authors.workspace = true
 license.workspace = true
 repository.workspace = true

@@ -77,6 +77,11 @@ cargo build -p tpt-dsp-viz            # default features
 cargo build -p tpt-dsp-viz --features audio
 ```
 
+This crate needs **Rust 1.95 or later**, because `egui`/`eframe` 0.37 require it. It
+sets its own `rust-version`, so the workspace's 1.85 minimum applies to the other
+crates only. A window needs a display, so the render loop is not exercised in
+headless CI; the crate builds, tests and passes clippy there.
+
 ## License
 
 Dual licensed under **MIT** and **Apache-2.0**. © TPT Solutions.

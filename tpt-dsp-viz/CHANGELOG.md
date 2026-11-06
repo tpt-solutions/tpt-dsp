@@ -9,6 +9,11 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+### Changed
+- `eframe` and `egui` are upgraded from 0.36 to 0.37.
+- The crate sets its own `rust-version = "1.95"`, not the workspace's 1.85, because
+  `egui` 0.37 requires Rust 1.95. The workspace MSRV check excludes this crate.
+
 ## [0.2.0] - 2026-11-01
 
 ### Changed
