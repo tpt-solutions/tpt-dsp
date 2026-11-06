@@ -253,6 +253,121 @@ fn eval(x: f64, s: &Solution) -> f64 {
     num / den
 }
 
+/// Design an odd-length, linear-phase FIR by weighted least squares.
+///
+/// The filter minimises the weighted integral of the squared error between
+/// its amplitude response and the desired response, over the bands:
+/// `∫ W(f) (A(f) − D(f))² df`. The band list and weights mean the same as for
+/// [`remez_fir`].
+///
+/// The result is not equiripple. It has the lowest mean-square error for the
+/// tap count, but its peak error is larger than Parks–McClellan's, and it
+/// shows more ripple near band edges. Choose it when the average error over
+/// the bands matters more than the worst case.
+///
+/// Returns `taps` coefficients, symmetric about the centre.
+///
+/// # Errors
+/// Returns an error for an even or zero tap count, an empty or unsorted band
+/// list, bands outside `[0, 0.5)`, or a non-positive weight. A singular normal
+/// matrix is reported as [`FilterDesignError::NumericallyDegenerate`].
+pub fn least_squares_fir(taps: usize, bands: &[RemezBand]) -> Result<Vec<f32>, FilterDesignError> {
+    if taps == 0 {
+        return Err(FilterDesignError::EmptyTaps);
+    }
+    if taps % 2 == 0 {
+        return Err(FilterDesignError::EvenTapCount);
+    }
+    validate_bands(bands)?;
+    if taps == 1 {
+        return Ok(alloc::vec![bands[0].desired]);
+    }
+
+    let m = (taps - 1) / 2;
+    let n = m + 1;
+    // Amplitude response A(ω) = Σ_k x_k c_k(ω), with c_0 = 1 and
+    // c_k = 2 cos(kω), where x_k is the tap at distance k from the centre.
+    // Setting the derivative of the weighted error to zero gives the normal
+    // equations (Σ W c cᵀ) x = Σ W D c, summed over a dense grid per band.
+    let mut a = alloc::vec![0.0f64; n * n];
+    let mut b = alloc::vec![0.0f64; n];
+    let mut c = alloc::vec![0.0f64; n];
+    for band in bands {
+        let (lo, hi) = (f64::from(band.start), f64::from(band.end));
+        let span = hi - lo;
+        let pts = ((GRID_DENSITY * (m + 1)) as f64 * span / 0.5)
+            .ceil()
+            .max(2.0) as usize;
+        let w = f64::from(band.weight);
+        let d = f64::from(band.desired);
+        for j in 0..pts {
+            let f = lo + span * j as f64 / (pts - 1) as f64;
+            let omega = core::f64::consts::TAU * f;
+            c[0] = 1.0;
+            for (k, ck) in c.iter_mut().enumerate().skip(1) {
+                *ck = 2.0 * (k as f64 * omega).cos();
+            }
+            for r in 0..n {
+                b[r] += w * d * c[r];
+                for col in 0..n {
+                    a[r * n + col] += w * c[r] * c[col];
+                }
+            }
+        }
+    }
+    let x = solve_dense(&mut a, &mut b, n)?;
+
+    let mut out = alloc::vec![0.0f32; taps];
+    for (k, &xk) in x.iter().enumerate() {
+        out[m + k] = xk as f32;
+        out[m - k] = xk as f32;
+    }
+    Ok(out)
+}
+
+/// Solve the dense system `a·x = b` by Gaussian elimination with partial
+/// pivoting. `a` is `n × n` row-major and both inputs are overwritten.
+fn solve_dense(a: &mut [f64], b: &mut [f64], n: usize) -> Result<Vec<f64>, FilterDesignError> {
+    for col in 0..n {
+        // Pivot on the largest entry in this column.
+        let pivot_row = (col..n)
+            .max_by(|&r1, &r2| a[r1 * n + col].abs().total_cmp(&a[r2 * n + col].abs()))
+            .unwrap_or(col);
+        let pivot = a[pivot_row * n + col];
+        if !pivot.is_finite() || pivot.abs() < 1e-300 {
+            return Err(FilterDesignError::NumericallyDegenerate);
+        }
+        if pivot_row != col {
+            for k in 0..n {
+                a.swap(col * n + k, pivot_row * n + k);
+            }
+            b.swap(col, pivot_row);
+        }
+        for row in col + 1..n {
+            let factor = a[row * n + col] / a[col * n + col];
+            if factor == 0.0 {
+                continue;
+            }
+            for k in col..n {
+                a[row * n + k] -= factor * a[col * n + k];
+            }
+            b[row] -= factor * b[col];
+        }
+    }
+    let mut x = alloc::vec![0.0f64; n];
+    for row in (0..n).rev() {
+        let mut sum = b[row];
+        for k in row + 1..n {
+            sum -= a[row * n + k] * x[k];
+        }
+        x[row] = sum / a[row * n + row];
+    }
+    if x.iter().any(|v| !v.is_finite()) {
+        return Err(FilterDesignError::NumericallyDegenerate);
+    }
+    Ok(x)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -335,5 +450,115 @@ mod tests {
             ..band
         };
         assert!(remez_fir(31, &[zero_weight]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod least_squares_tests {
+    use super::*;
+
+    fn lowpass_bands() -> [RemezBand; 2] {
+        [
+            RemezBand {
+                start: 0.0,
+                end: 0.2,
+                desired: 1.0,
+                weight: 1.0,
+            },
+            RemezBand {
+                start: 0.3,
+                end: 0.5,
+                desired: 0.0,
+                weight: 1.0,
+            },
+        ]
+    }
+
+    /// Zero-phase amplitude response of a symmetric odd-length FIR.
+    fn amplitude(taps: &[f32], f: f32) -> f32 {
+        let m = (taps.len() - 1) / 2;
+        taps.iter()
+            .enumerate()
+            .map(|(n, &h)| h * (core::f32::consts::TAU * f * (n as f32 - m as f32)).cos())
+            .sum()
+    }
+
+    /// Mean squared weighted error over the band grid, for a design.
+    fn mean_square_error(taps: &[f32], bands: &[RemezBand]) -> f64 {
+        let mut total = 0.0f64;
+        let mut count = 0usize;
+        for b in bands {
+            let steps = 400;
+            for j in 0..=steps {
+                let f = b.start + (b.end - b.start) * j as f32 / steps as f32;
+                let e = f64::from(b.weight) * f64::from(amplitude(taps, f) - b.desired);
+                total += e * e;
+                count += 1;
+            }
+        }
+        total / count as f64
+    }
+
+    #[test]
+    fn taps_are_symmetric_and_have_the_requested_length() {
+        let taps = least_squares_fir(31, &lowpass_bands()).unwrap();
+        assert_eq!(taps.len(), 31);
+        for i in 0..15 {
+            assert!((taps[i] - taps[30 - i]).abs() < 1e-6, "tap {i}");
+        }
+    }
+
+    #[test]
+    fn lowpass_has_unity_passband_and_attenuated_stopband() {
+        let taps = least_squares_fir(31, &lowpass_bands()).unwrap();
+        assert!(
+            (amplitude(&taps, 0.0) - 1.0).abs() < 0.05,
+            "DC {}",
+            amplitude(&taps, 0.0)
+        );
+        assert!((amplitude(&taps, 0.1) - 1.0).abs() < 0.05);
+        let stop = amplitude(&taps, 0.4).abs();
+        assert!(stop < 0.05, "stopband {stop}");
+    }
+
+    #[test]
+    fn mean_square_error_is_no_worse_than_remez() {
+        // Least squares minimises the mean-square error, so on the same bands
+        // it must not lose to the equiripple design on that measure.
+        let bands = lowpass_bands();
+        let ls = least_squares_fir(31, &bands).unwrap();
+        let pm = remez_fir(31, &bands).unwrap();
+        let e_ls = mean_square_error(&ls, &bands);
+        let e_pm = mean_square_error(&pm, &bands);
+        assert!(e_ls <= e_pm * 1.05, "LS {e_ls} vs Remez {e_pm}");
+    }
+
+    #[test]
+    fn single_tap_is_the_desired_gain() {
+        assert_eq!(
+            least_squares_fir(1, &lowpass_bands()).unwrap(),
+            alloc::vec![1.0]
+        );
+    }
+
+    #[test]
+    fn invalid_arguments_are_rejected() {
+        let bands = lowpass_bands();
+        assert_eq!(
+            least_squares_fir(0, &bands),
+            Err(FilterDesignError::EmptyTaps)
+        );
+        assert_eq!(
+            least_squares_fir(10, &bands),
+            Err(FilterDesignError::EvenTapCount)
+        );
+        assert!(least_squares_fir(11, &[]).is_err());
+        let bad_weight = [RemezBand {
+            start: 0.0,
+            end: 0.2,
+            desired: 1.0,
+            weight: 0.0,
+        }];
+        assert!(least_squares_fir(11, &bad_weight).is_err());
     }
 }

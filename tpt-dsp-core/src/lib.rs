@@ -144,7 +144,7 @@ pub use psychoacoustic::{
 };
 pub use receiver::{Agc, AmDemodulator, Detector, Pll, Squelch, SsbDemodulator};
 #[cfg(feature = "alloc")]
-pub use remez::{remez_fir, RemezBand};
+pub use remez::{least_squares_fir, remez_fir, RemezBand};
 #[cfg(feature = "alloc")]
 pub use rf::CicDecimator;
 pub use rf::{Goertzel, Nco};
