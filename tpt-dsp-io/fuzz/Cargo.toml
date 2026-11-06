@@ -1,0 +1,24 @@
+[package]
+name = "tpt-dsp-io-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.tpt-dsp-io]
+path = ".."
+
+[[bin]]
+name = "wav_reader"
+path = "fuzz_targets/wav_reader.rs"
+test = false
+doc = false
+bench = false
+
+# Standalone workspace: the fuzz harness is not a member of the main workspace.
+[workspace]
