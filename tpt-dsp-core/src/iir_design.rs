@@ -1589,3 +1589,100 @@ pub fn elliptic_bandstop(
     normalise_dc(&mut sections, fs);
     Ok(sections)
 }
+
+/// Chebyshev type II prototype with the stopband edge at 1 rad/s.
+///
+/// Returns `(zeros, poles)`, in the same representation as
+/// [`elliptic_prototype`]. Each zero is a magnitude `1/|cos θₖ|` on the
+/// imaginary axis, and each pole is the reciprocal of a Chebyshev I pole,
+/// which gives the maximally flat passband. `θₖ = π(2k+1)/(2N)`, and
+/// `a = asinh(√(10^{A/10} − 1))/N`.
+#[cfg(feature = "alloc")]
+fn chebyshev2_prototype(
+    order: usize,
+    atten_db: f64,
+) -> (alloc::vec::Vec<f64>, alloc::vec::Vec<(f64, f64)>) {
+    let inv_eps = (10f64.powf(atten_db / 10.0) - 1.0).sqrt();
+    let n = order as f64;
+    let a = inv_eps.asinh() / n;
+    let (sh, ch) = (a.sinh(), a.cosh());
+    let mut zeros = alloc::vec::Vec::with_capacity(order / 2);
+    let mut poles = alloc::vec::Vec::with_capacity(order.div_ceil(2));
+    for k in 0..order / 2 {
+        let theta = core::f64::consts::PI * (2.0 * k as f64 + 1.0) / (2.0 * n);
+        // Reciprocal of the Chebyshev I pole p = σ + jω. Its conjugate
+        // (σ, ω)/|p|² has positive imaginary part and is the one kept.
+        let (pr, pi) = (-sh * theta.sin(), ch * theta.cos());
+        let mag2 = pr * pr + pi * pi;
+        poles.push((pr / mag2, pi / mag2));
+        zeros.push(1.0 / theta.cos().abs().max(1e-12));
+    }
+    if order % 2 == 1 {
+        // The middle Chebyshev I pole is real, and its reciprocal is too. Its
+        // zero sits at infinity, so it has no finite zero magnitude.
+        poles.push((-1.0 / sh, 0.0));
+    }
+    (zeros, poles)
+}
+
+/// Validate the stopband attenuation of a Chebyshev II request.
+#[cfg(feature = "alloc")]
+fn check_atten(atten_db: f32) -> Result<f64, FilterDesignError> {
+    if !(atten_db.is_finite() && atten_db > 0.0) {
+        return Err(FilterDesignError::Gain);
+    }
+    Ok(f64::from(atten_db))
+}
+
+/// Chebyshev type II band-pass filter as a biquad cascade of order `2·order`.
+///
+/// Unlike the type I forms, the band edges `f_low` and `f_high` are where the
+/// response is `−atten_db`. The passband is maximally flat and sits between
+/// them, and the stopbands outside have equiripple zeros. Matches
+/// `scipy.signal.cheby2` with `btype="bandpass"`. Gain is normalised to unity
+/// at the digital centre frequency.
+///
+/// # Errors
+/// Returns an error for a zero order, a non-positive attenuation, or invalid
+/// `fs` or edges.
+#[cfg(feature = "alloc")]
+pub fn chebyshev2_bandpass(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+    atten_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    let (wl, wh) = bandpass_edges(order, fs, f_low, f_high)?;
+    let atten = check_atten(atten_db)?;
+    let (zeros, poles) = chebyshev2_prototype(order, atten);
+    let mut sections = bandpass_sections(&poles, &zeros, wl, wh, f64::from(fs));
+    normalise_bandpass(&mut sections, fs, wl, wh);
+    Ok(sections)
+}
+
+/// Chebyshev type II band-stop filter as a biquad cascade of order `2·order`.
+///
+/// The band edges `f_low` and `f_high` are where the response is
+/// `−atten_db`, and the equiripple stopband lies between them. The passbands
+/// outside are maximally flat. Matches `scipy.signal.cheby2` with
+/// `btype="bandstop"`. Gain is normalised to unity at DC.
+///
+/// # Errors
+/// Returns an error for a zero order, a non-positive attenuation, or invalid
+/// `fs` or edges.
+#[cfg(feature = "alloc")]
+pub fn chebyshev2_bandstop(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+    atten_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    let (wl, wh) = bandpass_edges(order, fs, f_low, f_high)?;
+    let atten = check_atten(atten_db)?;
+    let (zeros, poles) = chebyshev2_prototype(order, atten);
+    let mut sections = bandstop_sections(&poles, &zeros, wl, wh, f64::from(fs));
+    normalise_dc(&mut sections, fs);
+    Ok(sections)
+}

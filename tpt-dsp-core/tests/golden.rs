@@ -377,3 +377,52 @@ fn bandstop_magnitudes_match_scipy() {
     println!("butter/cheby1/ellip band-stop: {rows} points, worst |diff| {worst:.6} dB");
     assert!(rows == 81, "expected 81 reference points, read {rows}");
 }
+
+#[test]
+fn chebyshev2_band_magnitudes_match_scipy() {
+    use tpt_dsp_core::{cascade_magnitude_response, chebyshev2_bandpass, chebyshev2_bandstop};
+
+    // Reference: tests/golden/generate_cheby2_band.py (scipy.signal.cheby2,
+    // band-pass and band-stop 1–3 kHz at 40 dB, 48 kHz). Band-pass is
+    // relative to the digital centre, band-stop to DC, as in the other
+    // band-pass and band-stop references.
+    let centre = |fs: f32, fl: f32, fh: f32| -> f32 {
+        let fs = f64::from(fs);
+        let wl = 2.0 * fs * (std::f64::consts::PI * f64::from(fl) / fs).tan();
+        let wh = 2.0 * fs * (std::f64::consts::PI * f64::from(fh) / fs).tan();
+        (fs / std::f64::consts::PI * ((wl * wh).sqrt() / (2.0 * fs)).atan()) as f32
+    };
+    let mut worst = 0.0f64;
+    let mut rows = 0usize;
+    for line in golden("cheby2_band.csv").lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        let kind = f[0];
+        let order: usize = f[1].parse().unwrap();
+        let fs: f32 = f[2].parse().unwrap();
+        let fl: f32 = f[3].parse().unwrap();
+        let fh: f32 = f[4].parse().unwrap();
+        let atten: f32 = f[5].parse().unwrap();
+        let freq: f32 = f[6].parse().unwrap();
+        let want: f64 = f[7].parse().unwrap();
+
+        let (sections, reference) = match kind {
+            "bandpass" => (
+                chebyshev2_bandpass(order, fs, fl, fh, atten).unwrap(),
+                centre(fs, fl, fh),
+            ),
+            "bandstop" => (chebyshev2_bandstop(order, fs, fl, fh, atten).unwrap(), 0.0),
+            other => panic!("unknown kind `{other}`"),
+        };
+        let db = |x: f32| 20.0 * f64::from(cascade_magnitude_response(&sections, fs, x)).log10();
+        let got = db(freq) - db(reference);
+        let err = (got - want).abs();
+        assert!(
+            err < 0.001,
+            "cheby2 {kind} order {order} at {freq} Hz: got {got:.4} dB, scipy {want:.4} dB"
+        );
+        worst = worst.max(err);
+        rows += 1;
+    }
+    println!("cheby2 band-pass/band-stop: {rows} points, worst |diff| {worst:.6} dB");
+    assert!(rows == 60, "expected 60 reference points, read {rows}");
+}
