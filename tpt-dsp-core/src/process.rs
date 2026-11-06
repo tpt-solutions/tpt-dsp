@@ -218,3 +218,91 @@ mod tests {
         assert_eq!(s.target(), 2.0);
     }
 }
+
+/// A dynamic, ordered list of processors applied one after another.
+///
+/// Use [`Chain`] when the stages are known at compile time (it dispatches
+/// statically). `Cascade` owns boxed stages, so it suits a graph built at run
+/// time, such as a pedalboard whose order the user edits. Building it
+/// allocates; processing does not, as long as each stage does not.
+#[cfg(feature = "alloc")]
+#[derive(Default)]
+pub struct Cascade {
+    stages: alloc::vec::Vec<alloc::boxed::Box<dyn Processor>>,
+}
+
+#[cfg(feature = "alloc")]
+impl Cascade {
+    /// An empty cascade (which passes its input through unchanged).
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Append a stage. Returns `self` so calls can be chained.
+    pub fn push<P: Processor + 'static>(&mut self, stage: P) -> &mut Self {
+        self.stages.push(alloc::boxed::Box::new(stage));
+        self
+    }
+
+    /// Number of stages.
+    pub fn len(&self) -> usize {
+        self.stages.len()
+    }
+
+    /// `true` if there are no stages.
+    pub fn is_empty(&self) -> bool {
+        self.stages.is_empty()
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl Processor for Cascade {
+    fn process(&mut self, x: f32) -> f32 {
+        self.stages.iter_mut().fold(x, |y, stage| stage.process(y))
+    }
+
+    fn reset(&mut self) {
+        for stage in self.stages.iter_mut() {
+            stage.reset();
+        }
+    }
+}
+
+#[cfg(all(test, feature = "alloc"))]
+mod cascade_tests {
+    use super::*;
+    use crate::{DcBlocker, OnePole};
+
+    #[test]
+    fn cascade_matches_chain_and_identity_when_empty() {
+        let mut empty = Cascade::new();
+        assert!(empty.is_empty());
+        assert_eq!(empty.process(0.25), 0.25);
+
+        let mut cascade = Cascade::new();
+        cascade
+            .push(OnePole::low_pass(48_000.0, 800.0).unwrap())
+            .push(DcBlocker::new(48_000.0, 15.0).unwrap());
+        assert_eq!(cascade.len(), 2);
+
+        let mut chain = Chain::new(
+            OnePole::low_pass(48_000.0, 800.0).unwrap(),
+            DcBlocker::new(48_000.0, 15.0).unwrap(),
+        );
+        for i in 0..300 {
+            let x = (i as f32 * 0.07).sin();
+            assert!((cascade.process(x) - chain.process(x)).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn reset_reaches_every_stage() {
+        let mut cascade = Cascade::new();
+        cascade.push(OnePole::low_pass(48_000.0, 100.0).unwrap());
+        for _ in 0..50 {
+            cascade.process(1.0);
+        }
+        cascade.reset();
+        assert_eq!(cascade.process(0.0), 0.0);
+    }
+}
