@@ -26,6 +26,8 @@ pub enum PidError {
     InvalidSampleTime,
     /// A gain was NaN or infinite.
     NonFiniteGain,
+    /// The output limits were NaN, or `min` was greater than `max`.
+    InvalidOutputLimits,
 }
 
 impl core::fmt::Display for PidError {
@@ -33,6 +35,9 @@ impl core::fmt::Display for PidError {
         match self {
             PidError::InvalidSampleTime => f.write_str("sample time must be finite and positive"),
             PidError::NonFiniteGain => f.write_str("PID gains must be finite"),
+            PidError::InvalidOutputLimits => {
+                f.write_str("output limits must be ordered, with min <= max")
+            }
         }
     }
 }
@@ -196,6 +201,126 @@ impl Pid {
         self.has_prev = true;
         clamped
     }
+
+    /// Start a [`PidBuilder`] with the given `sample_time` (seconds). Gains
+    /// default to zero and the output is unbounded.
+    pub fn builder(sample_time: f32) -> PidBuilder {
+        PidBuilder::new(sample_time)
+    }
+}
+
+/// Builder for [`Pid`], for setting every option in one expression.
+///
+/// Only the sample time, given to [`Pid::builder`], is required. Settings that
+/// are invalid are reported by [`PidBuilder::build`] rather than applied
+/// silently, which is what the setters on [`Pid`] do for some of them.
+///
+/// ```
+/// use tpt_dsp_control::{AntiWindup, Pid};
+///
+/// let pid = Pid::builder(0.01)
+///     .kp(2.0)
+///     .ki(0.5)
+///     .kd(0.1)
+///     .setpoint(10.0)
+///     .output_limits(-1.0, 1.0)
+///     .anti_windup(AntiWindup::BackCalculation(1.0))
+///     .derivative_filter(0.02)
+///     .build()
+///     .unwrap();
+/// assert_eq!(pid.setpoint(), 10.0);
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PidBuilder {
+    kp: f32,
+    ki: f32,
+    kd: f32,
+    sample_time: f32,
+    setpoint: f32,
+    output_limits: Option<(f32, f32)>,
+    anti_windup: AntiWindup,
+    derivative_tau: f32,
+}
+
+impl PidBuilder {
+    fn new(sample_time: f32) -> Self {
+        Self {
+            kp: 0.0,
+            ki: 0.0,
+            kd: 0.0,
+            sample_time,
+            setpoint: 0.0,
+            output_limits: None,
+            anti_windup: AntiWindup::Clamp,
+            derivative_tau: 0.0,
+        }
+    }
+
+    /// Proportional gain.
+    pub fn kp(mut self, kp: f32) -> Self {
+        self.kp = kp;
+        self
+    }
+
+    /// Integral gain.
+    pub fn ki(mut self, ki: f32) -> Self {
+        self.ki = ki;
+        self
+    }
+
+    /// Derivative gain.
+    pub fn kd(mut self, kd: f32) -> Self {
+        self.kd = kd;
+        self
+    }
+
+    /// Initial setpoint.
+    pub fn setpoint(mut self, setpoint: f32) -> Self {
+        self.setpoint = setpoint;
+        self
+    }
+
+    /// Clamp the output to `[min, max]`. `build` fails if `min > max` or
+    /// either bound is NaN.
+    pub fn output_limits(mut self, min: f32, max: f32) -> Self {
+        self.output_limits = Some((min, max));
+        self
+    }
+
+    /// Anti-windup strategy used while the output is saturated.
+    pub fn anti_windup(mut self, mode: AntiWindup) -> Self {
+        self.anti_windup = mode;
+        self
+    }
+
+    /// Derivative filter time constant in seconds. Non-finite or negative
+    /// values disable the filter, as [`Pid::set_derivative_filter`] does.
+    pub fn derivative_filter(mut self, tau: f32) -> Self {
+        self.derivative_tau = tau;
+        self
+    }
+
+    /// Validate the settings and build the controller.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PidError::InvalidSampleTime`] or [`PidError::NonFiniteGain`]
+    /// as [`Pid::try_new`] does, or [`PidError::InvalidOutputLimits`] for
+    /// unordered output limits.
+    pub fn build(self) -> Result<Pid, PidError> {
+        let mut pid = Pid::try_new(self.kp, self.ki, self.kd, self.sample_time)?;
+        if let Some((min, max)) = self.output_limits {
+            if min.is_nan() || max.is_nan() || min > max {
+                return Err(PidError::InvalidOutputLimits);
+            }
+            pid.out_min = min;
+            pid.out_max = max;
+        }
+        pid.setpoint = self.setpoint;
+        pid.anti_windup = self.anti_windup;
+        pid.set_derivative_filter(self.derivative_tau);
+        Ok(pid)
+    }
 }
 
 #[cfg(test)]
@@ -305,5 +430,61 @@ mod tests {
         pid.set_setpoint(0.0);
         let u = pid.update(0.0);
         assert!((-1.0..=1.0).contains(&u));
+    }
+
+    #[test]
+    fn builder_matches_the_setter_api() {
+        let mut built = Pid::builder(0.01)
+            .kp(2.0)
+            .ki(1.0)
+            .kd(0.1)
+            .setpoint(5.0)
+            .output_limits(-3.0, 3.0)
+            .anti_windup(AntiWindup::BackCalculation(0.5))
+            .derivative_filter(0.02)
+            .build()
+            .unwrap();
+        let mut set = Pid::new(2.0, 1.0, 0.1, 0.01);
+        set.set_setpoint(5.0);
+        set.set_output_limits(-3.0, 3.0);
+        set.set_anti_windup(AntiWindup::BackCalculation(0.5));
+        set.set_derivative_filter(0.02);
+        for i in 0..200 {
+            let y = (i as f32 * 0.07).sin();
+            assert_eq!(built.update(y), set.update(y), "step {i}");
+        }
+    }
+
+    #[test]
+    fn builder_reports_invalid_settings() {
+        assert_eq!(
+            Pid::builder(0.0).build().unwrap_err(),
+            PidError::InvalidSampleTime
+        );
+        assert_eq!(
+            Pid::builder(0.01).kp(f32::NAN).build().unwrap_err(),
+            PidError::NonFiniteGain
+        );
+        assert_eq!(
+            Pid::builder(0.01)
+                .output_limits(1.0, -1.0)
+                .build()
+                .unwrap_err(),
+            PidError::InvalidOutputLimits
+        );
+        assert_eq!(
+            Pid::builder(0.01)
+                .output_limits(f32::NAN, 1.0)
+                .build()
+                .unwrap_err(),
+            PidError::InvalidOutputLimits
+        );
+    }
+
+    #[test]
+    fn builder_defaults_are_an_unbounded_zero_gain_controller() {
+        let mut pid = Pid::builder(0.01).build().unwrap();
+        pid.set_setpoint(1000.0);
+        assert_eq!(pid.update(0.0), 0.0);
     }
 }

@@ -18,4 +18,4 @@ mod pid;
 
 pub use input_shaping::{InputShaper, ShaperError};
 pub use kinematics::{JerkLimiter, ProfileError, TrapezoidalProfile};
-pub use pid::{AntiWindup, Pid, PidError};
+pub use pid::{AntiWindup, Pid, PidBuilder, PidError};
