@@ -8,11 +8,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- `tpt-dsp-control` no longer declares a dependency on `tpt-dsp-core`; it had never used it.
+- `tpt-dsp-core` IIR designs reject non-finite and degenerate parameters with `FilterDesignError` instead of returning a misbehaving filter. First-order sections are exact.
+- `tpt-dsp-core` Chebyshev I design applies frequency pre-warping; the flat-top window uses full-precision coefficients.
 - `tpt-dsp-io` audio is fully in-tree: the `audio` feature links no system ALSA library, so CI no longer installs `libasound2-dev`.
 - `tpt-dsp-viz` is on eframe 0.37 (the bump was not recorded here before).
 - CI pins `dtolnay/rust-toolchain` and `taiki-e/install-action` by commit SHA, with the toolchain or tool name as an explicit input.
 
 ### Fixed
+- `tpt-dsp-core`: a biquad's state is scrubbed of NaN and subnormal values once per block, and degenerate IIR designs found by fuzzing are rejected.
+- `tpt-dsp-audio`: `synth_eq` example band order corrected.
+- `tpt-dsp-io`: `sdr_pipeline --out` writes a real WAV file for `.wav` names, and its `--tcp` path works.
+- `tpt-dsp-wasm`: the dry-chain test accounts for the convolution reverb's latency.
 - Oscillator, wavetable, FM and envelope phase wrap no longer hangs on huge or non-finite frequencies; parameters are validated.
 - `ConvolutionReverb` no longer shifts the stream after a short final block. Output now has a fixed one-block latency and the dry signal is delayed to match.
 - `SubtractiveVoice` redesigns its filter every 32 samples instead of every sample.
@@ -26,6 +33,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Biquad state is scrubbed of NaN and subnormal values once per block.
 
 ### Added
+- New crates: `tpt-dsp-testkit` (`CountingAllocator`, `allocations_in`, `assert_no_alloc` for allocation-free tests) and the `tpt-dsp` facade (feature-gated re-exports, a `prelude`, and a compiled `walkthrough`).
+- `tpt-dsp-core`: IIR design families (Butterworth, Chebyshev I and II, elliptic / Cauer) for low-pass, high-pass, band-pass and band-stop, checked against SciPy golden vectors. Also `BiquadBuilder`, `OnePole`, `DcBlocker`, the state-variable `Svf`, `halfband_fir`, and response analysis (`magnitude_response`, `cascade_magnitude_response`, `cascade_group_delay`, `cascade_poles_zeros`).
+- `tpt-dsp-core`: `WindowType` gained `Rectangular`, `FlatTop`, `Kaiser(beta)`, `Tukey(alpha)` and `Gaussian(sigma)`, and `windowed_symmetric` / `f64` window generators.
+- `tpt-dsp-core`: `Processor` trait, `Chain` combinator, `Smoothed` parameter glide, and `Cascade` (`alloc`).
+- `tpt-dsp-core`: `RationalResampler` (polyphase, rational ratio) and `FarrowDelay` (fractional delay).
+- `tpt-dsp-core`: receiver blocks `Pll` (with `Detector`s), `Agc`, `Squelch`, `AmDemodulator`, `SsbDemodulator`.
+- `tpt-dsp-core`: `remez_fir` (Parks–McClellan) and `least_squares_fir`, both checked against SciPy.
+- `tpt-dsp-core`: RF helpers `Goertzel`, `Nco` and `CicDecimator`.
+- `tpt-dsp-audio`: `Compressor`, `Limiter` and `Gate` (`dynamics`).
+- `tpt-dsp-audio`: `Lfo`, `Tremolo`, `Chorus`, `Flanger` and `Phaser` (`modulation`).
+- `tpt-dsp-audio`: `PolyBlepOscillator`, `NoiseSource`, `PinkNoise` and `TpdfDither` (`synthesis`).
+- `tpt-dsp-audio`: `Oversampler` for running nonlinear processing at a higher rate.
+- `tpt-dsp-analysis`: `LoudnessMeter` (BS.1770 integrated loudness), `Mfcc`, `stft` / `istft`, `time_stretch`, `pitch_shift`, `yin_pitch`, `detect_onsets` / `pick_onsets`, and the `spectral_flatness`, `spectral_rolloff` and `spectral_flux` descriptors.
+- `tpt-dsp-control`: `PidBuilder` (`Pid::builder`), `Pid::update_with_dt` and an optional derivative filter.
+- `tpt-dsp-wasm`: browser filter designer (`www/designer.html`, `FilterSpec`).
+- `tpt-dsp-py`: `Biquad`, `Pid` and `Oscillator` classes, a `zero-copy` feature that reads NumPy `float32` arrays in place, and type stubs.
+- `tpt-dsp-nihplug`: `templates/nihplug-effect`, a `cargo-generate` template for a new CLAP/VST3 effect.
 - Fallible constructors: `Pid::try_new`, `TrapezoidalProfile::try_new`, `InputShaper::try_new_zvd`, `BiquadCoeffs::try_design`, `Fir::try_new`, `FirDesign::try_design`, `Eq::try_new`.
 - `set_sample_rate` on `Adsr`, `SubtractiveVoice` and `Eq`.
 - `Eq::with_max_block` and `IirFilter::with_max_block`.
@@ -34,6 +58,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `tpt-dsp-analysis`: `detect_onsets` and `pick_onsets` with `OnsetConfig` (spectral-flux peak picking), and `pitch_shift` (phase vocoder, then cubic resampling).
 - `tpt-dsp-core`: `least_squares_fir`, a weighted least-squares linear-phase FIR design.
 - `tpt-dsp-core`: `Detector::DecisionDirectedQpsk`, a decision-directed Costas loop for QPSK for `Pll`.
+- `tpt-dsp-cli`: `gen`, `resample`, `design`, `response` and `completions` subcommands, plus a library `tools` module behind them.
 - `tpt-dsp-cli`: `pipeline` accepts TOML (`[[effects]]` tables) as well as JSON, chosen by the `.toml` extension.
 - `.github/workflows/release.yml`: on a `v*` tag, runs the gate, checks the tag against the workspace version, and creates the GitHub Release from the CHANGELOG section. It does not publish to crates.io.
 
@@ -42,6 +67,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Repository
 - Logs, `audio_check*.txt` and `gate.txt` are untracked and ignored. `history/` and `spec.txt` moved to `docs/archive/`.
+- CI: a benchmark compile job and a weekly criterion run, a line-coverage gate, a `cargo-hack` feature matrix, a `cargo-fuzz` smoke job, a Windows and macOS job, an MSRV check that excludes `tpt-dsp-viz`, and a Python wheel build tested with NumPy.
+- CI pins third-party actions by commit SHA. `.github/workflows/release.yml` runs on `v*` tags.
+- Property-based tests (`proptest`) cover FFT, DCT, ring buffer, WAV and LPC/LSP round trips. Golden-vector tests check the filter designs, windows and Remez FIR against SciPy.
+- `cargo-deny` ignores RUSTSEC-2026-0441 for the optional `async-std` feature only.
+- Documentation: `README.md` has an examples table; `ARCHITECTURE.md` §10–11 cover SIMD support and execution profiles; new guides are `docs/COOKBOOK.md`, `docs/RT_SAFETY.md`, `docs/CHOOSING_A_CRATE.md`, `docs/RTL_SDR.md`, and `docs/DECISIONS.md`. Added `SECURITY.md`, issue and pull-request templates. Each crate has a README and CHANGELOG.
 
 ## [0.2.0] - 2026-11-01
 
