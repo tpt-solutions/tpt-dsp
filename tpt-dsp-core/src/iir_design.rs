@@ -1146,105 +1146,6 @@ fn complex_sqrt(re: f64, im: f64) -> (f64, f64) {
     (sr, if im < 0.0 { -si } else { si })
 }
 
-/// Elliptic (Cauer) band-pass filter as a biquad cascade.
-///
-/// `order` is the prototype (low-pass) order, so the band-pass has `2·order`
-/// poles. The prototype is the same as [`elliptic_lowpass`]. It is mapped by
-/// `s → (s² + ω₀²)/(B·s)`, with `ω₀ = √(ωl·ωh)` and `B = ωh − ωl`, where the
-/// band edges are pre-warped. The cascade is normalised to unit gain at the
-/// digital centre frequency `fs/π · atan(ω₀ / 2fs)`.
-///
-/// # Errors
-/// Returns an error for a zero order, non-positive ripples, a stopband
-/// attenuation not above the passband ripple, or an invalid `fs` or band edges
-/// (`0 < fl < fh < fs/2`).
-#[cfg(feature = "alloc")]
-pub fn elliptic_bandpass(
-    order: usize,
-    fs: f32,
-    f_low: f32,
-    f_high: f32,
-    rp_db: f32,
-    rs_db: f32,
-) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
-    if order == 0 {
-        return Err(FilterDesignError::InvalidOrder);
-    }
-    check_cutoff(fs, f_low)?;
-    check_cutoff(fs, f_high)?;
-    if f_low >= f_high {
-        return Err(FilterDesignError::FrequencyOutOfRange);
-    }
-    if !(rp_db.is_finite() && rp_db > 0.0 && rs_db.is_finite() && rs_db > rp_db) {
-        return Err(FilterDesignError::Gain);
-    }
-    let (zeros, poles) = elliptic_prototype(order, f64::from(rp_db), f64::from(rs_db));
-    let fs64 = f64::from(fs);
-    let warp = |f: f32| 2.0 * fs64 * (core::f64::consts::PI * f64::from(f) / fs64).tan();
-    let wl = warp(f_low);
-    let wh = warp(f_high);
-    let w0sq = wl * wh;
-    let w0 = w0sq.sqrt();
-    let bw = wh - wl;
-
-    let mut sections = alloc::vec::Vec::with_capacity(2 * order.div_ceil(2) + 1);
-    let mut zero_iter = zeros.iter();
-    for &(re, im) in &poles {
-        if im == 0.0 {
-            // A real LP pole p gives s² − p·B·s + ω₀² = 0. The LP zero at
-            // infinity becomes a zero at the origin, used by one of the sections.
-            let b = re * bw;
-            let disc = b * b - 4.0 * w0sq;
-            if disc >= 0.0 {
-                let s = disc.sqrt();
-                let (r1, r2) = ((b + s) / 2.0, (b - s) / 2.0);
-                sections.push(bilinear_biquad([0.0, 1.0, 0.0], [-r1, 1.0, 0.0], fs64));
-                sections.push(bilinear_biquad([-r2, 0.0, 0.0], [-r2, 1.0, 0.0], fs64));
-            } else {
-                let (rr, ri) = (b / 2.0, (-disc).sqrt() / 2.0);
-                sections.push(bilinear_biquad(
-                    [0.0, 1.0, 0.0],
-                    [rr * rr + ri * ri, -2.0 * rr, 1.0],
-                    fs64,
-                ));
-            }
-        } else {
-            // A complex LP pole pair p, p̄ with its zero pair ±jy. Each root r of
-            // s² − p·B·s + ω₀² = 0 is a BP pole (with its conjugate partner from
-            // p̄). The zero ±jy maps to the two zero pairs ±j·a₁ and ±j·a₂.
-            let y = zero_iter.next().copied().unwrap_or(0.0);
-            let yb = y * bw;
-            let root_mag = (yb * yb + 4.0 * w0sq).sqrt();
-            let (a1, a2) = ((yb + root_mag) / 2.0, (root_mag - yb) / 2.0);
-            // Discriminant (p·B)² − 4ω₀², then its square root.
-            let (pbr, pbi) = (re * bw, im * bw);
-            let disc_re = pbr * pbr - pbi * pbi - 4.0 * w0sq;
-            let disc_im = 2.0 * pbr * pbi;
-            let (sr, si) = complex_sqrt(disc_re, disc_im);
-            let r1 = ((pbr + sr) / 2.0, (pbi + si) / 2.0);
-            let r2 = ((pbr - sr) / 2.0, (pbi - si) / 2.0);
-            for (r, a) in [(r1, a1), (r2, a2)] {
-                sections.push(bilinear_biquad(
-                    [a * a, 0.0, 1.0],
-                    [r.0 * r.0 + r.1 * r.1, -2.0 * r.0, 1.0],
-                    fs64,
-                ));
-            }
-        }
-    }
-
-    // Unit gain at the digital centre frequency.
-    let centre = fs64 / core::f64::consts::PI * (w0 / (2.0 * fs64)).atan();
-    let g = cascade_magnitude_response(&sections, fs, centre as f32);
-    if g.is_finite() && g > 1e-12 {
-        let first = &mut sections[0];
-        first.b0 /= g;
-        first.b1 /= g;
-        first.b2 /= g;
-    }
-    Ok(sections)
-}
-
 #[cfg(all(test, feature = "alloc"))]
 mod elliptic_bandpass_tests {
     use super::*;
@@ -1270,4 +1171,228 @@ mod elliptic_bandpass_tests {
         assert!(elliptic_bandpass(2, FS, 3000.0, 1000.0, 1.0, 40.0).is_err());
         assert!(elliptic_bandpass(2, FS, 1000.0, 30_000.0, 1.0, 40.0).is_err());
     }
+}
+
+/// Map a low-pass prototype (edge at 1 rad/s) to a band-pass cascade.
+///
+/// `poles` lists the prototype poles: one representative per complex pair
+/// (positive imaginary part) and each real pole once. `zero_mags` lists the
+/// magnitudes of the finite prototype zeros, one per complex pair, in the same
+/// order as the complex poles; an all-pole prototype passes an empty slice.
+/// `wl` and `wh` are the pre-warped band edges in rad/s.
+///
+/// The substitution is `s → (s² + ω₀²)/(B·s)`, with `ω₀² = wl·wh` and
+/// `B = wh − wl`. Each complex pole pair gives two band-pass pole pairs. Each
+/// real pole gives two real poles, or a complex pair when the discriminant is
+/// negative. The zeros at the origin that the mapping produces from zeros at
+/// infinity go into the real-pole sections, or into a complex pair's own
+/// sections when the prototype has no finite zero for that pair.
+#[cfg(feature = "alloc")]
+fn bandpass_sections(
+    poles: &[(f64, f64)],
+    zero_mags: &[f64],
+    wl: f64,
+    wh: f64,
+    fs: f64,
+) -> alloc::vec::Vec<BiquadCoeffs<f32>> {
+    let w0sq = wl * wh;
+    let bw = wh - wl;
+    let mut sections = alloc::vec::Vec::with_capacity(2 * poles.len() + 1);
+    let mut zero_iter = zero_mags.iter();
+    for &(re, im) in poles {
+        if im == 0.0 {
+            // s² − p·B·s + ω₀² = 0. The prototype zero at infinity becomes a
+            // zero at the origin, carried by one of the sections.
+            let b = re * bw;
+            let disc = b * b - 4.0 * w0sq;
+            if disc >= 0.0 {
+                let s = disc.sqrt();
+                let (r1, r2) = ((b + s) / 2.0, (b - s) / 2.0);
+                sections.push(bilinear_biquad([0.0, 1.0, 0.0], [-r1, 1.0, 0.0], fs));
+                sections.push(bilinear_biquad([-r2, 0.0, 0.0], [-r2, 1.0, 0.0], fs));
+            } else {
+                let (rr, ri) = (b / 2.0, (-disc).sqrt() / 2.0);
+                sections.push(bilinear_biquad(
+                    [0.0, 1.0, 0.0],
+                    [rr * rr + ri * ri, -2.0 * rr, 1.0],
+                    fs,
+                ));
+            }
+        } else {
+            // Complex pair p, p̄: the roots r of s² − p·B·s + ω₀² = 0 are the
+            // band-pass poles (their conjugates come from p̄).
+            let (pbr, pbi) = (re * bw, im * bw);
+            let disc_re = pbr * pbr - pbi * pbi - 4.0 * w0sq;
+            let disc_im = 2.0 * pbr * pbi;
+            let (sr, si) = complex_sqrt(disc_re, disc_im);
+            let roots = [
+                ((pbr + sr) / 2.0, (pbi + si) / 2.0),
+                ((pbr - sr) / 2.0, (pbi - si) / 2.0),
+            ];
+            // With a finite zero ±jy, the two root sections get zero pairs
+            // ±j·a₁ and ±j·a₂ from the mapped zero. Without one, the zeros sit
+            // at the origin.
+            let numerators: [[f64; 3]; 2] = match zero_iter.next() {
+                Some(&y) => {
+                    let yb = y * bw;
+                    let root_mag = (yb * yb + 4.0 * w0sq).sqrt();
+                    let (a1, a2) = ((yb + root_mag) / 2.0, (root_mag - yb) / 2.0);
+                    [[a1 * a1, 0.0, 1.0], [a2 * a2, 0.0, 1.0]]
+                }
+                None => [[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]],
+            };
+            for (r, num) in roots.iter().zip(numerators.iter()) {
+                sections.push(bilinear_biquad(
+                    *num,
+                    [r.0 * r.0 + r.1 * r.1, -2.0 * r.0, 1.0],
+                    fs,
+                ));
+            }
+        }
+    }
+    sections
+}
+
+/// Validate a band-pass request and return the pre-warped band edges
+/// `(wl, wh)` in rad/s.
+#[cfg(feature = "alloc")]
+fn bandpass_edges(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+) -> Result<(f64, f64), FilterDesignError> {
+    if order == 0 {
+        return Err(FilterDesignError::InvalidOrder);
+    }
+    check_cutoff(fs, f_low)?;
+    check_cutoff(fs, f_high)?;
+    if f_low >= f_high {
+        return Err(FilterDesignError::FrequencyOutOfRange);
+    }
+    let fs64 = f64::from(fs);
+    let warp = |f: f32| 2.0 * fs64 * (core::f64::consts::PI * f64::from(f) / fs64).tan();
+    Ok((warp(f_low), warp(f_high)))
+}
+
+/// Normalise a band-pass cascade to unit gain at its digital centre frequency,
+/// `fs/π · atan(ω₀ / 2fs)` with `ω₀ = √(wl·wh)`.
+#[cfg(feature = "alloc")]
+fn normalise_bandpass(sections: &mut [BiquadCoeffs<f32>], fs: f32, wl: f64, wh: f64) {
+    let fs64 = f64::from(fs);
+    let w0 = (wl * wh).sqrt();
+    let centre = (fs64 / core::f64::consts::PI * (w0 / (2.0 * fs64)).atan()) as f32;
+    let g = cascade_magnitude_response(sections, fs, centre);
+    if g.is_finite() && g > 1e-12 {
+        let first = &mut sections[0];
+        first.b0 /= g;
+        first.b1 /= g;
+        first.b2 /= g;
+    }
+}
+
+/// Elliptic (Cauer) band-pass filter as a biquad cascade.
+///
+/// `order` is the prototype (low-pass) order, so the band-pass has `2·order`
+/// poles. The prototype is the same as [`elliptic_lowpass`], mapped to the
+/// pre-warped band edges. The cascade is normalised to unit gain at the
+/// digital centre frequency `fs/π · atan(ω₀ / 2fs)`. This matches
+/// `scipy.signal.ellip` with `btype="band"` to within 0.001 dB.
+///
+/// # Errors
+/// Returns an error for a zero order, non-positive ripples, a stopband
+/// attenuation not above the passband ripple, or an invalid `fs` or band edges
+/// (`0 < fl < fh < fs/2`).
+#[cfg(feature = "alloc")]
+pub fn elliptic_bandpass(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+    rp_db: f32,
+    rs_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    let (wl, wh) = bandpass_edges(order, fs, f_low, f_high)?;
+    if !(rp_db.is_finite() && rp_db > 0.0 && rs_db.is_finite() && rs_db > rp_db) {
+        return Err(FilterDesignError::Gain);
+    }
+    let (zeros, poles) = elliptic_prototype(order, f64::from(rp_db), f64::from(rs_db));
+    let mut sections = bandpass_sections(&poles, &zeros, wl, wh, f64::from(fs));
+    normalise_bandpass(&mut sections, fs, wl, wh);
+    Ok(sections)
+}
+
+/// Butterworth band-pass filter as a biquad cascade of order `2·order`.
+///
+/// Matches `scipy.signal.butter` with `btype="band"`. The cascade is
+/// normalised to unit gain at the digital centre frequency.
+///
+/// # Errors
+/// Returns an error for a zero order or an invalid `fs` or band edges.
+#[cfg(feature = "alloc")]
+pub fn butterworth_bandpass(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    let (wl, wh) = bandpass_edges(order, fs, f_low, f_high)?;
+    // Butterworth prototype poles lie on the unit circle in the left half
+    // plane, at angle π/2 + π(2k+1)/(2N). Keep one of each conjugate pair.
+    let n = order as f64;
+    let mut poles = alloc::vec::Vec::new();
+    for k in 0..order {
+        let theta = core::f64::consts::FRAC_PI_2
+            + core::f64::consts::PI * (2.0 * k as f64 + 1.0) / (2.0 * n);
+        let (re, im) = (theta.cos(), theta.sin());
+        if im > 1e-12 {
+            poles.push((re, im));
+        } else if im.abs() <= 1e-12 {
+            poles.push((-1.0, 0.0));
+        }
+    }
+    let mut sections = bandpass_sections(&poles, &[], wl, wh, f64::from(fs));
+    normalise_bandpass(&mut sections, fs, wl, wh);
+    Ok(sections)
+}
+
+/// Chebyshev type I band-pass filter as a biquad cascade of order `2·order`.
+///
+/// `ripple_db` is the passband ripple, as for [`chebyshev1_lowpass`]. Matches
+/// `scipy.signal.cheby1` with `btype="band"`. The cascade is normalised to
+/// unit gain at the digital centre frequency.
+///
+/// # Errors
+/// Returns an error for a zero order, a non-positive ripple, or an invalid `fs`
+/// or band edges.
+#[cfg(feature = "alloc")]
+pub fn chebyshev1_bandpass(
+    order: usize,
+    fs: f32,
+    f_low: f32,
+    f_high: f32,
+    ripple_db: f32,
+) -> Result<alloc::vec::Vec<BiquadCoeffs<f32>>, FilterDesignError> {
+    let (wl, wh) = bandpass_edges(order, fs, f_low, f_high)?;
+    if !(ripple_db.is_finite() && ripple_db > 0.0) {
+        return Err(FilterDesignError::Gain);
+    }
+    // Chebyshev I prototype poles (edge at 1 rad/s): σ = −sinh a · sin θ and
+    // ω = cosh a · cos θ, with θ = π(2k+1)/(2N) and a = asinh(1/ε)/N.
+    let eps = (10f64.powf(f64::from(ripple_db) / 10.0) - 1.0).sqrt();
+    let n = order as f64;
+    let a = (1.0 / eps).asinh() / n;
+    let (sh, ch) = (a.sinh(), a.cosh());
+    let mut poles = alloc::vec::Vec::new();
+    for k in 0..order.div_ceil(2) {
+        let theta = core::f64::consts::PI * (2.0 * k as f64 + 1.0) / (2.0 * n);
+        if order % 2 == 1 && k == order / 2 {
+            poles.push((-sh, 0.0));
+        } else {
+            poles.push((-sh * theta.sin(), ch * theta.cos()));
+        }
+    }
+    let mut sections = bandpass_sections(&poles, &[], wl, wh, f64::from(fs));
+    normalise_bandpass(&mut sections, fs, wl, wh);
+    Ok(sections)
 }

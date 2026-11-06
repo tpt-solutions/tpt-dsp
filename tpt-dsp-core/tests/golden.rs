@@ -290,3 +290,47 @@ fn elliptic_bandpass_magnitude_matches_scipy() {
     println!("elliptic band-pass: {rows} points, worst |diff| {worst:.6} dB");
     assert!(rows == 27, "expected 27 reference points, read {rows}");
 }
+
+#[test]
+fn butterworth_and_chebyshev1_bandpass_match_scipy() {
+    use tpt_dsp_core::{butterworth_bandpass, cascade_magnitude_response, chebyshev1_bandpass};
+
+    // Reference: tests/golden/generate_bandpass.py (scipy.signal.butter and
+    // cheby1, band-pass 1–3 kHz, 48 kHz), relative to the digital centre.
+    let centre = |fs: f32, fl: f32, fh: f32| -> f32 {
+        let fs = f64::from(fs);
+        let wl = 2.0 * fs * (std::f64::consts::PI * f64::from(fl) / fs).tan();
+        let wh = 2.0 * fs * (std::f64::consts::PI * f64::from(fh) / fs).tan();
+        (fs / std::f64::consts::PI * ((wl * wh).sqrt() / (2.0 * fs)).atan()) as f32
+    };
+    let mut worst = 0.0f64;
+    let mut rows = 0usize;
+    for line in golden("bandpass.csv").lines().skip(1) {
+        let f: Vec<&str> = line.split(',').collect();
+        let kind = f[0];
+        let order: usize = f[1].parse().unwrap();
+        let fs: f32 = f[2].parse().unwrap();
+        let fl: f32 = f[3].parse().unwrap();
+        let fh: f32 = f[4].parse().unwrap();
+        let ripple: f32 = f[5].parse().unwrap();
+        let freq: f32 = f[6].parse().unwrap();
+        let want: f64 = f[7].parse().unwrap();
+
+        let sections = match kind {
+            "butter" => butterworth_bandpass(order, fs, fl, fh).unwrap(),
+            "cheby1" => chebyshev1_bandpass(order, fs, fl, fh, ripple).unwrap(),
+            other => panic!("unknown kind `{other}`"),
+        };
+        let db = |x: f32| 20.0 * f64::from(cascade_magnitude_response(&sections, fs, x)).log10();
+        let got = db(freq) - db(centre(fs, fl, fh));
+        let err = (got - want).abs();
+        assert!(
+            err < 0.02,
+            "{kind} band-pass order {order} at {freq} Hz: got {got:.4} dB, scipy {want:.4} dB"
+        );
+        worst = worst.max(err);
+        rows += 1;
+    }
+    println!("butter/cheby1 band-pass: {rows} points, worst |diff| {worst:.6} dB");
+    assert!(rows == 54, "expected 54 reference points, read {rows}");
+}
