@@ -9,6 +9,20 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+### Added
+- Browser filter designer, `www/designer.html`, backed by `FilterSpec`. It plots the
+  magnitude response and returns the biquad coefficients for the tpt-dsp IIR designs:
+  Butterworth, Chebyshev I and II, and elliptic, as low-pass, high-pass, band-pass
+  and band-stop. `FilterSpec` exposes `response_db`, `coefficients` and
+  `section_count`.
+
+### Changed
+- The allocation-free check uses `tpt-dsp-testkit`'s `CountingAllocator` and
+  `assert_no_alloc`, instead of a counting allocator defined in this crate.
+
+### Fixed
+- The dry-chain test accounts for the convolution reverb's one-block latency.
+
 ## [0.2.0] - 2026-11-01
 
 ### Changed

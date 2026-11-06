@@ -28,11 +28,11 @@ buffer it touches (the delay line, the reverb FFT scratch, the EQ scratch, the
 wet mix buffer) is allocated in `Pedalboard::new`/`with_sample_rate`.
 
 That claim is enforced, not asserted: the test
-`process_block_128_does_not_allocate` installs a counting global allocator
-(`std::alloc::System` behind a per-thread counter), warms the chain up once and
-then requires **zero** allocations across 64 blocks. A companion test
-(`counting_allocator_actually_sees_allocations`) proves the probe is wired up,
-so a silently-broken hook cannot make the first test pass by accident.
+`process_block_128_does_not_allocate` installs `tpt-dsp-testkit`'s
+`CountingAllocator` as the global allocator, warms the chain up once, then counts
+the allocations made across 64 blocks with `allocations_in` and requires **zero**. A
+companion test (`counting_allocator_actually_sees_allocations`) proves the probe is
+wired up, so a silently-broken hook cannot make the first test pass by accident.
 
 ```sh
 cargo test -p tpt-dsp-wasm
@@ -94,6 +94,21 @@ python -m http.server 8080 --directory www   # or: npx serve www
 Click **Start**, allow microphone access, and use headphones — an open speaker
 plus a live mic through a distortion pedal is a feedback loop.
 
+## Filter designer
+
+`www/designer.html` is a separate page, linked from the pedalboard's index page. It
+designs a filter with the tpt-dsp IIR functions and plots its magnitude response. It
+also prints the biquad coefficients, so you can copy them into your own code.
+
+- Families: Butterworth, Chebyshev I, Chebyshev II and elliptic.
+- Shapes: low-pass, high-pass, band-pass and band-stop.
+- Parameters: order, sample rate, edge frequencies, passband ripple and stopband
+  attenuation, as each family needs them.
+
+The design runs in Rust. `FilterSpec` (in `src/designer.rs`) is a `wasm-bindgen`
+wrapper that exposes `response_db`, `coefficients` and `section_count`, and the
+design logic is tested natively with `cargo test -p tpt-dsp-wasm`.
+
 ## How the pieces fit
 
 ```text
@@ -120,6 +135,8 @@ Files in `www/`:
 | `main.js`             | Main-thread setup: wasm init, worklet load, mic → node → out.  |
 | `pedal-processor.js`  | The `AudioWorkletProcessor` that runs the DSP.                 |
 | `text-codec-shim.js`  | Minimal UTF-8 `TextDecoder`/`TextEncoder` for the worklet scope, which lacks them; imported before the wasm glue. |
+| `designer.html`       | Filter designer page: family, shape and parameter controls, response plot and coefficients. |
+| `designer.js`         | Designer page logic: calls `FilterSpec` and draws the response.                    |
 
 Browser support notes:
 
