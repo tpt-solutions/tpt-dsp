@@ -893,3 +893,117 @@ mod halfband_tests {
         assert!(halfband_fir(19).is_ok());
     }
 }
+
+/// Named-parameter builder for a biquad.
+///
+/// The defaults are 48 kHz, 1 kHz, Q 0.707 and 0 dB, so a common filter reads
+/// as `Biquad::builder(BiquadType::LowPass).frequency(2_000.0).build()`.
+/// [`build`](Self::build) validates the parameters and returns the same
+/// [`FilterDesignError`] as [`BiquadCoeffs::try_design`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BiquadBuilder {
+    kind: BiquadType,
+    sample_rate: f32,
+    frequency: f32,
+    q: f32,
+    gain_db: f32,
+}
+
+impl BiquadBuilder {
+    /// A builder for `kind` with the default parameters.
+    pub fn new(kind: BiquadType) -> Self {
+        Self {
+            kind,
+            sample_rate: 48_000.0,
+            frequency: 1_000.0,
+            q: 0.707,
+            gain_db: 0.0,
+        }
+    }
+
+    /// Sample rate in Hz.
+    pub fn sample_rate(mut self, hz: f32) -> Self {
+        self.sample_rate = hz;
+        self
+    }
+
+    /// Corner or centre frequency in Hz.
+    pub fn frequency(mut self, hz: f32) -> Self {
+        self.frequency = hz;
+        self
+    }
+
+    /// Quality factor (ignored by the shelving kinds).
+    pub fn q(mut self, q: f32) -> Self {
+        self.q = q;
+        self
+    }
+
+    /// Peak or shelf gain in dB (used by the peaking and shelving kinds).
+    pub fn gain_db(mut self, db: f32) -> Self {
+        self.gain_db = db;
+        self
+    }
+
+    /// Validate the parameters and build the filter.
+    ///
+    /// # Errors
+    /// Returns the [`FilterDesignError`] that [`BiquadCoeffs::try_design`]
+    /// would return for these parameters.
+    pub fn build(self) -> Result<Biquad<f32>, FilterDesignError> {
+        BiquadCoeffs::try_design(
+            self.kind,
+            self.sample_rate,
+            self.frequency,
+            self.q,
+            self.gain_db,
+        )
+        .map(Biquad::from_coeffs)
+    }
+}
+
+impl Biquad<f32> {
+    /// Start a [`BiquadBuilder`] for `kind`.
+    pub fn builder(kind: BiquadType) -> BiquadBuilder {
+        BiquadBuilder::new(kind)
+    }
+}
+
+#[cfg(test)]
+mod builder_tests {
+    use super::*;
+
+    #[test]
+    fn builder_matches_the_positional_design() {
+        let mut a = Biquad::<f32>::builder(BiquadType::Peaking)
+            .sample_rate(44_100.0)
+            .frequency(2_500.0)
+            .q(1.4)
+            .gain_db(-6.0)
+            .build()
+            .unwrap();
+        let mut b = Biquad::<f32>::design(BiquadType::Peaking, 44_100.0, 2_500.0, 1.4, -6.0);
+        for i in 0..200 {
+            let x = (i as f32 * 0.1).sin();
+            assert!((a.tick(x) - b.tick(x)).abs() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn defaults_build_a_valid_lowpass() {
+        assert!(Biquad::<f32>::builder(BiquadType::LowPass).build().is_ok());
+    }
+
+    #[test]
+    fn invalid_parameters_are_reported_not_panicked() {
+        let err = Biquad::<f32>::builder(BiquadType::LowPass)
+            .frequency(30_000.0)
+            .build()
+            .unwrap_err();
+        assert_eq!(err, FilterDesignError::FrequencyOutOfRange);
+        assert!(Biquad::<f32>::builder(BiquadType::LowPass)
+            .q(0.0)
+            .build()
+            .is_err());
+    }
+}

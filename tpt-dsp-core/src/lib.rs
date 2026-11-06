@@ -154,7 +154,7 @@ pub use windows::{windowed, windowed_f64, windowed_symmetric, windowed_symmetric
 #[cfg(feature = "alloc")]
 pub use convolution::{ConvolvePlan, FftConvolver};
 #[cfg(feature = "alloc")]
-pub use filters::{halfband_fir, Fir, FirDesign, IirCoeffs, IirFilter, IirStage};
+pub use filters::{halfband_fir, BiquadBuilder, Fir, FirDesign, IirCoeffs, IirFilter, IirStage};
 #[cfg(feature = "alloc")]
 pub use hilbert::HilbertTransformer;
 #[cfg(feature = "alloc")]
