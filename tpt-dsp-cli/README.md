@@ -28,14 +28,47 @@ tpt-dsp-cli info     --input iq.u8 --format i16le
   peaks). `--fft-size` and `--window` (default Hann) set the analysis; `--csv`
   dumps the averaged spectrum.
 - **`info`** — print WAV header metadata or IQ file size / format.
+- **`pipeline`** — apply an ordered list of effects from a spec file to a WAV file.
+  The file is JSON, `{"effects": [ … ]}`, or TOML with `[[effects]]` tables when the
+  name ends in `.toml`. The effects use the same syntax as `filter`.
+- **`gen`** — write a test WAV file. `--waveform` is `sine`, `saw`, `square`, `noise`
+  or `chirp`, with `--freq`, `--seconds`, `--rate`, `--amplitude` and `--channels`.
+  The saw and square are band-limited.
+- **`resample`** — convert a WAV file to another sample rate (`--to-rate`) with the
+  polyphase resampler.
+- **`design`** — print the magnitude response of a designed low-pass filter as CSV.
+  `--kind` is `butter`, `cheby1` or `cheby2`, with `--order`, `--cutoff`, `--rate`,
+  `--ripple` (Chebyshev I) and `--atten` (Chebyshev II).
+- **`response`** — print the magnitude response of an effect chain as CSV, given as
+  repeated `--effect` arguments. `--fft-size` sets the measurement resolution.
+- **`completions`** — print a completion script for `bash`, `zsh`, `fish`,
+  `powershell` or `elvish`.
 
 WAV I/O uses `tpt-dsp-io`'s built-in RIFF/WAVE module; IQ parsing uses `tpt-dsp-io`.
+
+Example pipeline file (`chain.toml`):
+
+```toml
+[[effects]]
+kind = "biquad"
+type = "lowpass"
+freq = 1000.0
+
+[[effects]]
+kind = "delay"
+seconds = 0.25
+```
+
+Run it with `tpt-dsp-cli pipeline --spec chain.toml --input in.wav --output out.wav`.
 
 ## Library
 
 The subcommands are thin wrappers over public functions, so the same steps can be
 used from Rust: `read_wav` / `write_wav`, `Effect::parse` and `EffectChain`,
 `read_iq` / `demod_iq`, `analyze_real` / `analyze_complex`, and `write_spectrum_csv`.
+The generation, resampling, design and pipeline steps are in the `tools` module:
+`generate`, `resample`, `design_response`, `effect_response`, `parse_pipeline_json`
+and `parse_pipeline_toml`.
 
 ## Build
 

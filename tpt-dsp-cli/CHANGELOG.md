@@ -9,6 +9,23 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+### Added
+- `gen`: write a test WAV file (sine, saw, square, noise or chirp) with chosen
+  frequency, duration, sample rate, amplitude and channel count.
+- `resample`: convert a WAV file to another sample rate with the polyphase rational
+  resampler.
+- `design`: print the magnitude response of a designed low-pass filter as CSV. The
+  families are Butterworth, Chebyshev I and Chebyshev II.
+- `response`: print the magnitude response of an effect chain, given with the same
+  `--effect` syntax as `filter`, as CSV.
+- `pipeline`: apply an ordered effect list from a file. JSON uses `{"effects": [...]}`,
+  and a name ending in `.toml` uses `[[effects]]` tables.
+- `completions`: print a shell completion script for bash, zsh, fish, PowerShell or
+  elvish.
+- Library modules for the new subcommands, in `tools`: `GenSpec` and `generate`,
+  `resample`, `DesignSpec` and `design_response`, `effect_response`, and
+  `parse_pipeline_json` and `parse_pipeline_toml`.
+
 ## [0.2.0] - 2026-11-01
 
 ### Changed
