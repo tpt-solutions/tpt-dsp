@@ -61,6 +61,108 @@ pub struct RtlTcpInfo {
     pub gain_count: u32,
 }
 
+/// A control command `rtl_tcp` accepts on its socket.
+///
+/// The server reads commands from the same connection that carries the
+/// samples. Each command is five bytes: a one-byte opcode followed by a
+/// big-endian 32-bit parameter. The commands here are the tuner settings that
+/// librtlsdr exposes; the rest of the protocol (bias tee, direct sampling,
+/// test mode and so on) is not wrapped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RtlTcpCommand {
+    /// Set the tuner centre frequency in hertz.
+    SetCenterFrequency(u32),
+    /// Set the sample rate in samples per second.
+    SetSampleRate(u32),
+    /// Select manual (`true`) or automatic (`false`) tuner gain.
+    SetManualGain(bool),
+    /// Set the tuner gain in tenths of a decibel. Only used in manual gain
+    /// mode, so send [`RtlTcpCommand::SetManualGain`] first.
+    SetTunerGainTenthDb(i32),
+    /// Set the frequency correction in parts per million.
+    SetFrequencyCorrectionPpm(i32),
+}
+
+impl RtlTcpCommand {
+    /// The five wire bytes for this command.
+    pub fn encode(self) -> [u8; 5] {
+        let (opcode, param) = match self {
+            Self::SetCenterFrequency(hz) => (0x01, hz),
+            Self::SetSampleRate(hz) => (0x02, hz),
+            Self::SetManualGain(manual) => (0x03, u32::from(manual)),
+            Self::SetTunerGainTenthDb(tenth_db) => (0x04, tenth_db as u32),
+            Self::SetFrequencyCorrectionPpm(ppm) => (0x05, ppm as u32),
+        };
+        let p = param.to_be_bytes();
+        [opcode, p[0], p[1], p[2], p[3]]
+    }
+}
+
+impl TcpIqSource<std::net::TcpStream> {
+    /// Send a control command to an `rtl_tcp` server on this connection.
+    ///
+    /// Commands and samples share the socket, so a command takes effect for
+    /// the samples that follow it. Only meaningful on a connection made with
+    /// [`connect_rtl_tcp`](Self::connect_rtl_tcp).
+    ///
+    /// # Errors
+    ///
+    /// Returns the socket write error.
+    pub fn send_command(&mut self, command: RtlTcpCommand) -> std::io::Result<()> {
+        use std::io::Write;
+        self.reader.write_all(&command.encode())?;
+        self.reader.flush()
+    }
+
+    /// Tune the dongle to `hz` (centre frequency).
+    ///
+    /// # Errors
+    ///
+    /// Returns the socket write error.
+    pub fn set_center_frequency(&mut self, hz: u32) -> std::io::Result<()> {
+        self.send_command(RtlTcpCommand::SetCenterFrequency(hz))
+    }
+
+    /// Set the sample rate in samples per second.
+    ///
+    /// # Errors
+    ///
+    /// Returns the socket write error.
+    pub fn set_sample_rate(&mut self, hz: u32) -> std::io::Result<()> {
+        self.send_command(RtlTcpCommand::SetSampleRate(hz))
+    }
+
+    /// Set the tuner gain in tenths of a decibel, switching to manual gain
+    /// first.
+    ///
+    /// # Errors
+    ///
+    /// Returns the socket write error.
+    pub fn set_tuner_gain_tenth_db(&mut self, tenth_db: i32) -> std::io::Result<()> {
+        self.send_command(RtlTcpCommand::SetManualGain(true))?;
+        self.send_command(RtlTcpCommand::SetTunerGainTenthDb(tenth_db))
+    }
+
+    /// Return the tuner to automatic gain control.
+    ///
+    /// # Errors
+    ///
+    /// Returns the socket write error.
+    pub fn set_auto_gain(&mut self) -> std::io::Result<()> {
+        self.send_command(RtlTcpCommand::SetManualGain(false))
+    }
+
+    /// Set the crystal frequency correction in parts per million.
+    ///
+    /// # Errors
+    ///
+    /// Returns the socket write error.
+    pub fn set_frequency_correction_ppm(&mut self, ppm: i32) -> std::io::Result<()> {
+        self.send_command(RtlTcpCommand::SetFrequencyCorrectionPpm(ppm))
+    }
+}
+
 /// Read and check the 12-byte `rtl_tcp` greeting from `reader`.
 ///
 /// # Errors
@@ -399,6 +501,84 @@ mod tests {
         let mut source = TcpIqSource::new(reader, IqFormat::U8);
         let mut buf = [Complex32::default(); 4];
         assert_eq!(source.recv(&mut buf).unwrap(), 0);
+    }
+
+    #[test]
+    fn rtl_tcp_commands_encode_opcode_then_big_endian_param() {
+        assert_eq!(
+            RtlTcpCommand::SetCenterFrequency(100_100_000).encode(),
+            [0x01, 0x05, 0xF7, 0x67, 0xA0]
+        );
+        assert_eq!(
+            RtlTcpCommand::SetSampleRate(2_400_000).encode(),
+            [0x02, 0x00, 0x24, 0x9F, 0x00]
+        );
+        assert_eq!(
+            RtlTcpCommand::SetManualGain(true).encode(),
+            [0x03, 0, 0, 0, 1]
+        );
+        assert_eq!(
+            RtlTcpCommand::SetManualGain(false).encode(),
+            [0x03, 0, 0, 0, 0]
+        );
+        // Negative values are two's complement in the 32-bit parameter.
+        assert_eq!(
+            RtlTcpCommand::SetTunerGainTenthDb(-50).encode(),
+            [0x04, 0xFF, 0xFF, 0xFF, 0xCE]
+        );
+        assert_eq!(
+            RtlTcpCommand::SetFrequencyCorrectionPpm(-3).encode(),
+            [0x05, 0xFF, 0xFF, 0xFF, 0xFD]
+        );
+    }
+
+    #[test]
+    fn rtl_tcp_control_commands_arrive_in_order_on_the_sample_socket() {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (sample_bytes, expect) = u8_pattern(40);
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut greeting = b"RTL0".to_vec();
+            greeting.extend_from_slice(&1u32.to_be_bytes());
+            greeting.extend_from_slice(&29u32.to_be_bytes());
+            stream.write_all(&greeting).unwrap();
+
+            // The client sends its commands before the server sends samples.
+            // Five commands: frequency, rate, manual gain, gain, correction.
+            let mut received = [0u8; 5 * 5];
+            stream.read_exact(&mut received).unwrap();
+            stream.write_all(&sample_bytes).unwrap();
+            received
+        });
+
+        let (mut source, _) = TcpIqSource::connect_rtl_tcp(addr).unwrap();
+        source.set_center_frequency(433_920_000).unwrap();
+        source.set_sample_rate(2_048_000).unwrap();
+        source.set_tuner_gain_tenth_db(197).unwrap(); // manual mode, then gain
+        source.set_frequency_correction_ppm(0).unwrap();
+
+        let received = server.join().unwrap();
+        let expected = [
+            RtlTcpCommand::SetCenterFrequency(433_920_000),
+            RtlTcpCommand::SetSampleRate(2_048_000),
+            RtlTcpCommand::SetManualGain(true),
+            RtlTcpCommand::SetTunerGainTenthDb(197),
+            RtlTcpCommand::SetFrequencyCorrectionPpm(0),
+        ];
+        for (i, command) in expected.iter().enumerate() {
+            assert_eq!(
+                &received[i * 5..i * 5 + 5],
+                &command.encode(),
+                "command {i}"
+            );
+        }
+
+        // The samples that follow are still decoded from the same socket.
+        let got = collect_all(&mut source, 16);
+        assert_eq!(got, expect);
     }
 
     #[test]

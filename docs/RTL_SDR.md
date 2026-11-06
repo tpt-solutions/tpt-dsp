@@ -37,6 +37,32 @@ Connecting with plain `TcpIqSource::connect(addr, IqFormat::U8)` does not read
 the greeting. The first six samples would then be the greeting bytes, so use
 `connect_rtl_tcp` for `rtl_tcp`.
 
+## Tune it
+
+The same connection accepts control commands. Each is five bytes on the wire
+(an opcode, then a big-endian `u32`), and `rtl_tcp` applies it before the
+samples that follow:
+
+```rust
+let (mut source, _info) = TcpIqSource::connect_rtl_tcp("127.0.0.1:1234")?;
+source.set_center_frequency(433_920_000)?; // 433.92 MHz
+source.set_sample_rate(2_048_000)?;
+source.set_tuner_gain_tenth_db(197)?;      // 19.7 dB; switches to manual gain
+source.set_frequency_correction_ppm(0)?;
+source.set_auto_gain()?;                   // back to AGC
+```
+
+Settings are not read back: `rtl_tcp` does not report them. Set what you need
+after connecting.
+
+## Not supported
+
+- Bias tee, direct sampling, offset tuning, test mode and the other opcodes
+  in `RtlTcpCommand`'s protocol. `RtlTcpCommand` is `#[non_exhaustive]`, so
+  they can be added without breaking callers.
+- A USB driver or `librtlsdr` binding. The `rtl-sdr` feature only changes the
+  error that `RtlSdrSource` reports.
+
 ## Run the example
 
 The `sdr_pipeline` example decimates the stream, FM-demodulates it, and writes
@@ -48,9 +74,3 @@ cargo run -p tpt-dsp-io --example sdr_pipeline --features tcp -- --tcp 127.0.0.1
 
 Without `--tcp` it uses a synthetic FM carrier, so it runs without hardware.
 
-## Not supported
-
-- Tuning, gain and sample-rate control. `rtl_tcp` accepts 5-byte commands for
-  these; the framework does not send them yet.
-- A USB driver or `librtlsdr` binding. The `rtl-sdr` feature only changes the
-  error that `RtlSdrSource` reports.

@@ -48,7 +48,7 @@ mod serial;
 pub use iq::{parse_iq, IqFormat, IqReassembler, IqStream, Reassembled, MAX_BYTES_PER_SAMPLE};
 pub use rtlsdr::{RtlSdrConfig, RtlSdrSource};
 pub use source::{IqError, IqSource, SyntheticIqSource};
-pub use tcp::{read_rtl_tcp_greeting, RtlTcpInfo, TcpIqSource};
+pub use tcp::{read_rtl_tcp_greeting, RtlTcpCommand, RtlTcpInfo, TcpIqSource};
 pub use wav::{
     read_wav_f32_path, read_wav_f32_reader, write_wav_f32_path, write_wav_f32_writer, SampleFormat,
     WavData, WavError, WavSpec,
