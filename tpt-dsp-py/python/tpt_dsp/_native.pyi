@@ -1,23 +1,27 @@
 """Type stubs for the compiled tpt_dsp._native extension."""
 
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
+
+# A list of floats, or a NumPy array. A 1-D float32 array is read in place by
+# the `zero-copy` build; every other build converts it first.
+Samples = Any
 
 
 
-def rms(samples: List[float]) -> float:
+def rms(samples: Samples) -> float:
     """RMS energy of a real signal."""
     ...
 
-def zero_crossing_rate(samples: List[float]) -> float:
+def zero_crossing_rate(samples: Samples) -> float:
     """Fraction of adjacent samples that change sign."""
     ...
 
-def spectral_centroid(samples: List[float], sample_rate: float) -> float:
+def spectral_centroid(samples: Samples, sample_rate: float) -> float:
     """Spectral centroid (Hz) of a real signal."""
     ...
 
 def spectrum(
-    samples: List[float], sample_rate: float, fft_size: int, window: str
+    samples: Samples, sample_rate: float, fft_size: int, window: str
 ) -> Tuple[List[float], List[float]]:
     """Averaged one-sided magnitude spectrum as ``(frequencies_hz, magnitude_db)``.
 
@@ -26,13 +30,13 @@ def spectrum(
     ...
 
 def fm_demod(
-    i: List[float], q: List[float], sample_rate: float, deviation: float
+    i: Samples, q: Samples, sample_rate: float, deviation: float
 ) -> List[float]:
     """FM-demodulate parallel in-phase and quadrature lists into audio."""
     ...
 
 def analyze(
-    samples: List[float], sample_rate: float, fft_size: int, window: str
+    samples: Samples, sample_rate: float, fft_size: int, window: str
 ) -> Dict[str, object]:
     """Summary of a real signal.
 
@@ -57,7 +61,7 @@ class Biquad:
         q: float = 0.707,
         gain_db: float = 0.0,
     ) -> None: ...
-    def process(self, samples: List[float]) -> List[float]:
+    def process(self, samples: Samples) -> List[float]:
         """Filter samples; state carries over between calls."""
         ...
     def reset(self) -> None:
