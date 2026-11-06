@@ -22,7 +22,7 @@ to catch issues locally first. See AGENTS.md for the rules that break CI.
 ## Real-time contract
 
 <!-- If this touches a hot path, confirm it does not allocate / lock / syscall.
-The `alloc_probe` counting-allocator test in tpt-dsp-wasm documents the
+The `tpt-dsp-testkit` allocation check (see `docs/RT_SAFETY.md`) documents the
 accepted proof pattern. -->
 
 ## Local verification

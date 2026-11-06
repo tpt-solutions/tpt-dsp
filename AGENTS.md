@@ -95,9 +95,10 @@ python -m http.server 8080 --directory www     # then http://localhost:8080
   over caller-owned slices, or a struct that allocates all scratch in `new()` and reuses
   it. Accepted existing exceptions are catalogued in `ARCHITECTURE.md` §3.2 — read it
   before claiming a path is or isn't allocation-free.
-- To prove a new hot path is allocation-free, copy the counting-global-allocator probe in
-  `tpt-dsp-wasm/src/pedalboard.rs` (`mod alloc_probe`: per-thread and opt-in, so parallel
-  tests don't interfere), including its companion test that proves the probe itself fires.
+- To prove a new hot path is allocation-free, use `tpt-dsp-testkit`: install its
+  `CountingAllocator` as the global allocator in a test binary and wrap the path in
+  `assert_no_alloc` (see `docs/RT_SAFETY.md`). The wasm pedalboard test uses it, and
+  the `counting_allocator_actually_sees_allocations` companion test proves it fires.
 - **`simd` is nightly-only.** `tpt-dsp-core/build.rs` sets a `tpt_portable_simd` cfg only
   on nightly; the crate root gates `#![feature(portable_simd)]` on it and otherwise
   compiles `simd_scalar.rs` under the same `simd` module path. That fallback is the only
