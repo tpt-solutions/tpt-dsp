@@ -33,6 +33,7 @@
 mod features;
 mod loudness;
 mod mfcc;
+mod onset;
 mod spectrogram;
 mod spectrum;
 mod stft;
@@ -48,13 +49,14 @@ pub use features::{
 };
 pub use loudness::LoudnessMeter;
 pub use mfcc::{hz_to_mel, mel_to_hz, Mfcc};
+pub use onset::{detect_onsets, pick_onsets, OnsetConfig};
 pub use spectrogram::Spectrogram;
 pub use spectrum::{
     db_to_linear, dominant_frequency, find_peaks, linear_to_db, parabolic_interpolate, peak_bin,
     Averaging, RealtimeSpectrumAnalyzer, SpectralPeak, SpectrumAnalyzer, SpectrumConfig,
     DEFAULT_DB_FLOOR,
 };
-pub use stft::{istft, stft, time_stretch};
+pub use stft::{istft, pitch_shift, stft, time_stretch};
 pub use timeseries::{Ema, MovingAverage, OutlierDetector, RunningMean};
 pub use yin::yin_pitch;
 

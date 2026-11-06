@@ -185,6 +185,61 @@ pub fn time_stretch(input: &[f32], fft_size: usize, hop: usize, rate: f32) -> Ve
         .collect()
 }
 
+/// Shift the pitch of `input` by `ratio` without changing its duration.
+///
+/// `ratio` is a frequency factor: `2.0` raises the pitch by an octave, `0.5`
+/// lowers it by one, and `1.0` returns the input (up to the vocoder's
+/// rounding). The output has the same length as the input.
+///
+/// The method is a phase vocoder followed by resampling. [`time_stretch`]
+/// first changes the duration to `len / (1 / ratio)` with the pitch kept, and
+/// the result is then read back over the original length. That read speed is
+/// `ratio`, which is the pitch change. Interpolation is cubic (Catmull-Rom).
+///
+/// # Panics
+///
+/// Panics under the same conditions as [`time_stretch`], and if `ratio` is not
+/// finite and positive.
+pub fn pitch_shift(input: &[f32], fft_size: usize, hop: usize, ratio: f32) -> Vec<f32> {
+    assert!(
+        ratio.is_finite() && ratio > 0.0,
+        "ratio must be finite and positive"
+    );
+    if input.is_empty() {
+        return Vec::new();
+    }
+    // A stretch by 1/ratio gives a signal of length input.len() * ratio.
+    let stretched = time_stretch(input, fft_size, hop, 1.0 / ratio);
+    let n = input.len();
+    let m = stretched.len();
+    if m < 2 {
+        return vec![0.0; n];
+    }
+    let step = (m - 1) as f64 / (n - 1).max(1) as f64;
+    (0..n)
+        .map(|i| {
+            let pos = i as f64 * step;
+            let k = pos.floor() as usize;
+            let t = (pos - k as f64) as f32;
+            let at = |j: isize| -> f32 {
+                let j = j.clamp(0, m as isize - 1) as usize;
+                stretched[j]
+            };
+            let (p0, p1, p2, p3) = (
+                at(k as isize - 1),
+                at(k as isize),
+                at(k as isize + 1),
+                at(k as isize + 2),
+            );
+            // Catmull-Rom spline through the four neighbouring samples.
+            let a = -0.5 * p0 + 1.5 * p1 - 1.5 * p2 + 0.5 * p3;
+            let b = p0 - 2.5 * p1 + 2.0 * p2 - 0.5 * p3;
+            let c = -0.5 * p0 + 0.5 * p2;
+            ((a * t + b) * t + c) * t + p1
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -257,5 +312,76 @@ mod tests {
         let y = time_stretch(&x, 512, 128, 1.7);
         assert!(y.iter().all(|v| v.is_finite()));
         assert!(!y.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod pitch_shift_tests {
+    use super::*;
+
+    const SR: f32 = 16_000.0;
+
+    fn sine(f: f32, n: usize) -> Vec<f32> {
+        (0..n)
+            .map(|i| (i as f32 * f * core::f32::consts::TAU / SR).sin())
+            .collect()
+    }
+
+    /// Frequency of the strongest bin in a long Hann-windowed analysis.
+    fn dominant_hz(x: &[f32]) -> f32 {
+        let fft = 8192;
+        let frames = stft(&x[..fft], fft, fft);
+        let mags: Vec<f32> = frames[0].iter().map(|c| c.norm()).collect();
+        let (k, _) = mags
+            .iter()
+            .enumerate()
+            .skip(1)
+            .fold(
+                (0usize, 0.0f32),
+                |best, (k, &m)| {
+                    if m > best.1 {
+                        (k, m)
+                    } else {
+                        best
+                    }
+                },
+            );
+        k as f32 * SR / fft as f32
+    }
+
+    #[test]
+    fn octave_up_doubles_the_frequency_and_keeps_the_length() {
+        let x = sine(440.0, 32_000);
+        let y = pitch_shift(&x, 2048, 512, 2.0);
+        assert_eq!(y.len(), x.len());
+        let f = dominant_hz(&y);
+        assert!((f - 880.0).abs() < 10.0, "got {f} Hz");
+    }
+
+    #[test]
+    fn octave_down_halves_the_frequency() {
+        let x = sine(440.0, 32_000);
+        let y = pitch_shift(&x, 2048, 512, 0.5);
+        assert_eq!(y.len(), x.len());
+        let f = dominant_hz(&y);
+        assert!((f - 220.0).abs() < 10.0, "got {f} Hz");
+    }
+
+    #[test]
+    fn unit_ratio_keeps_the_pitch() {
+        let x = sine(440.0, 32_000);
+        let y = pitch_shift(&x, 2048, 512, 1.0);
+        assert!((dominant_hz(&y) - 440.0).abs() < 10.0);
+    }
+
+    #[test]
+    fn empty_input_gives_empty_output() {
+        assert!(pitch_shift(&[], 512, 128, 2.0).is_empty());
+    }
+
+    #[test]
+    #[should_panic(expected = "ratio must be finite and positive")]
+    fn zero_ratio_panics() {
+        let _ = pitch_shift(&[0.0; 64], 64, 16, 0.0);
     }
 }
