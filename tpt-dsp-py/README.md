@@ -28,6 +28,10 @@ filtered = lp.process(sig)                     # bandpass, notch, allpass,
 pid = tpt_dsp.Pid(2.0, 1.0, 0.0, 0.01)
 pid.set_setpoint(10.0)
 u = pid.update(measured)
+
+# Stateful oscillator: sine, sawtooth (or saw), square or triangle
+osc = tpt_dsp.Oscillator(sr, 440.0, "square")
+block = osc.process(256)               # the phase carries over to the next call
 ```
 
 All functions take a list of `float`s, or a NumPy array, and return lists. Wrap
