@@ -182,6 +182,26 @@ jobs:
         working-directory: tpt-dsp-io/fuzz
         run: cargo fuzz run wav_reader -- -max_total_time=60
 
+  coverage:
+    name: Line coverage (cargo-llvm-cov)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Install system libraries (libudev)
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+      # Measured at 84% on Windows when this gate was set. The threshold sits
+      # below that so Linux-only and Windows-only backends do not cause a
+      # false failure. Raise it when coverage rises, rather than leaving it.
+      - name: cargo llvm-cov (workspace, all features)
+        run: cargo llvm-cov --workspace --all-features --summary-only --fail-under-lines 80
+
   machete:
     name: Unused dependencies (cargo-machete)
     runs-on: ubuntu-latest
@@ -258,13 +278,22 @@ jobs:
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - name: Build the Python wheel and run its tests (tpt-dsp-py)
+      # NumPy is installed so the array-input tests run instead of skipping.
+      - name: Build the abi3 Python wheel and run its tests (tpt-dsp-py)
         working-directory: tpt-dsp-py
         run: |
-          python -m pip install maturin
+          python -m pip install maturin numpy
           maturin build --release --out dist
           python -m pip install dist/*.whl
           python -m unittest discover -s tests
+      # The zero-copy build is per-version, not abi3, so it gets its own venv.
+      - name: Build and test the zero-copy wheel (tpt-dsp-py)
+        working-directory: tpt-dsp-py
+        run: |
+          maturin build --release --no-default-features --features zero-copy --out dist-zc
+          python -m venv zc-venv
+          zc-venv/bin/python -m pip install numpy dist-zc/*.whl
+          zc-venv/bin/python -m unittest discover -s tests
       - name: cargo build tpt-dsp-nihplug
         working-directory: tpt-dsp-nihplug
         run: cargo build
