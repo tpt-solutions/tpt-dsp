@@ -155,6 +155,30 @@ cargo run -p tpt-dsp-cli -- spectrum --input in.wav --fft-size 2048 --top 10
 
 See [`tpt-dsp-cli/README.md`](tpt-dsp-cli/README.md) for every subcommand.
 
+## Examples
+
+Every example is a runnable `cargo run` target. The first four run without
+hardware or extra features.
+
+| Example | Shows | Command |
+| --- | --- | --- |
+| `biquad_lowpass` | Design an RBJ low-pass, filter a mixed signal, find the surviving tone with an FFT | `cargo run -p tpt-dsp-core --example biquad_lowpass` |
+| `analyze_signal` | Real-time spectrum analysis of a noisy sine, with EMA smoothing and outlier detection | `cargo run -p tpt-dsp-analysis --example analyze_signal` |
+| `synth_eq` | An FM synthesis voice through a 3-band parametric EQ | `cargo run -p tpt-dsp-audio --example synth_eq` |
+| `pid_speed_hold` | A PID holds a simulated DC motor at a setpoint, with output limits and anti-windup | `cargo run -p tpt-dsp-control --example pid_speed_hold` |
+| `sdr_pipeline` | IQ → decimate → FM demodulate → 48 kHz audio. Synthetic by default; `--tcp` reads an `rtl_tcp` server | `cargo run -p tpt-dsp-io --example sdr_pipeline -- --out audio.wav` · `--features tcp -- --tcp 127.0.0.1:1234` ([RTL-SDR guide](docs/RTL_SDR.md)) |
+| `audio_check` | Live check of the built-in audio backends. Needs a sound device | `cargo run -p tpt-dsp-io --example audio_check --features audio` |
+| `custom_waterfall` | The smallest custom spectrogram with `tpt-dsp-viz`. Needs a display | `cargo run -p tpt-dsp-viz --example custom_waterfall` |
+
+The compiled walkthrough in `tpt-dsp/src/walkthrough.rs` (WAV in, filter,
+analyse, WAV out) runs as a doctest under `cargo test --all-features`.
+
+Browser examples are in [`www/`](www): the guitar pedalboard, and the
+[filter designer](www/designer.html), which plots the responses of every
+IIR design in the core and exports their coefficients. There is no embedded
+example. CI builds `tpt-dsp-core` for `thumbv7em-none-eabihf`, but a runnable
+example needs a board-specific runtime that this repository does not include.
+
 ## Web demo
 
 The `tpt-dsp-wasm` crate powers a browser guitar-pedalboard
