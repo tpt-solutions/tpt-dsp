@@ -9,6 +9,8 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Changed
 - **Breaking:** the `eframe`/`egui` GUI is replaced by an in-tree software renderer
   (`canvas`, `font`, `app`) over a `minifb` window. `egui`, `eframe` and their
@@ -25,13 +27,6 @@ For the whole-workspace history see the [root `CHANGELOG.md`](https://github.com
 - `run_app` opens a window for a `VizApp`. Left-click on the button, `P` or Space toggle pause. Escape closes.
 - `examples/snapshot.rs` renders one frame to a PNG without a display.
 - A built-in 5x7 bitmap font covering the UI labels.
-
-## [0.3.0] - 2026-11-07
-
-### Changed
-- `eframe` and `egui` are upgraded from 0.36 to 0.37.
-- The crate sets its own `rust-version = "1.95"`, not the workspace's 1.85, because
-  `egui` 0.37 requires Rust 1.95. The workspace MSRV check excludes this crate.
 
 ## [0.2.0] - 2026-11-01
 

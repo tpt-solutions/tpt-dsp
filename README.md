@@ -42,10 +42,10 @@ Dual licensed under **MIT** and **Apache-2.0**. © TPT Solutions.
 
 | Crate                | Purpose                                                              |
 | -------------------- | -------------------------------------------------------------------- |
-| `tpt-dsp-core`       | Complex math, FFT/DCT/Hilbert/MDCT, windows, biquad/FIR/IIR, least-squares and windowed-sinc FIR design, convolution, resampling, pitch estimation, LPC/LSP, vector quantisation, QPSK Costas-loop PLL, ring buffers, SPSC queues. `no_std`, `#![forbid(unsafe_code)]`. |
-| `tpt-dsp-audio`      | Oscillators, wavetable/FM/subtractive synthesis, waveshaping, delay, Freeverb and stereo Freeverb, EQ, audio graph, real-time engine. |
-| `tpt-dsp-analysis`   | Spectrum analysis, peak detection, spectrograms, onset detection, phase-vocoder pitch shifting, moving averages, EMA, outlier detection, RMS, spectral centroid, async (tokio/futures) adapters. |
-| `tpt-dsp-control`    | PID with anti-windup, input shaping (ZVD), trapezoidal & jerk-limited trajectory planning. |
+| `tpt-dsp-core`       | Complex math, FFT/DCT/Hilbert/MDCT, windows, biquad and IIR design (Butterworth, Chebyshev I/II, elliptic), equiripple and least-squares FIR design, convolution, resampling, receiver blocks (PLL, AGC, squelch, AM/SSB demodulators), RF helpers, pitch estimation, LPC/LSP, vector quantisation, ring buffers, SPSC queues. `no_std`, `#![forbid(unsafe_code)]`. |
+| `tpt-dsp-audio`      | Oscillators, wavetable/FM/subtractive/PolyBLEP synthesis, noise and dither, waveshaping, oversampling, delay, Freeverb and stereo Freeverb, EQ, dynamics (compressor, limiter, gate), modulation (LFO, tremolo, chorus, flanger, phaser), audio graph, real-time engine. |
+| `tpt-dsp-analysis`   | Spectrum analysis, STFT, phase-vocoder time-stretch and pitch shifting, YIN pitch, onset detection, spectrograms, BS.1770 loudness, MFCC, spectral descriptors, moving averages, EMA, outlier detection, RMS, async (tokio/futures) adapters. |
+| `tpt-dsp-control`    | PID with anti-windup, a builder and derivative filter, input shaping (ZVD), trapezoidal & jerk-limited trajectory planning. |
 | `tpt-dsp-io`         | IQ byte-stream parsing, built-in audio I/O — shared-mode WASAPI on Windows, raw ALSA UAPI on Linux, CoreAudio AudioUnits on macOS — plus RIFF/WAVE read/write, serial reader, and a TCP IQ source that can tune an `rtl_tcp` server (frequency, sample rate, gain, PPM). |
 | `tpt-dsp-wasm`       | WebAssembly pedalboard (Waveshaper → Delay → ConvolutionReverb → EQ) for a Web Audio `AudioWorklet`. |
 | `tpt-dsp-viz`        | Desktop viewer: scrolling waterfall, live dB spectrum line and peak readout (in-tree renderer over `minifb`). Synthetic or live audio input. |

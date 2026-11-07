@@ -7,20 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-07
+
 ### Changed
 - `tpt-dsp-viz` drops `egui`/`eframe` for an in-tree software renderer over `minifb`
   (MIT OR Apache-2.0). This removes Apache-2.0-only transitive crates and the Rust 1.95 requirement
   from the build. The crate now uses the workspace MSRV (1.85), and the MSRV CI job checks the whole workspace.
   Breaking API change in `tpt-dsp-viz`: see its changelog.
-
-## [0.3.0] - 2026-11-07
-
-### Changed
 - `tpt-dsp-control` no longer declares a dependency on `tpt-dsp-core`; it had never used it.
 - `tpt-dsp-core` IIR designs reject non-finite and degenerate parameters with `FilterDesignError` instead of returning a misbehaving filter. First-order sections are exact.
 - `tpt-dsp-core` Chebyshev I design applies frequency pre-warping; the flat-top window uses full-precision coefficients.
 - `tpt-dsp-io` audio is fully in-tree: the `audio` feature links no system ALSA library, so CI no longer installs `libasound2-dev`.
-- `tpt-dsp-viz` is on eframe 0.37 (the bump was not recorded here before).
 - CI pins `dtolnay/rust-toolchain` and `taiki-e/install-action` by commit SHA, with the toolchain or tool name as an explicit input.
 
 ### Fixed

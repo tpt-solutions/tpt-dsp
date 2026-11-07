@@ -61,7 +61,7 @@ Version 0.3.0 is inherited from the workspace, so every publishable crate goes o
 | `tpt-dsp-analysis` | Yes: loudness, MFCC, STFT, onsets, pitch shift, YIN | No | Depends on `tpt-dsp-core`. |
 | `tpt-dsp-control` | Yes: `PidBuilder`, `update_with_dt`, derivative filter; derivative-kick fix; drops its unused `core` dependency | No | No path dependencies. |
 | `tpt-dsp-io` | Yes: `rtl_tcp` control, WAV reader and writer hardening, `io_bench`, fuzz target | No | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-viz` | Dependency: eframe and egui 0.36 → 0.37; own `rust-version = "1.95"` | No | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-viz` | Yes, breaking: `egui`/`eframe` replaced by an in-tree renderer over `minifb`; uses the workspace MSRV (1.85) | No | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
 | `tpt-dsp-wasm` | Yes: browser filter designer (`FilterSpec`); allocation test uses `tpt-dsp-testkit` | No | Depends on `tpt-dsp-audio`; dev-depends on `tpt-dsp-testkit`. |
 | `tpt-dsp-cli` | Yes: `gen`, `resample`, `design`, `response`, `completions`, TOML pipelines | No | Depends on `core`, `audio`, `analysis`, `io`. |
 | `tpt-dsp-testkit` | New: `CountingAllocator`, `allocations_in`, `assert_no_alloc` | **Yes** | Dev-dependency of `wasm`. |
