@@ -134,10 +134,9 @@ Publishing:
 - [ ] Check that each crates.io page renders its README and that the links work.
 - [x] Update the "Latest published version" and "Published" columns in the table above,
       add a History row, and change the crates.io version in the root `README.md`.
-- [ ] Create the GitHub Release from `v0.3.0`, pasting in the `CHANGELOG.md` section.
-      `.github/workflows/release.yml` should create it from the tag, but at the time of
-      writing the Release API returned 404 for `v0.3.0`, and `gh` is not installed here
-      to check the workflow run. Verify it, or create it by hand.
+- [x] Create the GitHub Release from `v0.3.0`. Created by `.github/workflows/release.yml`
+      through a manual run on the existing tag, after the libudev fix; published
+      2026-11-07 at `https://github.com/tpt-solutions/tpt-dsp/releases/tag/v0.3.0`.
 
 ## Release 0.2.0 (published 2026-11-01)
 
@@ -271,6 +270,6 @@ Publishing:
 
 | Date | Version | Crates | Notes |
 |---|---|---|---|
-| 2026-11-07 | 0.3.0 | all ten publishable crates: the eight above plus new `tpt-dsp-testkit` and `tpt-dsp` | Tag `v0.3.0` at `8cdd5d3`. Published in dependency order: core → audio/analysis/control/io/testkit → viz → wasm → cli → facade. New DSP modules in core, audio, analysis and io, the `rtl_tcp` control path, the browser filter designer, and new CLI subcommands. The GitHub Release is still to be created. |
+| 2026-11-07 | 0.3.0 | all ten publishable crates: the eight above plus new `tpt-dsp-testkit` and `tpt-dsp` | Tag `v0.3.0` at `8cdd5d3`. Published in dependency order: core → audio/analysis/control/io/testkit → viz → wasm → cli → facade. New DSP modules in core, audio, analysis and io, the `rtl_tcp` control path, the browser filter designer, and new CLI subcommands. GitHub Release created 2026-11-07. |
 | 2026-11-01 | 0.2.0 | all eight workspace crates listed above | Tag `v0.2.0` at `d9aca4c`; all eight published from that tag (the `tpt-dsp-viz` upload uses eframe 0.36, while `master` has since moved to eframe 0.37 by dependabot). New DSP modules in core, `FftConvolver` and DCT/MDCT fixes, and README and changelog corrections. The GitHub Release is still to be created. |
 | 2026-08-26 | 0.1.0 | all eight workspace crates listed above | First public release. Published in dependency order (core → control/audio/analysis/io → viz/wasm/cli); crates.io's new-crate rate limit forced a few minutes' wait between the `viz`, `wasm` and `cli` uploads. |
