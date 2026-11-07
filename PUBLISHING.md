@@ -12,19 +12,19 @@ path-depends on is live at the version it requests).
 
 | Crate | Latest published version | Published | Notes |
 |---|---|---|---|
-| `tpt-dsp-core` | 0.2.0 | ☑ | No dependencies; published first. |
-| `tpt-dsp-audio` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-analysis` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-control` | 0.2.0 | ☑ | No path dependencies. |
-| `tpt-dsp-io` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`. |
-| `tpt-dsp-viz` | 0.2.0 | ☑ | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
-| `tpt-dsp-wasm` | 0.2.0 | ☑ | Depends on `tpt-dsp-audio`. |
-| `tpt-dsp-cli` | 0.2.0 | ☑ | Depends on `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-io`. |
-| `tpt-dsp-testkit` | — | ☐ | New in 0.3.0. Dev-dependency of `tpt-dsp-wasm`, so it goes up before `wasm`. |
-| `tpt-dsp` | — | ☐ | New in 0.3.0. Facade crate; depends on `core`, `audio`, `analysis`, `control`, `io`. Publish last. |
+| `tpt-dsp-core` | 0.3.0 | ☑ | No dependencies; published first. |
+| `tpt-dsp-audio` | 0.3.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-analysis` | 0.3.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-control` | 0.3.0 | ☑ | No path dependencies. |
+| `tpt-dsp-io` | 0.3.0 | ☑ | Depends on `tpt-dsp-core`. |
+| `tpt-dsp-viz` | 0.3.0 | ☑ | Depends on `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-wasm` | 0.3.0 | ☑ | Depends on `tpt-dsp-audio`; dev-depends on `tpt-dsp-testkit`. |
+| `tpt-dsp-cli` | 0.3.0 | ☑ | Depends on `tpt-dsp-core`, `tpt-dsp-audio`, `tpt-dsp-analysis`, `tpt-dsp-io`. |
+| `tpt-dsp-testkit` | 0.3.0 | ☑ | New in 0.3.0. Dev-dependency of `tpt-dsp-wasm`, published before it. |
+| `tpt-dsp` | 0.3.0 | ☑ | New in 0.3.0. Facade crate; depends on `core`, `audio`, `analysis`, `control`, `io`. Published last. |
 
-The 0.3.0 release is prepared but **not yet published**; see the next section. The
-"Latest published version" column stays at 0.2.0 until each 0.3.0 upload succeeds.
+Every crate above was uploaded at 0.3.0 on 2026-11-07 and confirmed in the crates.io
+index.
 
 ### Intentionally not published
 
@@ -34,10 +34,10 @@ The 0.3.0 release is prepared but **not yet published**; see the next section. T
 | `tpt-dsp-py` | Excluded from the workspace: builds a Python `extension-module` (links libpython at load time) and cannot be built/tested by the normal `cargo build/test --workspace` gate. Python bindings belong on PyPI (via `maturin`/`pyo3`), not crates.io — no action needed here. |
 | `templates/dsp-effect-crate` | A `cargo-generate` template, not a real crate (its `Cargo.toml` contains `{{crate_name}}` placeholders). Never published. |
 
-## Release 0.3.0 (prepared 2026-11-07, not yet published)
+## Release 0.3.0 (published 2026-11-07)
 
-Prepared and dry-run, not tagged, committed or uploaded. Nothing here reaches
-crates.io until the steps under "Publishing" are run.
+All ten publishable crates were uploaded at 0.3.0 on 2026-11-07 from the tag `v0.3.0`
+(commit `8cdd5d3`), in the order below. The plan is kept as a record of what was done.
 
 ### Why 0.3.0
 
@@ -121,24 +121,23 @@ Prepared:
 - [x] Run the full gate from `AGENTS.md`.
 - [x] Check each package's contents with `cargo package --list`.
 - [x] Dry runs (see the table above).
-- [ ] Confirm the two new crates (see the decision above).
-- [ ] Commit the release changes on `master` (the working tree is still uncommitted).
+- [x] Confirm the two new crates (confirmed 2026-11-07).
+- [x] Commit the release changes on `master` (pushed before tagging).
 
 Publishing:
 
-- [ ] Tag and push: `git tag v0.3.0`, then push `master` and the tag as separate
-      commands, checking each one succeeds.
-- [ ] Publish in the order above, waiting for each dependency to appear on crates.io
-      before publishing its dependents. Re-run the dry runs for the dependent crates once
-      their dependencies are live.
-- [ ] After each upload, check that the crates.io page renders the README and that the
-      links work.
-- [ ] Update the "Latest published version" and "Published" columns in the table above,
-      add a History row, and change the crates.io version in the root `README.md`
-      (it says 0.2.0 until this is done).
+- [x] Tag and push: `v0.3.0` pushed to `origin` as its own command (it had not been
+      pushed when publishing started).
+- [x] Publish in the order above (2026-11-07). The dry runs for the dependent crates
+      were re-run implicitly by each real upload, which resolved against the live
+      dependencies.
+- [ ] Check that each crates.io page renders its README and that the links work.
+- [x] Update the "Latest published version" and "Published" columns in the table above,
+      add a History row, and change the crates.io version in the root `README.md`.
 - [ ] Create the GitHub Release from `v0.3.0`, pasting in the `CHANGELOG.md` section.
-      `.github/workflows/release.yml` creates it from the tag, but it does not publish
-      to crates.io.
+      `.github/workflows/release.yml` should create it from the tag, but at the time of
+      writing the Release API returned 404 for `v0.3.0`, and `gh` is not installed here
+      to check the workflow run. Verify it, or create it by hand.
 
 ## Release 0.2.0 (published 2026-11-01)
 
@@ -272,5 +271,6 @@ Publishing:
 
 | Date | Version | Crates | Notes |
 |---|---|---|---|
+| 2026-11-07 | 0.3.0 | all ten publishable crates: the eight above plus new `tpt-dsp-testkit` and `tpt-dsp` | Tag `v0.3.0` at `8cdd5d3`. Published in dependency order: core → audio/analysis/control/io/testkit → viz → wasm → cli → facade. New DSP modules in core, audio, analysis and io, the `rtl_tcp` control path, the browser filter designer, and new CLI subcommands. The GitHub Release is still to be created. |
 | 2026-11-01 | 0.2.0 | all eight workspace crates listed above | Tag `v0.2.0` at `d9aca4c`; all eight published from that tag (the `tpt-dsp-viz` upload uses eframe 0.36, while `master` has since moved to eframe 0.37 by dependabot). New DSP modules in core, `FftConvolver` and DCT/MDCT fixes, and README and changelog corrections. The GitHub Release is still to be created. |
 | 2026-08-26 | 0.1.0 | all eight workspace crates listed above | First public release. Published in dependency order (core → control/audio/analysis/io → viz/wasm/cli); crates.io's new-crate rate limit forced a few minutes' wait between the `viz`, `wasm` and `cli` uploads. |

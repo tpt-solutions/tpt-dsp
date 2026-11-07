@@ -84,13 +84,13 @@ graph is acyclic.
 
 ## Getting started
 
-The publishable crates are on [crates.io](https://crates.io) at 0.2.0
+The publishable crates are on [crates.io](https://crates.io) at 0.3.0
 (see [`PUBLISHING.md`](PUBLISHING.md) for the list and the release process):
 
 ```toml
 [dependencies]
-tpt-dsp-core = "0.2"
-tpt-dsp-audio = "0.2"
+tpt-dsp-core = "0.3"
+tpt-dsp-audio = "0.3"
 ```
 
 ### Design a biquad low-pass filter
